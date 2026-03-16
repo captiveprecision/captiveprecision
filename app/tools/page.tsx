@@ -1,4 +1,4 @@
-﻿import Link from "next/link";
+import Link from "next/link";
 
 export default function ToolsPage() {
   return (
@@ -15,7 +15,7 @@ export default function ToolsPage() {
           <h2>Cheer Score</h2>
           <p className="muted-copy">The first active tool in the platform.</p>
           <div className="settings-inline-actions">
-            <Link className="profile-edit-button" href="/tools/cheer-score-calculator">
+            <Link className="profile-edit-button" href="/coach/tools/cheer-score-calculator">
               Open tool
             </Link>
           </div>
