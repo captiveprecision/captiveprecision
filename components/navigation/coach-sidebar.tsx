@@ -13,7 +13,7 @@ const coachNavItems = [
 
 const coachToolItems = [
   { href: "/coach/tools/cheer-score-calculator" as Route, title: "Cheer Score", shortLabel: "C" },
-  { href: "/coach/tools/full-out-evaluator" as Route, title: "Full Out Evaluator", shortLabel: "F" },
+  { href: "/coach/tools/full-out-evaluator" as Route, title: "Execution Evaluator", shortLabel: "F" },
   { href: "/coach/tools/cheer-planner" as Route, title: "Cheer Planner", shortLabel: "P" }
 ];
 

@@ -21,9 +21,14 @@ export default function GymToolsPage() {
           </div>
         </article>
         <article className="surface-card panel-pad settings-section">
-          <div className="metric-label">Coming soon</div>
-          <h2>Full Out Evaluator</h2>
-          <p className="muted-copy">Coming soon.</p>
+          <div className="metric-label">Live</div>
+          <h2>Execution Evaluator</h2>
+          <p className="muted-copy">Routine execution scoring with central admin-controlled scoring values and local records saved by team.</p>
+          <div className="settings-inline-actions">
+            <Link className="profile-edit-button" href={"/gym/tools/full-out-evaluator" as Route}>
+              Open tool
+            </Link>
+          </div>
         </article>
         <article className="surface-card panel-pad settings-section">
           <div className="metric-label">Coming soon</div>

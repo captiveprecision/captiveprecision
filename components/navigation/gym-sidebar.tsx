@@ -13,7 +13,7 @@ const gymNavItems = [
 
 const gymToolItems = [
   { href: "/gym/tools/cheer-score-calculator" as Route, title: "Cheer Score", shortLabel: "C" },
-  { href: "/gym/tools/full-out-evaluator" as Route, title: "Full Out Evaluator", shortLabel: "F" },
+  { href: "/gym/tools/full-out-evaluator" as Route, title: "Execution Evaluator", shortLabel: "F" },
   { href: "/gym/tools/cheer-planner" as Route, title: "Cheer Planner", shortLabel: "P" }
 ];
 
