@@ -18,6 +18,8 @@ export function AdminSidebar() {
       navItems={adminNavItems}
       footerTitle="Admin setup"
       footerCopy="This provisional admin area is ready for us to start building internal tools, controls, and operational views next."
+      secondaryActionHref="/select-workspace"
+      secondaryActionLabel="Switch workspace"
       logoutHref="/api/auth/logout"
     />
   );

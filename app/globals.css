@@ -389,6 +389,35 @@ input {
   font-weight: 700;
 }
 
+.sidebar-secondary-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 44px;
+  padding: 0 16px;
+  border: 1px solid rgba(18, 18, 18, 0.12);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.84);
+  color: var(--cp-text);
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  transition:
+    background-color 180ms ease,
+    border-color 180ms ease,
+    color 180ms ease,
+    transform 180ms ease;
+}
+
+.sidebar-secondary-action:hover {
+  background: var(--cp-accent);
+  border-color: var(--cp-accent);
+  color: #fff;
+  transform: translateY(-1px);
+}
+
 .sidebar[data-collapsed="true"] .sidebar-panel {
   padding: 10px 6px;
   align-items: center;
@@ -1215,6 +1244,17 @@ input {
     text-align: left;
   }
 
+  .sidebar-secondary-action {
+    width: auto;
+    min-height: 40px;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    text-align: left;
+  }
+
+  .sidebar-secondary-action:hover,
   .sidebar-logout:hover,
   .mobile-header-close:hover {
     background: transparent;
@@ -2046,6 +2086,12 @@ input {
 
 
 .sidebar-logout {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sidebar-secondary-action {
   display: inline-flex;
   align-items: center;
   justify-content: center;

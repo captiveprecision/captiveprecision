@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid credentials." }, { status: 401 });
   }
 
-  const response = NextResponse.json({ nextPath: user.roles.length === 1 ? `/${user.roles[0]}` : "/" });
+  const response = NextResponse.json({ nextPath: user.roles.length === 1 ? `/${user.roles[0]}` : "/select-workspace" });
   response.cookies.set(SESSION_COOKIE_NAME, buildSessionCookie({
     email: user.email,
     displayName: user.displayName,

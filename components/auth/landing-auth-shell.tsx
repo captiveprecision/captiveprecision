@@ -1,13 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 
-import type { AppRole, AuthSession } from "@/lib/auth/mock-auth";
-
-type LandingAuthShellProps = {
-  session: AuthSession | null;
-};
+import type { AppRole } from "@/lib/auth/mock-auth";
 
 type RequestState = {
   mode: "idle" | "loading" | "error";
@@ -19,8 +14,7 @@ const roleOptions: Array<{ value: Extract<AppRole, "coach" | "gym">; label: stri
   { value: "gym", label: "Gym" }
 ];
 
-export function LandingAuthShell({ session }: LandingAuthShellProps) {
-  const router = useRouter();
+export function LandingAuthShell() {
   const [loginState, setLoginState] = useState<RequestState>({ mode: "idle" });
   const [registerState, setRegisterState] = useState<RequestState>({ mode: "idle" });
   const [loginEmail, setLoginEmail] = useState("");
@@ -47,8 +41,7 @@ export function LandingAuthShell({ session }: LandingAuthShellProps) {
       return;
     }
 
-    router.refresh();
-    router.push(payload.nextPath ?? "/");
+    window.location.assign(payload.nextPath ?? "/select-workspace");
   }
 
   async function handleRegister(event: React.FormEvent<HTMLFormElement>) {
@@ -73,44 +66,7 @@ export function LandingAuthShell({ session }: LandingAuthShellProps) {
       return;
     }
 
-    router.refresh();
-    router.push(payload.nextPath ?? "/");
-  }
-
-  async function handleLogout() {
-    await fetch("/api/auth/logout", { method: "POST" });
-    router.refresh();
-  }
-
-  if (session) {
-    return (
-      <main className="landing-shell">
-        <section className="landing-hero-card">
-          <div className="role-selection-badge">Captive Precision</div>
-          <h1 className="landing-title">Your session is active.</h1>
-          <p className="landing-copy">
-            Continue into the workspace you want to review. This session currently has access to {session.roles.join(", ")}.
-          </p>
-
-          <div className="landing-role-grid">
-            {session.roles.includes("coach") ? <a className="landing-role-card" href="/coach"><strong>Coach</strong><span>Teams, tools, personal performance flow.</span></a> : null}
-            {session.roles.includes("gym") ? <a className="landing-role-card" href="/gym"><strong>Gym</strong><span>Licenses, coaches, teams, athletes, organization stats.</span></a> : null}
-            {session.roles.includes("admin") ? <a className="landing-role-card" href="/admin"><strong>Admin</strong><span>Platform controls, scoring systems, internal operations.</span></a> : null}
-          </div>
-
-          <div className="landing-session-row">
-            <div>
-              <div className="metric-label">Signed in as</div>
-              <p className="landing-session-value">{session.displayName}</p>
-              <p className="landing-session-meta">{session.email}</p>
-            </div>
-            <button type="button" className="landing-auth-button landing-auth-button-secondary" onClick={handleLogout}>
-              Log out
-            </button>
-          </div>
-        </section>
-      </main>
-    );
+    window.location.assign(payload.nextPath ?? `/${registerRole}`);
   }
 
   return (

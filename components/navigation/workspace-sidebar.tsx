@@ -17,6 +17,8 @@ type SidebarProps = {
   toolItems?: NavItem[];
   footerTitle: string;
   footerCopy: string;
+  secondaryActionHref?: string;
+  secondaryActionLabel?: string;
   logoutHref: string;
 };
 
@@ -62,6 +64,8 @@ export function WorkspaceSidebar({
   toolItems,
   footerTitle,
   footerCopy,
+  secondaryActionHref,
+  secondaryActionLabel,
   logoutHref
 }: SidebarProps) {
   const pathname = usePathname();
@@ -217,6 +221,11 @@ export function WorkspaceSidebar({
               <p className="sidebar-footer-title">{footerTitle}</p>
               <p className="sidebar-footer-copy">{footerCopy}</p>
             </div>
+            {secondaryActionHref && secondaryActionLabel ? (
+              <a href={secondaryActionHref} className="sidebar-secondary-action">
+                {secondaryActionLabel}
+              </a>
+            ) : null}
             <a href={logoutHref} className="sidebar-logout">
               Log out
             </a>
