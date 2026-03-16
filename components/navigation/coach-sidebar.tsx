@@ -25,7 +25,7 @@ export function CoachSidebar() {
       toolItems={coachToolItems}
       footerTitle="Coach release"
       footerCopy="The coach workspace now contains the live dashboard, profile flow, settings shell, and the first premium tool set."
-      logoutHref="/"
+      logoutHref="/api/auth/logout"
     />
   );
 }

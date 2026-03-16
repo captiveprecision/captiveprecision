@@ -1,10 +1,19 @@
-import { GymSidebar } from "@/components/navigation/gym-sidebar";
+import { redirect } from "next/navigation";
 
-export default function GymLayout({
+import { GymSidebar } from "@/components/navigation/gym-sidebar";
+import { getAuthSession } from "@/lib/auth/mock-auth";
+
+export default async function GymLayout({
   children
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const session = await getAuthSession();
+
+  if (!session || !session.roles.includes("gym")) {
+    redirect("/");
+  }
+
   return (
     <div className="app-frame">
       <GymSidebar />

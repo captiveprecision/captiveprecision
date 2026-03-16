@@ -25,7 +25,7 @@ export function GymSidebar() {
       toolItems={gymToolItems}
       footerTitle="Gym release"
       footerCopy="The gym workspace manages coach licenses, shared teams, athletes, and organization-wide visibility across tools."
-      logoutHref="/"
+      logoutHref="/api/auth/logout"
     />
   );
 }

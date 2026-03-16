@@ -17,7 +17,7 @@ type SidebarProps = {
   toolItems?: NavItem[];
   footerTitle: string;
   footerCopy: string;
-  logoutHref: Route;
+  logoutHref: string;
 };
 
 function isDashboardRoute(pathname: string, href: string, index: number) {
@@ -217,9 +217,9 @@ export function WorkspaceSidebar({
               <p className="sidebar-footer-title">{footerTitle}</p>
               <p className="sidebar-footer-copy">{footerCopy}</p>
             </div>
-            <Link href={logoutHref} className="sidebar-logout">
+            <a href={logoutHref} className="sidebar-logout">
               Log out
-            </Link>
+            </a>
           </div>
         </div>
       </aside>

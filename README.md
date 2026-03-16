@@ -6,6 +6,7 @@ Base inicial para una plataforma web en Next.js con:
 - control de acceso premium por membresia via Whop
 - registro generico de actividad por herramienta
 - App Router listo para crecer a dashboard, onboarding y herramientas premium
+- roles preparados para coach, gym y admin
 
 ## Stack base
 
@@ -29,7 +30,9 @@ npm install
 copy .env.example .env.local
 ```
 
-3. Crea el proyecto en Supabase y ejecuta la migracion inicial en `supabase/migrations/001_initial_schema.sql`.
+3. Crea el proyecto en Supabase y ejecuta las migraciones en orden:
+- `supabase/migrations/001_initial_schema.sql`
+- `supabase/migrations/002_roles_gym_scoring.sql`
 
 4. Inicia el proyecto:
 
@@ -45,9 +48,21 @@ npm run dev
 - `supabase/migrations/`: esquema SQL inicial
 - `docs/`: decisiones de arquitectura y siguientes pasos
 
+## Modelo preparado
+
+- `admin`
+- `gym`
+- `coach`
+- `coach.membership_type`:
+  - `independent`
+  - `gym_assigned`
+- `gym` con licencias de coaches
+- scoring systems versionados para herramientas futuras
+
 ## Pendientes para la siguiente fase
 
+- aplicar las migraciones en Supabase
 - configurar login/signup real con UI
+- persistir scoring systems desde Supabase en vez de localStorage
 - verificar webhooks de Whop y sincronizar membresias
-- construir la primera herramienta premium
-- definir planes y reglas exactas de acceso por herramienta
+- construir permisos reales por rol y por licencia
