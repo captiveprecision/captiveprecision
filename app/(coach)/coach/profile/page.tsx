@@ -23,6 +23,10 @@ export default function CoachProfilePage() {
               <h1 className="profile-name">Edith Morales</h1>
               <p className="profile-headline">Coach, choreographer, and owner at Captive Precision</p>
               <p className="profile-meta">Miami, Florida · 12 years in cheer development</p>
+              <div className="profile-chip-row">
+                <span className="profile-chip">Independent Coach</span>
+                <span className="profile-chip">Eligible for gym assignment</span>
+              </div>
             </div>
 
             <Link className="profile-edit-button" href="/coach/profile/edit">
@@ -84,6 +88,10 @@ export default function CoachProfilePage() {
               <div>
                 <span className="profile-detail-label">Teams</span>
                 <p className="profile-detail-value">3 active teams</p>
+              </div>
+              <div>
+                <span className="profile-detail-label">Coach type</span>
+                <p className="profile-detail-value">Independent coach</p>
               </div>
             </div>
           </article>

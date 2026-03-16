@@ -20,6 +20,7 @@ const notificationItems = [
 
 const membershipItems = [
   { label: "Plan", value: "Premium Monthly" },
+  { label: "Coach type", value: "Independent Coach" },
   { label: "Status", value: "Active" },
   { label: "Renewal", value: "April 12, 2026" },
   { label: "Provider", value: "Whop" }
@@ -96,6 +97,21 @@ export default function CoachSettingsPage() {
               <div className="settings-preference-card">
                 <span className="settings-row-title">Theme</span>
                 <p className="settings-row-copy">Premium light interface based on the cheer calculator system.</p>
+              </div>
+            </div>
+          </article>
+
+          <article className="surface-card panel-pad settings-section">
+            <div className="metric-label">Coach classification</div>
+            <h2>Membership states</h2>
+            <div className="settings-preference-grid">
+              <div className="settings-preference-card">
+                <span className="settings-row-title">Independent coach</span>
+                <p className="settings-row-copy">Keeps personal teams, tools, and records under an individual membership.</p>
+              </div>
+              <div className="settings-preference-card">
+                <span className="settings-row-title">Gym-assigned coach</span>
+                <p className="settings-row-copy">Keeps personal teams and also sees gym-assigned teams once a gym license is attached.</p>
               </div>
             </div>
           </article>
