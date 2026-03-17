@@ -9,15 +9,20 @@ import {
   normalizeTeamName,
   readExecutionEvaluatorRecords,
   type ExecutionEvaluatorRecord,
+  type ExecutionSectionSnapshot,
   writeExecutionEvaluatorRecords
 } from "@/lib/tools/execution-evaluator-records";
+
+type SectionMode = "execution" | "manual";
 
 type ExecutionSectionState = {
   id: string;
   name: string;
   maxPoints: number;
+  earnedPoints: number;
   deductions: number;
   step: number;
+  mode: SectionMode;
 };
 
 type ExecutionTotals = {
@@ -48,13 +53,38 @@ function formatNumber(value: number) {
   });
 }
 
+function clamp(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max);
+}
+
+function getSectionMode(name: string): SectionMode {
+  return /execution/i.test(name) ? "execution" : "manual";
+}
+
+function normalizeSavedSection(section: ExecutionSectionSnapshot): ExecutionSectionState {
+  const mode = section.mode ?? getSectionMode(section.name);
+  const earnedPoints = section.earnedPoints ?? Math.max(0, round(section.maxPoints - section.deductions));
+
+  return {
+    id: section.id,
+    name: section.name,
+    maxPoints: section.maxPoints,
+    earnedPoints: clamp(earnedPoints, 0, section.maxPoints),
+    deductions: mode === "execution" ? clamp(section.deductions, 0, section.maxPoints) : 0,
+    step: section.step || 0.1,
+    mode
+  };
+}
+
 function buildSections(version: ReturnType<typeof getVersionById>) {
   return version.sections.map((section) => ({
     id: section.id,
     name: section.name,
     maxPoints: section.maxPoints,
+    earnedPoints: section.maxPoints,
     deductions: 0,
-    step: 0.1
+    step: 0.1,
+    mode: getSectionMode(section.name)
   }));
 }
 
@@ -64,8 +94,8 @@ function buildTotals(
   illegalityDeductions: number
 ): ExecutionTotals {
   const startScore = round(sections.reduce((sum, section) => sum + section.maxPoints, 0));
-  const executionDeductions = round(sections.reduce((sum, section) => sum + section.deductions, 0));
-  const executionSubtotal = round(Math.max(0, startScore - executionDeductions));
+  const executionSubtotal = round(sections.reduce((sum, section) => sum + section.earnedPoints, 0));
+  const executionDeductions = round(Math.max(0, startScore - executionSubtotal));
   const finalScore = round(Math.max(0, executionSubtotal - generalDeductions - illegalityDeductions));
   const totalLossPct = startScore > 0 ? round(((startScore - finalScore) / startScore) * 100) : 0;
 
@@ -90,6 +120,7 @@ export function ExecutionEvaluator() {
   const [generalStep, setGeneralStep] = useState(0.5);
   const [sections, setSections] = useState<ExecutionSectionState[]>([]);
   const [records, setRecords] = useState<ExecutionEvaluatorRecord[]>([]);
+  const [openManualSections, setOpenManualSections] = useState<string[]>([]);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
 
   const activeSystem = useMemo(() => getSystemById(config, config.activeSystemId), [config]);
@@ -104,6 +135,7 @@ export function ExecutionEvaluator() {
     }
 
     setSections(buildSections(activeVersion));
+    setOpenManualSections([]);
     setRecords(readExecutionEvaluatorRecords());
   }, [activeVersion, isReady]);
 
@@ -116,6 +148,15 @@ export function ExecutionEvaluator() {
     return () => window.clearTimeout(timeout);
   }, [saveMessage]);
 
+  const executionSections = useMemo(
+    () => sections.filter((section) => section.mode === "execution"),
+    [sections]
+  );
+  const manualSections = useMemo(
+    () => sections.filter((section) => section.mode === "manual"),
+    [sections]
+  );
+
   const totals = useMemo(
     () => buildTotals(sections, generalDeductions, illegalityDeductions),
     [sections, generalDeductions, illegalityDeductions]
@@ -123,28 +164,45 @@ export function ExecutionEvaluator() {
 
   const normalizedCurrentTeam = normalizeTeamName(teamName);
   const currentTeamRecords = useMemo(
-    () => records.filter((record) => normalizeTeamName(record.teamName) == normalizedCurrentTeam),
+    () => records.filter((record) => normalizeTeamName(record.teamName) === normalizedCurrentTeam),
     [normalizedCurrentTeam, records]
   );
   const groupedRecords = useMemo(() => groupExecutionRecordsByTeam(records), [records]);
 
-  const updateSectionDeduction = (id: string, direction: 1 | -1) => {
+  const updateExecutionDeduction = (id: string, direction: 1 | -1) => {
     setSections((current) => current.map((section) => {
-      if (section.id !== id) {
+      if (section.id !== id || section.mode !== "execution") {
         return section;
       }
 
-      const nextValue = direction === 1
+      const nextDeductions = direction === 1
         ? Math.min(section.maxPoints, round(section.deductions + section.step))
         : Math.max(0, round(section.deductions - section.step));
 
-      return { ...section, deductions: nextValue };
+      return {
+        ...section,
+        deductions: nextDeductions,
+        earnedPoints: round(Math.max(0, section.maxPoints - nextDeductions))
+      };
     }));
   };
 
-  const resetSectionDeduction = (id: string) => {
+  const resetExecutionDeduction = (id: string) => {
     setSections((current) => current.map((section) => (
-      section.id === id ? { ...section, deductions: 0 } : section
+      section.id === id && section.mode === "execution"
+        ? { ...section, deductions: 0, earnedPoints: section.maxPoints }
+        : section
+    )));
+  };
+
+  const updateManualScore = (id: string, value: string) => {
+    const parsed = Number(value);
+    const safeValue = Number.isFinite(parsed) ? Math.max(parsed, 0) : 0;
+
+    setSections((current) => current.map((section) => (
+      section.id === id && section.mode === "manual"
+        ? { ...section, earnedPoints: clamp(round(safeValue), 0, section.maxPoints) }
+        : section
     )));
   };
 
@@ -155,6 +213,13 @@ export function ExecutionEvaluator() {
     setIllegalityDeductions(0);
     setGeneralStep(0.5);
     setSections(buildSections(activeVersion));
+    setOpenManualSections([]);
+  };
+
+  const toggleManualSection = (id: string) => {
+    setOpenManualSections((current) => (
+      current.includes(id) ? current.filter((value) => value !== id) : [...current, id]
+    ));
   };
 
   const saveSnapshot = () => {
@@ -176,7 +241,15 @@ export function ExecutionEvaluator() {
       versionLabel: activeVersion.label,
       savedAt: new Date().toISOString(),
       generalStep,
-      sections: sections.map((section) => ({ ...section })),
+      sections: sections.map((section) => ({
+        id: section.id,
+        name: section.name,
+        maxPoints: section.maxPoints,
+        earnedPoints: section.earnedPoints,
+        deductions: section.deductions,
+        step: section.step,
+        mode: section.mode
+      })),
       totals
     };
 
@@ -190,13 +263,16 @@ export function ExecutionEvaluator() {
   };
 
   const loadSnapshot = (record: ExecutionEvaluatorRecord) => {
+    const nextSections = record.sections.map(normalizeSavedSection);
+
     setLevel(record.level);
     setRoutineName(record.routineName);
     setTeamName(record.teamName);
     setGeneralDeductions(record.totals.generalDeductions);
     setIllegalityDeductions(record.totals.illegalityDeductions);
     setGeneralStep(record.generalStep);
-    setSections(record.sections.map((section) => ({ ...section })));
+    setSections(nextSections);
+    setOpenManualSections(nextSections.filter((section) => section.mode === "manual" && section.earnedPoints !== section.maxPoints).map((section) => section.id));
     setSaveMessage(`Loaded ${record.teamName} record.`);
   };
 
@@ -211,7 +287,7 @@ export function ExecutionEvaluator() {
           <div className="metric-label">Live tool</div>
           <h1 className="page-title settings-title">Execution Evaluator</h1>
           <p className="page-copy">
-            Uses the active scoring system and version from admin so deductions always calculate from the central scoring structure.
+            Only sections labeled as execution allow deductions. The rest stay collapsed and can be opened only to edit score when needed.
           </p>
         </div>
         <div className="execution-score-box">
@@ -246,22 +322,21 @@ export function ExecutionEvaluator() {
             <div className="execution-system-bar">
               <span>{activeSystem.name}</span>
               <span>{activeVersion.label}</span>
-              <span>{sections.length} scoring items</span>
+              <span>{executionSections.length} execution / {manualSections.length} manual</span>
             </div>
           </article>
 
           <article className="surface-card panel-pad execution-panel">
             <div className="execution-panel-head">
               <div>
-                <div className="metric-label">Scoring breakdown</div>
-                <h2>Central evaluation sections</h2>
+                <div className="metric-label">Execution sections</div>
+                <h2>Deductions enabled</h2>
               </div>
               <button type="button" className="profile-edit-button" onClick={resetEvaluator}>Reset</button>
             </div>
 
             <div className="execution-sections-grid">
-              {sections.map((section) => {
-                const executionScore = Math.max(0, round(section.maxPoints - section.deductions));
+              {executionSections.length ? executionSections.map((section) => {
                 const lossPct = section.maxPoints > 0 ? round((section.deductions / section.maxPoints) * 100) : 0;
 
                 return (
@@ -269,7 +344,7 @@ export function ExecutionEvaluator() {
                     <div className="execution-section-header">
                       <div>
                         <h3>{section.name}</h3>
-                        <p>Driven by the active admin scoring version.</p>
+                        <p>Deduction-based section.</p>
                       </div>
                       <div className="execution-section-chip">Max {formatNumber(section.maxPoints)}</div>
                     </div>
@@ -285,7 +360,7 @@ export function ExecutionEvaluator() {
                       </div>
                       <div className="execution-metric-box">
                         <span>Execution</span>
-                        <strong>{formatNumber(executionScore)}</strong>
+                        <strong>{formatNumber(section.earnedPoints)}</strong>
                       </div>
                       <div className="execution-metric-box">
                         <span>Loss</span>
@@ -294,19 +369,59 @@ export function ExecutionEvaluator() {
                     </div>
 
                     <div className="execution-actions-row">
-                      <button type="button" className="execution-action-button" onClick={() => updateSectionDeduction(section.id, -1)}>
+                      <button type="button" className="execution-action-button" onClick={() => updateExecutionDeduction(section.id, -1)}>
                         Remove deduction
                       </button>
-                      <button type="button" className="execution-action-button execution-action-button-primary" onClick={() => updateSectionDeduction(section.id, 1)}>
+                      <button type="button" className="execution-action-button execution-action-button-primary" onClick={() => updateExecutionDeduction(section.id, 1)}>
                         Add deduction
                       </button>
-                      <button type="button" className="execution-action-button execution-action-button-ghost" onClick={() => resetSectionDeduction(section.id)}>
+                      <button type="button" className="execution-action-button execution-action-button-ghost" onClick={() => resetExecutionDeduction(section.id)}>
                         Reset
                       </button>
                     </div>
                   </article>
                 );
-              })}
+              }) : <p className="muted-copy">No sections labeled as execution are present in the active scoring version.</p>}
+            </div>
+          </article>
+
+          <article className="surface-card panel-pad execution-panel">
+            <div className="execution-panel-head">
+              <div>
+                <div className="metric-label">Other sections</div>
+                <h2>Manual score only</h2>
+              </div>
+            </div>
+
+            <div className="execution-sections-grid">
+              {manualSections.length ? manualSections.map((section) => {
+                const isOpen = openManualSections.includes(section.id);
+
+                return (
+                  <article className="execution-manual-card" key={section.id} data-open={isOpen}>
+                    <button type="button" className="execution-manual-toggle" onClick={() => toggleManualSection(section.id)}>
+                      <span>{section.name}</span>
+                      <span>{isOpen ? "Close" : "Open"}</span>
+                    </button>
+                    {isOpen ? (
+                      <div className="execution-manual-body">
+                        <div className="profile-form-field execution-manual-field">
+                          <label htmlFor={`manual-score-${section.id}`}>Score</label>
+                          <input
+                            id={`manual-score-${section.id}`}
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            max={section.maxPoints}
+                            value={section.earnedPoints}
+                            onChange={(event) => updateManualScore(section.id, event.target.value)}
+                          />
+                        </div>
+                      </div>
+                    ) : null}
+                  </article>
+                );
+              }) : <p className="muted-copy">All visible sections are currently execution sections.</p>}
             </div>
           </article>
         </div>
@@ -321,8 +436,8 @@ export function ExecutionEvaluator() {
               <div><span>Routine</span><strong>{routineName || "Routine Practice Score"}</strong></div>
               <div><span>Team</span><strong>{teamName || "No team selected"}</strong></div>
               <div><span>Starting score</span><strong>{formatNumber(totals.startScore)}</strong></div>
-              <div><span>Execution deductions</span><strong>-{formatNumber(totals.executionDeductions)}</strong></div>
-              <div><span>Execution subtotal</span><strong>{formatNumber(totals.executionSubtotal)}</strong></div>
+              <div><span>Section loss</span><strong>-{formatNumber(totals.executionDeductions)}</strong></div>
+              <div><span>Section subtotal</span><strong>{formatNumber(totals.executionSubtotal)}</strong></div>
               <div><span>General deductions</span><strong>-{formatNumber(totals.generalDeductions)}</strong></div>
               <div><span>Illegalities</span><strong>-{formatNumber(totals.illegalityDeductions)}</strong></div>
             </div>

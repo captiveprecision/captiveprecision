@@ -3363,3 +3363,40 @@ body,
   border-color: var(--cp-accent);
   color: var(--cp-hover-text);
 }
+
+
+.execution-manual-card {
+  border: 1px solid var(--cp-border);
+  border-radius: 22px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.execution-manual-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 58px;
+  padding: 0 18px;
+  border: 0;
+  background: transparent;
+  color: var(--cp-text);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+
+.execution-manual-toggle:hover {
+  background: var(--cp-accent);
+  color: #fff;
+}
+
+.execution-manual-body {
+  padding: 0 18px 18px;
+}
+
+.execution-manual-field {
+  margin: 0;
+}

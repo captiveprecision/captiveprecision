@@ -4,8 +4,10 @@ export type ExecutionSectionSnapshot = {
   id: string;
   name: string;
   maxPoints: number;
+  earnedPoints?: number;
   deductions: number;
   step: number;
+  mode?: "execution" | "manual";
 };
 
 export type ExecutionTotalsSnapshot = {
