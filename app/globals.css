@@ -3400,3 +3400,354 @@ body,
 .execution-manual-field {
   margin: 0;
 }
+
+
+.planner-shell {
+  gap: 20px;
+}
+
+.planner-hero {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+}
+
+.planner-hero-metrics {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(140px, 1fr));
+}
+
+.planner-hero-pill,
+.planner-summary-total {
+  display: grid;
+  gap: 6px;
+  padding: 16px 18px;
+  border-radius: 22px;
+  border: 1px solid var(--cp-border);
+  background: #f5f4ef;
+}
+
+.planner-hero-pill span,
+.planner-summary-total span,
+.planner-info-bar p,
+.planner-level-toggle p,
+.planner-skill-copy small,
+.planner-save-message,
+.planner-recent-item span {
+  color: var(--cp-muted);
+}
+
+.planner-hero-pill strong,
+.planner-summary-total strong {
+  font-size: 2rem;
+  line-height: 1;
+  letter-spacing: -0.05em;
+}
+
+.planner-hero-pill-accent,
+.planner-summary-total-accent {
+  background: var(--cp-accent);
+  border-color: var(--cp-accent);
+}
+
+.planner-hero-pill-accent span,
+.planner-summary-total-accent span,
+.planner-hero-pill-accent strong,
+.planner-summary-total-accent strong {
+  color: #000;
+}
+
+.planner-layout {
+  display: grid;
+  gap: 20px;
+  grid-template-columns: minmax(0, 1.18fr) minmax(320px, 0.82fr);
+  align-items: start;
+}
+
+.planner-main-column,
+.planner-side-column,
+.planner-panel,
+.planner-level-list,
+.planner-skill-list,
+.planner-summary-box,
+.planner-recent-list {
+  display: grid;
+  gap: 16px;
+}
+
+.planner-header-row,
+.planner-settings-head,
+.planner-level-toggle,
+.planner-level-actions,
+.planner-summary-head,
+.planner-save-row,
+.planner-recent-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.planner-header-row,
+.planner-settings-head,
+.planner-summary-head,
+.planner-save-row {
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.planner-badge-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.planner-info-bar {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--cp-border);
+  border-radius: 16px;
+  background: #f7f6f0;
+}
+
+.planner-info-dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  border: 1px solid var(--cp-border);
+  background: #fff;
+  font-size: 12px;
+  font-weight: 800;
+  flex: 0 0 auto;
+}
+
+.planner-athlete-grid,
+.planner-settings-grid,
+.planner-athlete-summary-grid,
+.planner-summary-grid-boxes {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.planner-athlete-notes,
+.planner-settings-card,
+.planner-summary-box {
+  grid-column: 1 / -1;
+}
+
+.planner-settings-card {
+  border: 1px solid var(--cp-border);
+  border-radius: 22px;
+  background: #f7f6f0;
+  padding: 16px;
+}
+
+.planner-settings-body,
+.planner-settings-actions {
+  display: grid;
+  gap: 14px;
+}
+
+.planner-skill-count-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.planner-setting-card,
+.planner-athlete-summary-item,
+.planner-summary-box,
+.planner-level-score-row,
+.planner-recent-item,
+.planner-level-card {
+  border: 1px solid var(--cp-border);
+  border-radius: 18px;
+  background: #fff;
+}
+
+.planner-setting-card,
+.planner-athlete-summary-item,
+.planner-summary-box {
+  padding: 14px;
+}
+
+.planner-level-card {
+  overflow: hidden;
+}
+
+.planner-level-toggle {
+  width: 100%;
+  align-items: center;
+  padding: 16px 18px;
+  border: 0;
+  background: #f7f6f0;
+  text-align: left;
+  cursor: pointer;
+}
+
+.planner-level-toggle:hover,
+.planner-option-button:hover,
+.planner-remove-button:hover,
+.planner-recent-item:hover {
+  background: #fff7d4;
+  border-color: var(--cp-accent);
+}
+
+.planner-level-toggle h3,
+.planner-summary-box h3 {
+  margin: 4px 0 6px;
+}
+
+.planner-level-body {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+}
+
+.planner-skill-row {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(240px, 1.2fr) auto auto;
+  align-items: center;
+  padding: 14px;
+  border: 1px solid var(--cp-border);
+  border-radius: 18px;
+  background: #f8f7f2;
+}
+
+.planner-skill-row[data-extra="true"] {
+  border-style: dashed;
+}
+
+.planner-skill-copy {
+  display: grid;
+  gap: 6px;
+}
+
+.planner-option-group {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--cp-border-strong);
+  border-radius: 12px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.planner-option-button {
+  min-width: 58px;
+  min-height: 38px;
+  padding: 0 12px;
+  border: 0;
+  border-right: 1px solid var(--cp-border-strong);
+  background: #fff;
+  color: var(--cp-text);
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.planner-option-button:last-child {
+  border-right: 0;
+}
+
+.planner-option-button[data-active="true"] {
+  background: var(--cp-accent);
+  color: #000;
+}
+
+.planner-remove-button,
+.planner-secondary-button {
+  min-height: 42px;
+  padding: 0 14px;
+  border-radius: 14px;
+  border: 1px solid var(--cp-border-strong);
+  background: #fff;
+  color: var(--cp-text);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.planner-summary-card {
+  background: #f7f6f0;
+}
+
+.planner-template-tag {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: var(--cp-accent);
+  color: #000;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.planner-level-score-list {
+  display: grid;
+  gap: 8px;
+}
+
+.planner-level-score-row,
+.planner-recent-item {
+  align-items: center;
+  padding: 10px 12px;
+}
+
+.planner-recent-item {
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+}
+
+.planner-save-row {
+  align-items: start;
+}
+
+.planner-save-message {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.planner-placeholder {
+  padding: 32px 20px;
+  border: 1px dashed var(--cp-border-strong);
+  border-radius: 20px;
+  background: #f7f6f0;
+}
+
+@media (max-width: 1100px) {
+  .planner-layout,
+  .planner-hero {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 900px) {
+  .planner-athlete-grid,
+  .planner-settings-grid,
+  .planner-athlete-summary-grid,
+  .planner-summary-grid-boxes,
+  .planner-skill-count-grid,
+  .planner-hero-metrics,
+  .planner-skill-row {
+    grid-template-columns: 1fr;
+  }
+
+  .planner-option-group {
+    width: 100%;
+  }
+
+  .planner-option-button {
+    flex: 1 1 0;
+  }
+}

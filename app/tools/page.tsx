@@ -28,9 +28,14 @@ export default function ToolsPage() {
         </article>
 
         <article className="surface-card panel-pad settings-section">
-          <div className="metric-label">Coming soon</div>
+          <div className="metric-label">Live</div>
           <h2>Cheer Planner</h2>
-          <p className="muted-copy">Placeholder for planning routines, sessions, and progression.</p>
+          <p className="muted-copy">Step 1 of the planner is now live with tryout evaluations, local templates, and athlete records prepared for later planner phases.</p>
+          <div className="settings-inline-actions">
+            <Link className="profile-edit-button" href="/tools/cheer-planner">
+              Open tool
+            </Link>
+          </div>
         </article>
       </section>
     </main>
