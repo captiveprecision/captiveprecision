@@ -2964,3 +2964,402 @@ input {
     text-align: left;
   }
 }
+/* Visual system unification */
+
+:root {
+  --cp-page-bg: #f3f1ea;
+  --cp-surface-muted: #f7f4ea;
+  --cp-hover-text: #0f0f0f;
+}
+
+body,
+.app-frame,
+.landing-shell,
+.role-selection-shell {
+  background: var(--cp-page-bg);
+}
+
+.surface-card,
+.surface-card-dark,
+.landing-hero-card,
+.role-selection-card,
+.landing-highlight-card,
+.landing-role-card,
+.landing-auth-card,
+.dashboard-summary-card,
+.settings-preference-card,
+.execution-section-card,
+.execution-deduction-card,
+.execution-score-box,
+.execution-metric-box,
+.execution-team-group,
+.execution-record-row,
+.scoring-admin-section-row,
+.cp-tool .cp-card,
+.cp-tool .cp-card-dark,
+.cp-tool .cp-section-card {
+  border-radius: 24px;
+}
+
+.surface-card,
+.landing-hero-card,
+.role-selection-card,
+.landing-highlight-card,
+.landing-role-card,
+.landing-auth-card,
+.dashboard-summary-card,
+.settings-preference-card,
+.execution-score-box,
+.execution-section-card,
+.execution-deduction-card,
+.execution-metric-box,
+.execution-team-group,
+.execution-record-row,
+.scoring-admin-section-row,
+.cp-tool .cp-card,
+.cp-tool .cp-section-card {
+  background: #fff;
+  border: 1px solid var(--cp-border);
+}
+
+.surface-card-dark,
+.cp-tool .cp-card-dark,
+.execution-panel-dark,
+.dashboard-chart-card-premium {
+  background: var(--cp-dark);
+  border: 1px solid var(--cp-dark);
+}
+
+.profile-cover {
+  background: #ece6d6;
+}
+
+.dashboard-priority-card,
+.dashboard-chart-surface {
+  background: #171717;
+}
+
+.cp-tool .cp-wrap {
+  max-width: 1280px;
+  display: grid;
+  gap: 18px;
+}
+
+.cp-tool .cp-card,
+.cp-tool .cp-card-dark {
+  margin-bottom: 0;
+}
+
+.profile-edit-button,
+.landing-auth-button,
+.scoring-admin-save-button,
+.cp-tool .cp-btn,
+.execution-action-button-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 18px;
+  border: 1px solid var(--cp-dark);
+  border-radius: 999px;
+  background: var(--cp-dark);
+  color: var(--cp-accent);
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease,
+    transform 140ms ease;
+}
+
+.dashboard-tab,
+.scoring-admin-tab,
+.landing-auth-button-secondary,
+.scoring-admin-secondary-action,
+.role-selection-button,
+.execution-action-button,
+.execution-action-button-ghost,
+.cp-tool .cp-tab,
+.cp-tool .cp-btn-secondary,
+.cp-tool .cp-btn-reset,
+.cp-tool .cp-remove,
+.sidebar-toggle,
+.sidebar-link,
+.sidebar-logout,
+.mobile-menu-trigger,
+.mobile-header-close,
+.sidebar-secondary-action,
+.sidebar-sublink {
+  border-radius: 999px;
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease,
+    transform 140ms ease;
+}
+
+.dashboard-tab,
+.scoring-admin-tab,
+.landing-auth-button-secondary,
+.scoring-admin-secondary-action,
+.role-selection-button,
+.execution-action-button,
+.execution-action-button-ghost,
+.cp-tool .cp-tab,
+.cp-tool .cp-btn-secondary,
+.cp-tool .cp-btn-reset,
+.sidebar-toggle,
+.sidebar-link,
+.sidebar-logout,
+.mobile-menu-trigger,
+.mobile-header-close,
+.sidebar-secondary-action,
+.sidebar-sublink {
+  background: #fff;
+  border: 1px solid var(--cp-border);
+  color: var(--cp-text);
+}
+
+.dashboard-tab:hover,
+.dashboard-tab[data-active="true"],
+.scoring-admin-tab:hover,
+.scoring-admin-tab[data-active="true"],
+.profile-edit-button:hover,
+.landing-auth-button:hover,
+.landing-auth-button-secondary:hover,
+.scoring-admin-save-button:hover,
+.scoring-admin-secondary-action:hover,
+.role-selection-button:hover,
+.execution-action-button:hover,
+.execution-action-button-primary:hover,
+.execution-action-button-ghost:hover,
+.cp-tool .cp-btn:hover,
+.cp-tool .cp-tab:hover,
+.cp-tool .cp-tab.active,
+.cp-tool .cp-btn-secondary:hover,
+.cp-tool .cp-btn-reset:hover,
+.cp-tool .cp-remove:hover,
+.sidebar-toggle:hover,
+.sidebar-link:hover,
+.sidebar-logout:hover,
+.mobile-menu-trigger:hover,
+.mobile-header-close:hover,
+.sidebar-secondary-action:hover,
+.sidebar-sublink:hover {
+  background: var(--cp-accent);
+  border-color: var(--cp-accent);
+  color: var(--cp-hover-text);
+  transform: translateY(-1px);
+}
+
+.dashboard-tab[data-active="true"],
+.scoring-admin-tab[data-active="true"],
+.cp-tool .cp-tab.active {
+  background: var(--cp-dark);
+  border-color: var(--cp-dark);
+  color: var(--cp-accent);
+}
+
+.sidebar-link[data-active="true"],
+.sidebar-sublink[data-active="true"] {
+  background: var(--cp-dark);
+  border-color: var(--cp-dark);
+  color: var(--cp-accent);
+}
+
+.sidebar[data-collapsed="true"] .sidebar-link[data-active="true"] {
+  color: var(--cp-accent);
+}
+
+.sidebar[data-collapsed="true"] .sidebar-link[data-active="true"] .nav-bullet {
+  background: var(--cp-dark);
+  border-color: var(--cp-dark);
+  color: var(--cp-accent);
+}
+
+.sidebar[data-collapsed="true"] .sidebar-link:hover,
+.sidebar[data-collapsed="true"] .sidebar-tools-trigger:hover,
+.sidebar[data-collapsed="true"] .sidebar-sublink:hover {
+  background: transparent;
+  border-color: transparent;
+  color: var(--cp-accent);
+  transform: none;
+}
+
+.sidebar[data-collapsed="true"] .sidebar-link:hover .nav-bullet,
+.sidebar[data-collapsed="true"] .sidebar-sublink:hover .sidebar-sublink-bullet {
+  background: var(--cp-accent);
+  border-color: var(--cp-accent);
+  color: var(--cp-hover-text);
+}
+
+.role-selection-badge,
+.dashboard-news-tag,
+.profile-chip,
+.scoring-admin-stat-pill,
+.execution-section-chip,
+.cp-tool .cp-chip,
+.execution-system-bar span,
+.dashboard-score-pill,
+.dashboard-chart-kicker {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--cp-accent);
+  background: var(--cp-accent-soft);
+  color: var(--cp-text);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.nav-bullet,
+.sidebar-sublink-bullet,
+.dashboard-note-bullet {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  border: 0;
+  background: var(--cp-accent);
+  color: transparent;
+}
+
+.profile-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--cp-muted);
+  line-height: 1.65;
+}
+
+.profile-list li {
+  position: relative;
+  padding-left: 22px;
+}
+
+.profile-list li + li {
+  margin-top: 10px;
+}
+
+.profile-list li::before {
+  content: "";
+  position: absolute;
+  top: 0.75em;
+  left: 0;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--cp-accent);
+  transform: translateY(-50%);
+}
+
+.dashboard-note-item,
+.dashboard-task-item,
+.dashboard-update-item,
+.dashboard-news-item,
+.settings-toggle-row,
+.settings-security-item {
+  border-top-color: var(--cp-border);
+}
+
+.dashboard-task-item,
+.dashboard-update-item,
+.dashboard-news-item {
+  padding-top: 14px;
+}
+
+.landing-role-card,
+.settings-preference-card,
+.dashboard-summary-card,
+.execution-team-group,
+.execution-record-row,
+.scoring-admin-tab {
+  transition:
+    border-color 140ms ease,
+    background-color 140ms ease,
+    color 140ms ease,
+    transform 140ms ease,
+    box-shadow 140ms ease;
+}
+
+.landing-role-card:hover,
+.settings-preference-card:hover,
+.dashboard-summary-card:hover,
+.execution-team-group:hover,
+.execution-record-row:hover,
+.scoring-admin-tab:hover {
+  background: #fff;
+  border-color: var(--cp-accent);
+  box-shadow: 0 12px 28px rgba(15, 15, 15, 0.08);
+}
+
+.settings-toggle {
+  background: #ebe7da;
+  border-color: #d9d3c2;
+}
+
+.settings-toggle[data-enabled="true"] {
+  background: var(--cp-dark);
+  border-color: var(--cp-dark);
+}
+
+.settings-toggle-knob {
+  background: #fff;
+}
+
+.landing-auth-form input,
+.cp-tool input,
+.scoring-admin-system-selector select,
+.scoring-admin-section-name input,
+.scoring-admin-section-points input,
+.profile-form-field input,
+.profile-form-field textarea,
+.profile-form-field select {
+  border-radius: 16px;
+  border: 1px solid var(--cp-border);
+  background: #fff;
+}
+
+.landing-auth-form input:focus,
+.cp-tool input:focus,
+.scoring-admin-system-selector select:focus,
+.scoring-admin-section-name input:focus,
+.scoring-admin-section-points input:focus,
+.profile-form-field input:focus,
+.profile-form-field textarea:focus,
+.profile-form-field select:focus {
+  border-color: var(--cp-accent);
+}
+
+.cp-tool label,
+.scoring-admin-section-name label,
+.scoring-admin-section-points label {
+  color: var(--cp-muted);
+}
+
+.execution-save-message {
+  background: var(--cp-accent-soft);
+  border-color: var(--cp-accent);
+  color: var(--cp-text);
+}
+.cp-tool .cp-btn.cp-btn-calculate,
+.cp-tool .cp-btn.cp-btn-reset,
+.cp-tool .cp-btn.cp-btn-calculate:hover,
+.cp-tool .cp-btn.cp-btn-reset:hover {
+  background: var(--cp-dark);
+  border-color: var(--cp-dark);
+  color: var(--cp-accent);
+}
+
+.cp-tool .cp-btn.cp-btn-calculate:hover,
+.cp-tool .cp-btn.cp-btn-reset:hover {
+  background: var(--cp-accent);
+  border-color: var(--cp-accent);
+  color: var(--cp-hover-text);
+}

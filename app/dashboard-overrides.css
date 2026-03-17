@@ -6,8 +6,8 @@
 }
 
 .dashboard-chart-card-premium {
-  background: #1d1d1d;
-  border: 1px solid #2a2a2a;
+  background: var(--cp-dark);
+  border: 1px solid var(--cp-dark);
   color: #fff;
 }
 
@@ -22,14 +22,15 @@
 .dashboard-chart-kicker {
   display: inline-flex;
   align-items: center;
-  min-height: 28px;
-  padding: 0 10px;
+  min-height: 34px;
+  padding: 0 12px;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  color: rgba(255, 255, 255, 0.68);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
+  border: 1px solid var(--cp-accent);
+  background: var(--cp-accent-soft);
+  color: var(--cp-text);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
 }
 
@@ -50,14 +51,14 @@
 .dashboard-score-pill {
   display: inline-flex;
   align-items: center;
-  min-height: 28px;
-  padding: 0 10px;
+  min-height: 34px;
+  padding: 0 12px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  color: #fff;
-  font-size: 11px;
-  font-weight: 700;
+  border: 1px solid var(--cp-accent);
+  background: var(--cp-accent-soft);
+  color: var(--cp-text);
+  font-size: 12px;
+  font-weight: 800;
 }
 
 .dashboard-chart-stage {
@@ -70,16 +71,16 @@
 .dashboard-chart-yaxis {
   display: grid;
   align-content: space-between;
-  color: rgba(255, 255, 255, 0.4);
+  color: rgba(255, 255, 255, 0.56);
   font-size: 11px;
 }
 
 .dashboard-chart-surface {
   position: relative;
   min-width: 0;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 200, 0, 0.22);
   border-radius: 18px;
-  background: #222222;
+  background: #171717;
   padding: 14px 14px 10px;
 }
 
@@ -96,7 +97,7 @@
 .dashboard-chart-grid-premium span {
   display: block;
   width: 100%;
-  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .dashboard-chart,
@@ -134,7 +135,7 @@
   grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 8px;
   margin-top: 12px;
-  color: rgba(255, 255, 255, 0.5);
+  color: rgba(255, 255, 255, 0.68);
   font-size: 11px;
   text-align: center;
 }
@@ -142,20 +143,21 @@
 .dashboard-news-tag {
   display: inline-flex;
   align-items: center;
-  min-height: 28px;
-  padding: 0 10px;
+  min-height: 34px;
+  padding: 0 12px;
   border-radius: 999px;
-  background: var(--cp-accent);
-  color: #0f0f0f;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
+  border: 1px solid var(--cp-accent);
+  background: var(--cp-accent-soft);
+  color: var(--cp-text);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
 }
 
 .dashboard-note-bullet {
-  width: 8px;
-  height: 8px;
+  width: 10px;
+  height: 10px;
   margin-top: 8px;
   border-radius: 999px;
   background: var(--cp-accent);
