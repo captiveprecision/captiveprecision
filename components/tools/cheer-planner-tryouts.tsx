@@ -684,12 +684,12 @@ export function CheerPlannerTryouts() {
   );
 
   return (
-    <div className="app-shell planner-shell">
-      <section className="app-panel planner-hero-card">
+    <main className="workspace-shell page-stack planner-shell">
+      <section className="surface-card panel-pad planner-hero-card">
         <div className="planner-hero-copy">
-          <span className="app-eyebrow">Cheer Planner</span>
-          <h1>Build your roster from live tryout data.</h1>
-          <p>
+          <span className="metric-label">Cheer Planner</span>
+          <h1 className="page-title planner-page-title">Build your roster from live tryout data.</h1>
+          <p className="page-copy">
             Step 1 captures athlete records and tumbling evaluations. Team Builder consumes the latest saved tryout
             for each athlete and turns it into assignable roster data.
           </p>
@@ -701,14 +701,14 @@ export function CheerPlannerTryouts() {
               className={workspaceTab === "tryouts" ? "planner-toggle-button is-active" : "planner-toggle-button"}
               onClick={() => setWorkspaceTab("tryouts")}
             >
-              Step 1 ? Tryouts
+              Step 1 / Tryouts
             </button>
             <button
               type="button"
               className={workspaceTab === "team-builder" ? "planner-toggle-button is-active" : "planner-toggle-button"}
               onClick={() => setWorkspaceTab("team-builder")}
             >
-              Step 2 ? Team Builder
+              Step 2 / Team Builder
             </button>
           </div>
           {saveMessage ? <p className="planner-save-message">{saveMessage}</p> : null}
@@ -718,10 +718,10 @@ export function CheerPlannerTryouts() {
       {workspaceTab === "tryouts" ? (
         <div className="planner-layout-grid">
           <div className="planner-main-column">
-            <section className="app-panel planner-panel-stack">
+            <section className="surface-card panel-pad planner-panel-stack">
               <div className="planner-section-head">
                 <div>
-                  <span className="app-eyebrow">Athlete intake</span>
+                  <span className="metric-label">Athlete intake</span>
                   <h2>Tryout record</h2>
                 </div>
                 <button type="button" className="planner-text-button" onClick={startNewAthlete}>
@@ -730,15 +730,15 @@ export function CheerPlannerTryouts() {
               </div>
 
               <div className="planner-athlete-grid">
-                <label className="field-shell">
+                <label className="profile-form-field">
                   <span>Registration #</span>
                   <input value={athleteDraft.registrationNumber || "Auto-assigned on save"} readOnly />
                 </label>
-                <label className="field-shell">
+                <label className="profile-form-field">
                   <span>Athlete name</span>
                   <input value={athleteDraft.name} onChange={(event) => updateAthleteDraft("name", event.target.value)} />
                 </label>
-                <label className="field-shell">
+                <label className="profile-form-field">
                   <span>Date of birth</span>
                   <input
                     type="date"
@@ -746,11 +746,11 @@ export function CheerPlannerTryouts() {
                     onChange={(event) => updateAthleteDraft("dateOfBirth", event.target.value)}
                   />
                 </label>
-                <label className="field-shell">
+                <label className="profile-form-field">
                   <span>Current team</span>
                   <input value={athleteDraft.teamName} onChange={(event) => updateAthleteDraft("teamName", event.target.value)} />
                 </label>
-                <label className="field-shell planner-athlete-grid-wide">
+                <label className="profile-form-field planner-athlete-grid-wide">
                   <span>Notes</span>
                   <textarea
                     rows={3}
@@ -761,10 +761,10 @@ export function CheerPlannerTryouts() {
               </div>
             </section>
 
-            <section className="app-panel planner-panel-stack">
+            <section className="surface-card panel-pad planner-panel-stack">
               <div className="planner-section-head">
                 <div>
-                  <span className="app-eyebrow">Sport</span>
+                  <span className="metric-label">Sport</span>
                   <h2>Tryout track</h2>
                 </div>
               </div>
@@ -776,7 +776,7 @@ export function CheerPlannerTryouts() {
                     className={activeSport === sport ? "planner-tab-button is-active" : "planner-tab-button"}
                     onClick={() => setActiveSport(sport)}
                   >
-                    {sport === "tumbling" ? "Tumbling" : `${sport.charAt(0).toUpperCase()}${sport.slice(1)} ? Coming soon`}
+                    {sport === "tumbling" ? "Tumbling" : `${sport.charAt(0).toUpperCase()}${sport.slice(1)} / Coming soon`}
                   </button>
                 ))}
               </div>
@@ -787,10 +787,10 @@ export function CheerPlannerTryouts() {
 
             {activeSport === "tumbling" ? (
               <>
-                <section className="app-panel planner-panel-stack">
+                <section className="surface-card panel-pad planner-panel-stack">
                   <div className="planner-section-head">
                     <div>
-                      <span className="app-eyebrow">Template</span>
+                      <span className="metric-label">Template</span>
                       <h2>Tryout settings</h2>
                     </div>
                     <button
@@ -807,14 +807,14 @@ export function CheerPlannerTryouts() {
                       <div className="planner-option-grid">
                         {plannerState.template.options.map((option, index) => (
                           <div key={option.id} className="planner-option-card">
-                            <label className="field-shell">
+                            <label className="profile-form-field">
                               <span>Label</span>
                               <input
                                 value={option.label}
                                 onChange={(event) => updateTemplateOption(index, "label", event.target.value)}
                               />
                             </label>
-                            <label className="field-shell">
+                            <label className="profile-form-field">
                               <span>Value</span>
                               <input
                                 type="number"
@@ -829,7 +829,7 @@ export function CheerPlannerTryouts() {
 
                       <div className="planner-count-grid">
                         {LEVEL_KEYS.map((levelKey) => (
-                          <label key={levelKey} className="field-shell">
+                          <label key={levelKey} className="profile-form-field">
                             <span>{levelLabels[levelKey]} skills</span>
                             <input
                               type="number"
@@ -855,17 +855,17 @@ export function CheerPlannerTryouts() {
                     <div className="planner-chip-row">
                       {plannerState.template.options.map((option) => (
                         <span key={option.id} className="planner-value-chip">
-                          {option.label} ? {formatScore(option.value)}
+                          {option.label} / {formatScore(option.value)}
                         </span>
                       ))}
                     </div>
                   )}
                 </section>
 
-                <section className="app-panel planner-panel-stack">
+                <section className="surface-card panel-pad planner-panel-stack">
                   <div className="planner-section-head">
                     <div>
-                      <span className="app-eyebrow">Evaluation</span>
+                      <span className="metric-label">Evaluation</span>
                       <h2>Tumbling levels</h2>
                     </div>
                     <div className="planner-summary-chip-group">
@@ -900,14 +900,14 @@ export function CheerPlannerTryouts() {
                             <div className="planner-skill-list">
                               {level.skills.map((skill) => (
                                 <div key={skill.id} className="planner-skill-row">
-                                  <label className="field-shell planner-skill-name-field">
+                                  <label className="profile-form-field planner-skill-name-field">
                                     <span>{skill.isExtra ? "Extra skill" : "Skill"}</span>
                                     <input
                                       value={skill.name}
                                       onChange={(event) => updateSkillName(level.levelKey, skill.id, event.target.value)}
                                     />
                                   </label>
-                                  <label className="field-shell planner-skill-option-field">
+                                  <label className="profile-form-field planner-skill-option-field">
                                     <span>Evaluation</span>
                                     <select
                                       value={skill.optionId ?? ""}
@@ -945,10 +945,10 @@ export function CheerPlannerTryouts() {
           </div>
 
           <aside className="planner-side-column">
-            <section className="app-panel planner-panel-stack">
+            <section className="surface-card panel-pad planner-panel-stack">
               <div className="planner-section-head">
                 <div>
-                  <span className="app-eyebrow">Live summary</span>
+                  <span className="metric-label">Live summary</span>
                   <h2>Top levels</h2>
                 </div>
               </div>
@@ -956,7 +956,7 @@ export function CheerPlannerTryouts() {
                 {summary.topLevels.map((item) => (
                   <div key={item.levelKey} className="planner-summary-row">
                     <strong>{item.levelLabel}</strong>
-                    <span>Main {formatScore(item.baseScore)} ? Extra {formatScore(item.extraScore)}</span>
+                    <span>Main {formatScore(item.baseScore)} / Extra {formatScore(item.extraScore)}</span>
                   </div>
                 ))}
               </div>
@@ -965,10 +965,10 @@ export function CheerPlannerTryouts() {
               </button>
             </section>
 
-            <section className="app-panel planner-panel-stack">
+            <section className="surface-card panel-pad planner-panel-stack">
               <div className="planner-section-head">
                 <div>
-                  <span className="app-eyebrow">Recent</span>
+                  <span className="metric-label">Recent</span>
                   <h2>Latest evaluations</h2>
                 </div>
               </div>
@@ -993,7 +993,7 @@ export function CheerPlannerTryouts() {
         <div className="planner-team-builder-stack">
           <section className="planner-team-stats-grid">
             {stats.map((stat) => (
-              <article key={stat.label} className="app-panel planner-team-stat-card">
+              <article key={stat.label} className="surface-card panel-pad planner-team-stat-card">
                 <span>{stat.label}</span>
                 <strong>{stat.value}</strong>
                 <p>{stat.note}</p>
@@ -1003,10 +1003,10 @@ export function CheerPlannerTryouts() {
 
           <div className="planner-layout-grid">
             <div className="planner-main-column">
-              <section className="app-panel planner-panel-stack">
+              <section className="surface-card panel-pad planner-panel-stack">
                 <div className="planner-section-head">
                   <div>
-                    <span className="app-eyebrow">Qualification rules</span>
+                    <span className="metric-label">Qualification rules</span>
                     <h2>Current thresholds</h2>
                   </div>
                   <button
@@ -1019,7 +1019,7 @@ export function CheerPlannerTryouts() {
                 </div>
                 <div className={qualificationOpen ? "planner-team-rules-grid is-open" : "planner-team-rules-grid"}>
                   {LEVEL_LABELS.map((levelLabel) => (
-                    <label key={levelLabel} className="field-shell">
+                    <label key={levelLabel} className="profile-form-field">
                       <span>{levelLabel}</span>
                       <input
                         type="number"
@@ -1032,10 +1032,10 @@ export function CheerPlannerTryouts() {
                 </div>
               </section>
 
-              <section className="app-panel planner-panel-stack">
+              <section className="surface-card panel-pad planner-panel-stack">
                 <div className="planner-section-head">
                   <div>
-                    <span className="app-eyebrow">Athlete pool</span>
+                    <span className="metric-label">Athlete pool</span>
                     <h2>Latest saved tryouts</h2>
                   </div>
                   <button
@@ -1049,11 +1049,11 @@ export function CheerPlannerTryouts() {
 
                 {createTeamOpen ? (
                   <div className="planner-create-team-card">
-                    <label className="field-shell">
+                    <label className="profile-form-field">
                       <span>Team name</span>
                       <input value={teamDraft.name} onChange={(event) => setTeamDraft((current) => ({ ...current, name: event.target.value }))} />
                     </label>
-                    <label className="field-shell">
+                    <label className="profile-form-field">
                       <span>Team level</span>
                       <select
                         value={teamDraft.teamLevel}
@@ -1064,7 +1064,7 @@ export function CheerPlannerTryouts() {
                         ))}
                       </select>
                     </label>
-                    <label className="field-shell">
+                    <label className="profile-form-field">
                       <span>Team type</span>
                       <input value={teamDraft.teamType} onChange={(event) => setTeamDraft((current) => ({ ...current, teamType: event.target.value }))} />
                     </label>
@@ -1075,11 +1075,11 @@ export function CheerPlannerTryouts() {
                 ) : null}
 
                 <div className="planner-team-filters">
-                  <label className="field-shell planner-athlete-grid-wide">
+                  <label className="profile-form-field planner-athlete-grid-wide">
                     <span>Search</span>
                     <input value={filters.search} onChange={(event) => setFilters((current) => ({ ...current, search: event.target.value }))} />
                   </label>
-                  <label className="field-shell">
+                  <label className="profile-form-field">
                     <span>Level</span>
                     <select
                       value={filters.level}
@@ -1092,7 +1092,7 @@ export function CheerPlannerTryouts() {
                       ))}
                     </select>
                   </label>
-                  <label className="field-shell">
+                  <label className="profile-form-field">
                     <span>Availability</span>
                     <select
                       value={filters.availability}
@@ -1103,7 +1103,7 @@ export function CheerPlannerTryouts() {
                       <option value="assigned">Assigned</option>
                     </select>
                   </label>
-                  <label className="field-shell">
+                  <label className="profile-form-field">
                     <span>Sort</span>
                     <select
                       value={filters.sort}
@@ -1111,8 +1111,8 @@ export function CheerPlannerTryouts() {
                     >
                       <option value="score-desc">Score</option>
                       <option value="name-asc">Name</option>
-                      <option value="age-asc">Age ?</option>
-                      <option value="age-desc">Age ?</option>
+                      <option value="age-asc">Age low to high</option>
+                      <option value="age-desc">Age high to low</option>
                     </select>
                   </label>
                 </div>
@@ -1126,13 +1126,13 @@ export function CheerPlannerTryouts() {
                           <span className="planner-athlete-pool-badge">{athlete.displayLevel}</span>
                         </div>
                         <p>
-                          {athlete.registrationNumber} ? Age {athlete.age ?? "-"} ? Source {athlete.sourceTeamName || "No source team"}
+                          {athlete.registrationNumber} / Age {athlete.age ?? "-"} / Source {athlete.sourceTeamName || "No source team"}
                         </p>
                         <p>
-                          Score {formatScore(athlete.displayScore)} ? Extra {formatScore(athlete.extraScore)} ? Assigned to {athlete.assignedTeamName}
+                          Score {formatScore(athlete.displayScore)} / Extra {formatScore(athlete.extraScore)} / Assigned to {athlete.assignedTeamName}
                         </p>
                       </div>
-                      <label className="field-shell planner-athlete-assign-field">
+                      <label className="profile-form-field planner-athlete-assign-field">
                         <span>Assign to team</span>
                         <select
                           value={athlete.assignedTeamId ?? ""}
@@ -1160,21 +1160,21 @@ export function CheerPlannerTryouts() {
             </div>
 
             <aside className="planner-side-column">
-              <section className="app-panel planner-panel-stack">
+              <section className="surface-card panel-pad planner-panel-stack">
                 <div className="planner-section-head">
                   <div>
-                    <span className="app-eyebrow">Teams</span>
+                    <span className="metric-label">Teams</span>
                     <h2>Saved rosters</h2>
                   </div>
                 </div>
 
                 {teamEdit ? (
                   <div className="planner-create-team-card planner-team-edit-card">
-                    <label className="field-shell">
+                    <label className="profile-form-field">
                       <span>Team name</span>
                       <input value={teamEdit.name} onChange={(event) => setTeamEdit((current) => current ? { ...current, name: event.target.value } : current)} />
                     </label>
-                    <label className="field-shell">
+                    <label className="profile-form-field">
                       <span>Team level</span>
                       <select
                         value={teamEdit.teamLevel}
@@ -1185,7 +1185,7 @@ export function CheerPlannerTryouts() {
                         ))}
                       </select>
                     </label>
-                    <label className="field-shell">
+                    <label className="profile-form-field">
                       <span>Team type</span>
                       <input value={teamEdit.teamType} onChange={(event) => setTeamEdit((current) => current ? { ...current, teamType: event.target.value } : current)} />
                     </label>
@@ -1202,7 +1202,7 @@ export function CheerPlannerTryouts() {
                       <div className="planner-team-card-head">
                         <div>
                           <strong>{team.name}</strong>
-                          <p>{team.teamLevel} ? {team.teamType}</p>
+                          <p>{team.teamLevel} / {team.teamType}</p>
                         </div>
                         <div className="planner-team-card-actions">
                           <button type="button" className="planner-text-button" onClick={() => openTeamEdit(team)}>Edit</button>
@@ -1219,7 +1219,7 @@ export function CheerPlannerTryouts() {
                           <div key={member.registrationNumber} className="planner-team-member-row">
                             <div>
                               <strong>{member.name}</strong>
-                              <p>{member.registrationNumber} ? {member.displayLevel} ? {formatScore(member.displayScore)}</p>
+                              <p>{member.registrationNumber} / {member.displayLevel} / {formatScore(member.displayScore)}</p>
                             </div>
                             <button type="button" className="planner-text-button" onClick={() => removeFromTeam(member.registrationNumber, team.id)}>
                               Remove
@@ -1235,6 +1235,6 @@ export function CheerPlannerTryouts() {
           </div>
         </div>
       )}
-    </div>
+    </main>
   );
 }
