@@ -3751,3 +3751,364 @@ body,
     flex: 1 1 0;
   }
 }
+
+.planner-shell {
+  display: grid;
+  gap: 20px;
+}
+
+.planner-hero-card,
+.planner-panel-stack,
+.planner-team-stat-card,
+.planner-team-card,
+.planner-option-card,
+.planner-create-team-card,
+.planner-level-card,
+.planner-recent-card,
+.planner-athlete-pool-row {
+  border: 1px solid var(--cp-border);
+  border-radius: 24px;
+  background: #fff;
+}
+
+.planner-hero-card {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(0, 1.2fr) minmax(260px, 0.8fr);
+  align-items: end;
+}
+
+.planner-hero-copy h1,
+.planner-panel-stack h2,
+.planner-team-stat-card strong,
+.planner-team-card strong,
+.planner-level-head strong,
+.planner-summary-row strong,
+.planner-athlete-pool-title-row strong,
+.planner-team-member-row strong {
+  margin: 0;
+}
+
+.planner-hero-copy p,
+.planner-inline-note,
+.planner-level-head span,
+.planner-summary-row span,
+.planner-team-stat-card p,
+.planner-athlete-pool-copy p,
+.planner-team-card p,
+.planner-team-summary-row,
+.planner-recent-card span,
+.planner-save-message {
+  color: var(--cp-muted);
+}
+
+.planner-hero-actions,
+.planner-main-column,
+.planner-side-column,
+.planner-panel-stack,
+.planner-settings-stack,
+.planner-level-stack,
+.planner-skill-list,
+.planner-summary-list,
+.planner-recent-list,
+.planner-team-builder-stack,
+.planner-team-card-list,
+.planner-team-members-list,
+.planner-athlete-pool-list {
+  display: grid;
+  gap: 16px;
+}
+
+.planner-layout-grid {
+  display: grid;
+  gap: 20px;
+  grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr);
+  align-items: start;
+}
+
+.planner-panel-stack,
+.planner-team-stat-card,
+.planner-team-card,
+.planner-option-card,
+.planner-create-team-card,
+.planner-level-card,
+.planner-recent-card,
+.planner-athlete-pool-row {
+  padding: 20px;
+}
+
+.planner-workspace-switch,
+.planner-sport-tabs,
+.planner-inline-actions,
+.planner-chip-row,
+.planner-summary-chip-group,
+.planner-team-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.planner-toggle-button,
+.planner-tab-button,
+.planner-primary-button,
+.planner-secondary-button,
+.planner-text-button,
+.planner-remove-button,
+.planner-danger-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  padding: 0 14px;
+  border: 1px solid var(--cp-border);
+  border-radius: 16px;
+  background: #fff;
+  color: var(--cp-text);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
+}
+
+.planner-toggle-button:hover,
+.planner-tab-button:hover,
+.planner-primary-button,
+.planner-primary-button:hover,
+.planner-secondary-button:hover,
+.planner-text-button:hover,
+.planner-remove-button:hover,
+.planner-danger-button:hover,
+.planner-toggle-button.is-active,
+.planner-tab-button.is-active {
+  background: var(--cp-accent);
+  border-color: var(--cp-accent);
+  color: #fff;
+}
+
+.planner-secondary-button,
+.planner-text-button,
+.planner-remove-button,
+.planner-danger-button {
+  background: transparent;
+}
+
+.planner-save-message {
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--cp-accent);
+  border-radius: 16px;
+  background: #fff7d4;
+  color: var(--cp-text);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.planner-section-head,
+.planner-level-head,
+.planner-athlete-pool-row,
+.planner-team-card-head,
+.planner-team-member-row,
+.planner-summary-row,
+.planner-team-summary-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.planner-section-head,
+.planner-level-head,
+.planner-athlete-pool-row,
+.planner-team-card-head,
+.planner-team-member-row {
+  align-items: flex-start;
+}
+
+.planner-athlete-grid,
+.planner-count-grid,
+.planner-team-filters,
+.planner-team-rules-grid,
+.planner-option-grid,
+.planner-team-stats-grid {
+  display: grid;
+  gap: 14px;
+}
+
+.planner-athlete-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.planner-athlete-grid-wide {
+  grid-column: 1 / -1;
+}
+
+.planner-option-grid,
+.planner-team-stats-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.planner-count-grid,
+.planner-team-rules-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.planner-team-filters {
+  grid-template-columns: minmax(0, 1.5fr) repeat(3, minmax(0, 1fr));
+}
+
+.planner-team-rules-grid:not(.is-open) {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.planner-value-chip,
+.planner-athlete-pool-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: var(--cp-accent);
+  color: #000;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.planner-level-card,
+.planner-team-card,
+.planner-recent-card,
+.planner-athlete-pool-row,
+.planner-option-card,
+.planner-create-team-card {
+  gap: 14px;
+}
+
+.planner-level-head {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+}
+
+.planner-level-meta,
+.planner-athlete-pool-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.planner-skill-row {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1.2fr) minmax(180px, 0.8fr) auto;
+  align-items: end;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--cp-border);
+}
+
+.planner-skill-row:last-child,
+.planner-team-member-row:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.planner-skill-name-field,
+.planner-skill-option-field,
+.planner-athlete-assign-field {
+  width: 100%;
+}
+
+.planner-summary-row,
+.planner-team-member-row {
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--cp-border);
+}
+
+.planner-recent-card {
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+}
+
+.planner-recent-card strong,
+.planner-athlete-pool-copy strong,
+.planner-team-card strong {
+  display: block;
+}
+
+.planner-athlete-pool-copy,
+.planner-team-card-head > div:first-child,
+.planner-team-member-row > div:first-child {
+  display: grid;
+  gap: 4px;
+}
+
+.planner-athlete-pool-copy p,
+.planner-team-card p,
+.planner-team-member-row p,
+.planner-team-stat-card p {
+  margin: 0;
+}
+
+.planner-team-stat-card {
+  display: grid;
+  gap: 6px;
+}
+
+.planner-team-stat-card span {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--cp-muted);
+}
+
+.planner-team-stat-card strong {
+  font-size: 2rem;
+  line-height: 1;
+  letter-spacing: -0.04em;
+}
+
+.planner-inline-note {
+  margin: 0;
+}
+
+.planner-temp {
+  display: none;
+}
+
+@media (max-width: 1100px) {
+  .planner-hero-card,
+  .planner-layout-grid,
+  .planner-option-grid,
+  .planner-team-stats-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .planner-count-grid,
+  .planner-team-rules-grid,
+  .planner-team-filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .planner-athlete-grid,
+  .planner-count-grid,
+  .planner-team-rules-grid,
+  .planner-team-filters,
+  .planner-skill-row {
+    grid-template-columns: 1fr;
+  }
+
+  .planner-section-head,
+  .planner-level-head,
+  .planner-athlete-pool-row,
+  .planner-team-card-head,
+  .planner-team-member-row,
+  .planner-team-summary-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

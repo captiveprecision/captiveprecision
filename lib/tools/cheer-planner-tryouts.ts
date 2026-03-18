@@ -3,6 +3,7 @@ export const CHEER_PLANNER_TRYOUTS_STORAGE_KEY = "cp-cheer-planner-tryouts";
 export const LEVEL_KEYS = ["beginner", "1", "2", "3", "4", "5", "6", "7"] as const;
 export type PlannerLevelKey = (typeof LEVEL_KEYS)[number];
 export type PlannerSportKey = "tumbling" | "dance" | "jumps" | "stunts";
+export type PlannerLevelLabel = "Beginner" | "Level 1" | "Level 2" | "Level 3" | "Level 4" | "Level 5" | "Level 6" | "Level 7";
 
 export type PlannerTryoutOption = {
   id: string;
@@ -32,7 +33,18 @@ export type PlannerLevelEvaluation = {
   skills: PlannerSkillEvaluation[];
 };
 
-export type PlannerAthleteProfile = {
+export type PlannerAthleteRecord = {
+  registrationNumber: string;
+  name: string;
+  dateOfBirth: string;
+  sourceTeamName: string;
+  athleteNotes: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type PlannerAthleteSnapshot = {
+  registrationNumber: string;
   name: string;
   dateOfBirth: string;
   teamName: string;
@@ -41,7 +53,7 @@ export type PlannerAthleteProfile = {
 
 export type PlannerTopLevel = {
   levelKey: PlannerLevelKey;
-  levelLabel: string;
+  levelLabel: PlannerLevelLabel;
   baseScore: number;
   extraScore: number;
 };
@@ -57,7 +69,8 @@ export type PlannerTryoutEvaluation = {
   id: string;
   plannerStage: "tryouts";
   sport: PlannerSportKey;
-  athlete: PlannerAthleteProfile;
+  athleteRegistrationNumber: string;
+  athleteSnapshot: PlannerAthleteSnapshot;
   templateId: string;
   templateName: string;
   templateUpdatedAt: string;
@@ -66,12 +79,27 @@ export type PlannerTryoutEvaluation = {
   savedAt: string;
 };
 
-export type CheerPlannerTryoutsState = {
-  template: PlannerTryoutTemplate;
-  evaluations: PlannerTryoutEvaluation[];
+export type PlannerQualificationRules = Record<PlannerLevelLabel, number>;
+
+export type PlannerTeamRecord = {
+  id: string;
+  name: string;
+  teamLevel: PlannerLevelLabel;
+  teamType: string;
+  memberRegistrationNumbers: string[];
+  createdAt: string;
+  updatedAt: string;
 };
 
-export const levelLabels: Record<PlannerLevelKey, string> = {
+export type CheerPlannerState = {
+  template: PlannerTryoutTemplate;
+  athletes: PlannerAthleteRecord[];
+  evaluations: PlannerTryoutEvaluation[];
+  teams: PlannerTeamRecord[];
+  qualificationRules: PlannerQualificationRules;
+};
+
+export const levelLabels: Record<PlannerLevelKey, PlannerLevelLabel> = {
   beginner: "Beginner",
   "1": "Level 1",
   "2": "Level 2",
@@ -81,6 +109,8 @@ export const levelLabels: Record<PlannerLevelKey, string> = {
   "6": "Level 6",
   "7": "Level 7"
 };
+
+export const LEVEL_LABELS = LEVEL_KEYS.map((levelKey) => levelLabels[levelKey]);
 
 export const defaultSkillLibrary: Record<PlannerLevelKey, string[]> = {
   beginner: ["Forward Roll", "Handstand", "Bridge"],
@@ -116,9 +146,23 @@ export const defaultTryoutTemplate: PlannerTryoutTemplate = {
   updatedAt: new Date("2026-03-17T00:00:00.000Z").toISOString()
 };
 
-export const defaultTryoutState: CheerPlannerTryoutsState = {
+export const defaultQualificationRules: PlannerQualificationRules = {
+  "Beginner": 5,
+  "Level 1": 5,
+  "Level 2": 5,
+  "Level 3": 5,
+  "Level 4": 5,
+  "Level 5": 5,
+  "Level 6": 5,
+  "Level 7": 5
+};
+
+export const defaultCheerPlannerState: CheerPlannerState = {
   template: defaultTryoutTemplate,
-  evaluations: []
+  athletes: [],
+  evaluations: [],
+  teams: [],
+  qualificationRules: defaultQualificationRules
 };
 
 export function cloneTemplate(template: PlannerTryoutTemplate): PlannerTryoutTemplate {
@@ -129,10 +173,14 @@ export function cloneTemplate(template: PlannerTryoutTemplate): PlannerTryoutTem
   };
 }
 
+export function cloneAthlete(athlete: PlannerAthleteRecord): PlannerAthleteRecord {
+  return { ...athlete };
+}
+
 export function cloneEvaluation(evaluation: PlannerTryoutEvaluation): PlannerTryoutEvaluation {
   return {
     ...evaluation,
-    athlete: { ...evaluation.athlete },
+    athleteSnapshot: { ...evaluation.athleteSnapshot },
     evaluations: evaluation.evaluations.map((level) => ({
       ...level,
       skills: level.skills.map((skill) => ({ ...skill }))
@@ -145,37 +193,59 @@ export function cloneEvaluation(evaluation: PlannerTryoutEvaluation): PlannerTry
   };
 }
 
-export function cloneTryoutState(state: CheerPlannerTryoutsState): CheerPlannerTryoutsState {
+export function cloneTeam(team: PlannerTeamRecord): PlannerTeamRecord {
   return {
-    template: cloneTemplate(state.template),
-    evaluations: state.evaluations.map(cloneEvaluation)
+    ...team,
+    memberRegistrationNumbers: [...team.memberRegistrationNumbers]
   };
 }
 
-export function readCheerPlannerTryoutsState(): CheerPlannerTryoutsState {
+export function cloneCheerPlannerState(state: CheerPlannerState): CheerPlannerState {
+  return {
+    template: cloneTemplate(state.template),
+    athletes: state.athletes.map(cloneAthlete),
+    evaluations: state.evaluations.map(cloneEvaluation),
+    teams: state.teams.map(cloneTeam),
+    qualificationRules: { ...state.qualificationRules }
+  };
+}
+
+export function getNextRegistrationNumber(athletes: PlannerAthleteRecord[]) {
+  const maxValue = athletes.reduce((currentMax, athlete) => {
+    const parsed = Number(athlete.registrationNumber.replace(/[^\d]/g, ""));
+    return Number.isFinite(parsed) ? Math.max(currentMax, parsed) : currentMax;
+  }, 1000);
+
+  return `CP-${String(maxValue + 1).padStart(4, "0")}`;
+}
+
+export function readCheerPlannerState(): CheerPlannerState {
   if (typeof window === "undefined") {
-    return cloneTryoutState(defaultTryoutState);
+    return cloneCheerPlannerState(defaultCheerPlannerState);
   }
 
   try {
     const raw = window.localStorage.getItem(CHEER_PLANNER_TRYOUTS_STORAGE_KEY);
 
     if (!raw) {
-      return cloneTryoutState(defaultTryoutState);
+      return cloneCheerPlannerState(defaultCheerPlannerState);
     }
 
-    const parsed = JSON.parse(raw) as Partial<CheerPlannerTryoutsState>;
+    const parsed = JSON.parse(raw) as Partial<CheerPlannerState>;
 
     return {
       template: parsed.template ? cloneTemplate({ ...defaultTryoutTemplate, ...parsed.template }) : cloneTemplate(defaultTryoutTemplate),
-      evaluations: Array.isArray(parsed.evaluations) ? parsed.evaluations.map(cloneEvaluation) : []
+      athletes: Array.isArray(parsed.athletes) ? parsed.athletes.map(cloneAthlete) : [],
+      evaluations: Array.isArray(parsed.evaluations) ? parsed.evaluations.map(cloneEvaluation) : [],
+      teams: Array.isArray(parsed.teams) ? parsed.teams.map(cloneTeam) : [],
+      qualificationRules: parsed.qualificationRules ? { ...defaultQualificationRules, ...parsed.qualificationRules } : { ...defaultQualificationRules }
     };
   } catch {
-    return cloneTryoutState(defaultTryoutState);
+    return cloneCheerPlannerState(defaultCheerPlannerState);
   }
 }
 
-export function writeCheerPlannerTryoutsState(state: CheerPlannerTryoutsState) {
+export function writeCheerPlannerState(state: CheerPlannerState) {
   if (typeof window === "undefined") {
     return;
   }
