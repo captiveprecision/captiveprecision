@@ -1,11 +1,11 @@
+import { WorkspacePlaceholderPage } from "@/components/layout/workspace-placeholder-page";
+
 export default function CoachMessagesPage() {
   return (
-    <main className="workspace-shell page-stack">
-      <section className="surface-card panel-pad settings-hero">
-        <div className="metric-label">Messages</div>
-        <h1 className="page-title settings-title">Messages</h1>
-        <p className="page-copy">Coming soon.</p>
-      </section>
-    </main>
+    <WorkspacePlaceholderPage
+      eyebrow="Messages"
+      title="Messages"
+      description="Coach messaging is reserved for a future release. The route stays in navigation so the workspace map remains stable."
+    />
   );
 }

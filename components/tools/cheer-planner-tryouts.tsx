@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+import { Badge, Button, Card, CardContent, EmptyState, Input, SectionHeader, Select, Tabs, Textarea } from "@/components/ui";
+
 import {
   LEVEL_KEYS,
   LEVEL_LABELS,
@@ -19,9 +21,12 @@ import {
   type PlannerLevelLabel,
   type PlannerSkillEvaluation,
   type PlannerTeamRecord,
+  type PlannerQualifiedLevel,
   type PlannerTopLevel,
   type PlannerTryoutEvaluation,
   type PlannerTryoutTemplate,
+  canAssignQualifiedLevelToTeam,
+  getHighestQualifiedLevelFromEvaluation,
   writeCheerPlannerState
 } from "@/lib/tools/cheer-planner-tryouts";
 
@@ -32,13 +37,13 @@ type AthleteDraftState = {
   registrationNumber: string;
   name: string;
   dateOfBirth: string;
-  teamName: string;
+  sourceTeamName: string;
   athleteNotes: string;
 };
 
 type AthletePoolItem = PlannerAthleteRecord & {
   age: number | null;
-  displayLevel: PlannerLevelLabel | "Unqualified";
+  displayLevel: PlannerQualifiedLevel;
   displayScore: number;
   extraScore: number;
   levelScores: Record<PlannerLevelLabel, { baseScore: number; extraScore: number }>;
@@ -105,7 +110,7 @@ function buildEmptyAthleteDraft(): AthleteDraftState {
     registrationNumber: "",
     name: "",
     dateOfBirth: "",
-    teamName: "",
+    sourceTeamName: "",
     athleteNotes: ""
   };
 }
@@ -173,22 +178,6 @@ function calculateAge(dateOfBirth: string, referenceDate: string) {
   return age;
 }
 
-function getHighestQualifiedLevel(
-  evaluation: PlannerTryoutEvaluation | null,
-  qualificationRules: CheerPlannerState["qualificationRules"]
-): PlannerLevelLabel | "Unqualified" {
-  if (!evaluation) {
-    return "Unqualified";
-  }
-
-  const qualified = LEVEL_LABELS.filter((levelLabel) => {
-    const levelScore = evaluation.summary.levelScores.find((item) => item.levelLabel === levelLabel);
-    return levelScore ? levelScore.baseScore >= qualificationRules[levelLabel] : false;
-  });
-
-  return qualified.length ? qualified[qualified.length - 1] : "Unqualified";
-}
-
 function getLatestEvaluations(evaluations: PlannerTryoutEvaluation[]) {
   const sorted = [...evaluations].sort((left, right) => new Date(right.savedAt).getTime() - new Date(left.savedAt).getTime());
   const map = new Map<string, PlannerTryoutEvaluation>();
@@ -216,7 +205,7 @@ function buildAthletePool(state: CheerPlannerState): AthletePoolItem[] {
         }];
       })
     ) as Record<PlannerLevelLabel, { baseScore: number; extraScore: number }>;
-    const displayLevel = getHighestQualifiedLevel(latestEvaluation, state.qualificationRules);
+    const displayLevel = getHighestQualifiedLevelFromEvaluation(latestEvaluation, state.qualificationRules);
     const displayScore = displayLevel === "Unqualified"
       ? levelScores.Beginner.baseScore
       : levelScores[displayLevel].baseScore;
@@ -482,7 +471,7 @@ export function CheerPlannerTryouts() {
       registrationNumber: currentRegistrationNumber,
       name: trimmedName,
       dateOfBirth: athleteDraft.dateOfBirth,
-      sourceTeamName: athleteDraft.teamName.trim(),
+      sourceTeamName: athleteDraft.sourceTeamName.trim(),
       athleteNotes: athleteDraft.athleteNotes.trim(),
       createdAt: plannerState.athletes.find((item) => item.registrationNumber === currentRegistrationNumber)?.createdAt || now,
       updatedAt: now
@@ -497,7 +486,7 @@ export function CheerPlannerTryouts() {
         registrationNumber: currentRegistrationNumber,
         name: athleteRecord.name,
         dateOfBirth: athleteRecord.dateOfBirth,
-        teamName: athleteRecord.sourceTeamName,
+        evaluationTeamName: athleteRecord.sourceTeamName,
         athleteNotes: athleteRecord.athleteNotes
       },
       templateId: plannerState.template.id,
@@ -530,7 +519,7 @@ export function CheerPlannerTryouts() {
       registrationNumber: evaluation.athleteSnapshot.registrationNumber,
       name: evaluation.athleteSnapshot.name,
       dateOfBirth: evaluation.athleteSnapshot.dateOfBirth,
-      teamName: evaluation.athleteSnapshot.teamName,
+      sourceTeamName: evaluation.athleteSnapshot.evaluationTeamName,
       athleteNotes: evaluation.athleteSnapshot.athleteNotes
     });
     setLevelsDraft(evaluation.evaluations.map((level) => ({
@@ -576,16 +565,32 @@ export function CheerPlannerTryouts() {
   };
 
   const assignToTeam = (registrationNumber: string, teamId: string) => {
+    const athlete = athleteMap.get(registrationNumber);
+    const team = teamMap.get(teamId);
+
+    if (!athlete || !team) {
+      setSaveMessage("Athlete or team record was not found.");
+      return;
+    }
+
+    if (!canAssignQualifiedLevelToTeam(athlete.displayLevel, team.teamLevel)) {
+      setSaveMessage(
+        `${athlete.name} is qualified for ${athlete.displayLevel}, which does not meet ${team.name} (${team.teamLevel}).`
+      );
+      return;
+    }
+
     persistState((current) => ({
       ...current,
-      teams: current.teams.map((team) => ({
-        ...team,
-        memberRegistrationNumbers: team.id === teamId
-          ? Array.from(new Set([...team.memberRegistrationNumbers.filter((id) => id !== registrationNumber), registrationNumber]))
-          : team.memberRegistrationNumbers.filter((id) => id !== registrationNumber),
+      teams: current.teams.map((currentTeam) => ({
+        ...currentTeam,
+        memberRegistrationNumbers: currentTeam.id === teamId
+          ? Array.from(new Set([...currentTeam.memberRegistrationNumbers.filter((id) => id !== registrationNumber), registrationNumber]))
+          : currentTeam.memberRegistrationNumbers.filter((id) => id !== registrationNumber),
         updatedAt: new Date().toISOString()
       }))
     }));
+    setSaveMessage(`Assigned ${athlete.name} to ${team.name}.`);
   };
 
   const removeFromTeam = (registrationNumber: string, teamId: string) => {
@@ -635,6 +640,28 @@ export function CheerPlannerTryouts() {
       return;
     }
 
+    const currentTeam = teamMap.get(teamEdit.teamId);
+
+    if (!currentTeam) {
+      setSaveMessage("Team record was not found.");
+      setTeamEdit(null);
+      return;
+    }
+
+    const invalidMembers = currentTeam.memberRegistrationNumbers
+      .map((registrationNumber) => athleteMap.get(registrationNumber))
+      .filter((member): member is AthletePoolItem => Boolean(member))
+      .filter((member) => !canAssignQualifiedLevelToTeam(member.displayLevel, teamEdit.teamLevel));
+
+    if (invalidMembers.length) {
+      const preview = invalidMembers.slice(0, 3).map((member) => member.name).join(", ");
+      const suffix = invalidMembers.length > 3 ? ` and ${invalidMembers.length - 3} more` : "";
+      setSaveMessage(
+        `Cannot change ${currentTeam.name} to ${teamEdit.teamLevel}. ${preview}${suffix} no longer meet that team level.`
+      );
+      return;
+    }
+
     persistState((current) => ({
       ...current,
       teams: current.teams.map((team) => (
@@ -649,11 +676,13 @@ export function CheerPlannerTryouts() {
           : team
       ))
     }));
+    setSaveMessage(`Updated ${teamEdit.name.trim() || currentTeam.name}.`);
     setTeamEdit(null);
   };
 
   const stats = useMemo(() => {
-    const beginnerQualified = athletePool.filter((athlete) => athlete.displayLevel === "Beginner").length;
+    const qualifiedCount = athletePool.filter((athlete) => athlete.displayLevel !== "Unqualified").length;
+    const unqualifiedCount = athletePool.filter((athlete) => athlete.displayLevel === "Unqualified").length;
     const available = athletePool.filter((athlete) => !athlete.assignedTeamId).length;
     const averageScore = athletePool.length
       ? athletePool.reduce((sum, athlete) => sum + athlete.displayScore, 0) / athletePool.length
@@ -661,16 +690,21 @@ export function CheerPlannerTryouts() {
 
     return [
       { label: "Total athletes", value: athletePool.length, note: "Saved athlete records" },
-      { label: "Beginner qualified", value: beginnerQualified, note: `Requirement ${plannerState.qualificationRules.Beginner.toFixed(1)}` },
-      { label: "Unqualified", value: athletePool.length - beginnerQualified, note: "Below current requirement" },
+      { label: "Qualified", value: qualifiedCount, note: "Meets at least one active qualification rule" },
+      { label: "Unqualified", value: unqualifiedCount, note: "Below every active qualification threshold" },
       { label: "Available", value: available, note: "Not assigned to a team" },
       { label: "Average score", value: formatScore(averageScore), note: "Main skill total only" }
     ];
-  }, [athletePool, plannerState.qualificationRules.Beginner]);
+  }, [athletePool]);
 
   const athleteMap = useMemo(
     () => new Map(athletePool.map((athlete) => [athlete.registrationNumber, athlete] as const)),
     [athletePool]
+  );
+
+  const teamMap = useMemo(
+    () => new Map(plannerState.teams.map((team) => [team.id, team] as const)),
+    [plannerState.teams]
   );
 
   const teamsWithMembers = useMemo(
@@ -685,403 +719,357 @@ export function CheerPlannerTryouts() {
 
   return (
     <main className="workspace-shell page-stack planner-shell">
-      <section className="surface-card panel-pad planner-hero-card">
-        <div className="planner-hero-copy">
-          <span className="metric-label">Cheer Planner</span>
-          <h1 className="page-title planner-page-title">Build your roster from live tryout data.</h1>
-          <p className="page-copy">
-            Step 1 captures athlete records and tumbling evaluations. Team Builder consumes the latest saved tryout
-            for each athlete and turns it into assignable roster data.
-          </p>
-        </div>
-        <div className="planner-hero-actions">
-          <div className="planner-workspace-switch" role="tablist" aria-label="Cheer planner workspace">
-            <button
-              type="button"
-              className={workspaceTab === "tryouts" ? "planner-toggle-button is-active" : "planner-toggle-button"}
-              onClick={() => setWorkspaceTab("tryouts")}
-            >
-              Step 1 / Tryouts
-            </button>
-            <button
-              type="button"
-              className={workspaceTab === "team-builder" ? "planner-toggle-button is-active" : "planner-toggle-button"}
-              onClick={() => setWorkspaceTab("team-builder")}
-            >
-              Step 2 / Team Builder
-            </button>
-          </div>
-          {saveMessage ? <p className="planner-save-message">{saveMessage}</p> : null}
-        </div>
-      </section>
+      <Card radius="panel" variant="subtle">
+        <CardContent className="planner-hero-card planner-panel-stack">
+          <SectionHeader
+            eyebrow="Cheer Planner"
+            title="Build your roster from live tryout data."
+            description="Step 1 captures athlete records and tumbling evaluations. Team Builder consumes the latest saved tryout for each athlete and turns it into assignable roster data."
+            actions={
+              <div className="planner-hero-actions">
+                <Tabs
+                  className="planner-workspace-switch"
+                  items={[
+                    { value: "tryouts", label: "Step 1 / Tryouts" },
+                    { value: "team-builder", label: "Step 2 / Team Builder" }
+                  ]}
+                  value={workspaceTab}
+                  onValueChange={setWorkspaceTab}
+                  ariaLabel="Cheer planner workspace"
+                />
+                {saveMessage ? <Badge variant="accent">{saveMessage}</Badge> : null}
+              </div>
+            }
+          />
+        </CardContent>
+      </Card>
 
       {workspaceTab === "tryouts" ? (
         <div className="planner-layout-grid">
           <div className="planner-main-column">
-            <section className="surface-card panel-pad planner-panel-stack">
-              <div className="planner-section-head">
-                <div>
-                  <span className="metric-label">Athlete intake</span>
-                  <h2>Tryout record</h2>
-                </div>
-                <button type="button" className="planner-text-button" onClick={startNewAthlete}>
-                  New athlete
-                </button>
-              </div>
-
-              <div className="planner-athlete-grid">
-                <label className="profile-form-field">
-                  <span>Registration #</span>
-                  <input value={athleteDraft.registrationNumber || "Auto-assigned on save"} readOnly />
-                </label>
-                <label className="profile-form-field">
-                  <span>Athlete name</span>
-                  <input value={athleteDraft.name} onChange={(event) => updateAthleteDraft("name", event.target.value)} />
-                </label>
-                <label className="profile-form-field">
-                  <span>Date of birth</span>
-                  <input
-                    type="date"
-                    value={athleteDraft.dateOfBirth}
-                    onChange={(event) => updateAthleteDraft("dateOfBirth", event.target.value)}
-                  />
-                </label>
-                <label className="profile-form-field">
-                  <span>Current team</span>
-                  <input value={athleteDraft.teamName} onChange={(event) => updateAthleteDraft("teamName", event.target.value)} />
-                </label>
-                <label className="profile-form-field planner-athlete-grid-wide">
-                  <span>Notes</span>
-                  <textarea
+            <Card radius="panel" className="planner-panel-stack">
+              <CardContent className="planner-panel-stack">
+                <SectionHeader
+                  eyebrow="Athlete intake"
+                  title="Tryout record"
+                  actions={<Button variant="ghost" size="sm" onClick={startNewAthlete}>New athlete</Button>}
+                />
+                <div className="planner-athlete-grid">
+                  <Input label="Registration #" value={athleteDraft.registrationNumber || "Auto-assigned on save"} readOnly />
+                  <Input label="Athlete name" value={athleteDraft.name} onChange={(event) => updateAthleteDraft("name", event.target.value)} />
+                  <Input type="date" label="Date of birth" value={athleteDraft.dateOfBirth} onChange={(event) => updateAthleteDraft("dateOfBirth", event.target.value)} />
+                  <Input label="Source team" value={athleteDraft.sourceTeamName} onChange={(event) => updateAthleteDraft("sourceTeamName", event.target.value)} />
+                  <Textarea
+                    label="Notes"
                     rows={3}
+                    containerClassName="planner-athlete-grid-wide"
                     value={athleteDraft.athleteNotes}
                     onChange={(event) => updateAthleteDraft("athleteNotes", event.target.value)}
                   />
-                </label>
-              </div>
-            </section>
-
-            <section className="surface-card panel-pad planner-panel-stack">
-              <div className="planner-section-head">
-                <div>
-                  <span className="metric-label">Sport</span>
-                  <h2>Tryout track</h2>
                 </div>
-              </div>
-              <div className="planner-sport-tabs">
-                {(["tumbling", "dance", "jumps", "stunts"] as PlannerSportTab[]).map((sport) => (
-                  <button
-                    key={sport}
-                    type="button"
-                    className={activeSport === sport ? "planner-tab-button is-active" : "planner-tab-button"}
-                    onClick={() => setActiveSport(sport)}
-                  >
-                    {sport === "tumbling" ? "Tumbling" : `${sport.charAt(0).toUpperCase()}${sport.slice(1)} / Coming soon`}
-                  </button>
-                ))}
-              </div>
-              {activeSport !== "tumbling" ? (
-                <p className="planner-inline-note">This step is wired for tumbling first. The other tryout lanes will connect next.</p>
-              ) : null}
-            </section>
+              </CardContent>
+            </Card>
+
+            <Card radius="panel" className="planner-panel-stack">
+              <CardContent className="planner-panel-stack">
+                <SectionHeader eyebrow="Sport" title="Tryout track" />
+                <Tabs
+                  className="planner-sport-tabs"
+                  items={[
+                    { value: "tumbling", label: "Tumbling" },
+                    { value: "dance", label: "Dance / Coming soon" },
+                    { value: "jumps", label: "Jumps / Coming soon" },
+                    { value: "stunts", label: "Stunts / Coming soon" }
+                  ]}
+                  value={activeSport}
+                  onValueChange={setActiveSport}
+                  ariaLabel="Planner sport"
+                />
+                {activeSport !== "tumbling" ? (
+                  <EmptyState
+                    title="Tumbling is the active track"
+                    description="This step is wired for tumbling first. The other tryout lanes will connect next."
+                  />
+                ) : null}
+              </CardContent>
+            </Card>
 
             {activeSport === "tumbling" ? (
               <>
-                <section className="surface-card panel-pad planner-panel-stack">
-                  <div className="planner-section-head">
-                    <div>
-                      <span className="metric-label">Template</span>
-                      <h2>Tryout settings</h2>
-                    </div>
-                    <button
-                      type="button"
-                      className="planner-text-button"
-                      onClick={() => setSettingsOpen((current) => !current)}
-                    >
-                      {settingsOpen ? "Hide" : "Edit"}
-                    </button>
-                  </div>
+                <Card radius="panel" className="planner-panel-stack">
+                  <CardContent className="planner-panel-stack">
+                    <SectionHeader
+                      eyebrow="Template"
+                      title="Tryout settings"
+                      actions={
+                        <Button variant="ghost" size="sm" onClick={() => setSettingsOpen((current) => !current)}>
+                          {settingsOpen ? "Hide" : "Edit"}
+                        </Button>
+                      }
+                    />
 
-                  {settingsOpen ? (
-                    <div className="planner-settings-stack">
-                      <div className="planner-option-grid">
-                        {plannerState.template.options.map((option, index) => (
-                          <div key={option.id} className="planner-option-card">
-                            <label className="profile-form-field">
-                              <span>Label</span>
-                              <input
-                                value={option.label}
-                                onChange={(event) => updateTemplateOption(index, "label", event.target.value)}
-                              />
-                            </label>
-                            <label className="profile-form-field">
-                              <span>Value</span>
-                              <input
-                                type="number"
-                                step="0.1"
-                                value={option.value}
-                                onChange={(event) => updateTemplateOption(index, "value", event.target.value)}
-                              />
-                            </label>
-                          </div>
-                        ))}
-                      </div>
+                    {settingsOpen ? (
+                      <div className="planner-settings-stack">
+                        <div className="planner-option-grid">
+                          {plannerState.template.options.map((option, index) => (
+                            <Card key={option.id} variant="subtle" className="planner-option-card">
+                              <CardContent className="planner-panel-stack">
+                                <Input
+                                  label="Label"
+                                  value={option.label}
+                                  onChange={(event) => updateTemplateOption(index, "label", event.target.value)}
+                                />
+                                <Input
+                                  type="number"
+                                  step="0.1"
+                                  label="Value"
+                                  value={option.value}
+                                  onChange={(event) => updateTemplateOption(index, "value", event.target.value)}
+                                />
+                              </CardContent>
+                            </Card>
+                          ))}
+                        </div>
 
-                      <div className="planner-count-grid">
-                        {LEVEL_KEYS.map((levelKey) => (
-                          <label key={levelKey} className="profile-form-field">
-                            <span>{levelLabels[levelKey]} skills</span>
-                            <input
+                        <div className="planner-count-grid">
+                          {LEVEL_KEYS.map((levelKey) => (
+                            <Input
+                              key={levelKey}
                               type="number"
                               min={1}
                               max={20}
+                              label={`${levelLabels[levelKey]} skills`}
                               value={plannerState.template.defaultSkillCounts[levelKey]}
                               onChange={(event) => updateSkillCount(levelKey, event.target.value)}
                             />
-                          </label>
+                          ))}
+                        </div>
+
+                        <div className="planner-inline-actions">
+                          <Button onClick={saveTemplate}>Save template</Button>
+                          <Button variant="secondary" onClick={resetTemplate}>Reset template</Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="planner-chip-row">
+                        {plannerState.template.options.map((option) => (
+                          <Badge key={option.id} variant="accent">
+                            {option.label} / {formatScore(option.value)}
+                          </Badge>
                         ))}
                       </div>
+                    )}
+                  </CardContent>
+                </Card>
 
-                      <div className="planner-inline-actions">
-                        <button type="button" className="planner-primary-button" onClick={saveTemplate}>
-                          Save template
-                        </button>
-                        <button type="button" className="planner-secondary-button" onClick={resetTemplate}>
-                          Reset template
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="planner-chip-row">
-                      {plannerState.template.options.map((option) => (
-                        <span key={option.id} className="planner-value-chip">
-                          {option.label} / {formatScore(option.value)}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </section>
+                <Card radius="panel" className="planner-panel-stack">
+                  <CardContent className="planner-panel-stack">
+                    <SectionHeader
+                      eyebrow="Evaluation"
+                      title="Tumbling levels"
+                      actions={
+                        <div className="planner-summary-chip-group">
+                          <Badge variant="accent">Main {formatScore(summary.totalBaseScore)}</Badge>
+                          <Badge variant="subtle">Extra {formatScore(summary.totalExtraScore)}</Badge>
+                        </div>
+                      }
+                    />
 
-                <section className="surface-card panel-pad planner-panel-stack">
-                  <div className="planner-section-head">
-                    <div>
-                      <span className="metric-label">Evaluation</span>
-                      <h2>Tumbling levels</h2>
-                    </div>
-                    <div className="planner-summary-chip-group">
-                      <span className="planner-value-chip">Main {formatScore(summary.totalBaseScore)}</span>
-                      <span className="planner-value-chip">Extra {formatScore(summary.totalExtraScore)}</span>
-                    </div>
-                  </div>
+                    <div className="planner-level-stack">
+                      {levelsDraft.map((level) => {
+                        const levelSummary = summary.levelScores.find((item) => item.levelKey === level.levelKey);
+                        const isOpen = openLevels.includes(level.levelKey);
 
-                  <div className="planner-level-stack">
-                    {levelsDraft.map((level) => {
-                      const levelSummary = summary.levelScores.find((item) => item.levelKey === level.levelKey);
-                      const isOpen = openLevels.includes(level.levelKey);
-
-                      return (
-                        <article key={level.levelKey} className="planner-level-card">
-                          <button
-                            type="button"
-                            className="planner-level-head"
-                            onClick={() => toggleLevel(level.levelKey)}
-                          >
-                            <div>
-                              <strong>{levelLabels[level.levelKey]}</strong>
-                              <span>{level.skills.length} skills</span>
-                            </div>
-                            <div className="planner-level-meta">
-                              <span>Main {formatScore(levelSummary?.baseScore ?? 0)}</span>
-                              <span>Extra {formatScore(levelSummary?.extraScore ?? 0)}</span>
-                            </div>
-                          </button>
-
-                          {isOpen ? (
-                            <div className="planner-skill-list">
-                              {level.skills.map((skill) => (
-                                <div key={skill.id} className="planner-skill-row">
-                                  <label className="profile-form-field planner-skill-name-field">
-                                    <span>{skill.isExtra ? "Extra skill" : "Skill"}</span>
-                                    <input
-                                      value={skill.name}
-                                      onChange={(event) => updateSkillName(level.levelKey, skill.id, event.target.value)}
-                                    />
-                                  </label>
-                                  <label className="profile-form-field planner-skill-option-field">
-                                    <span>Evaluation</span>
-                                    <select
-                                      value={skill.optionId ?? ""}
-                                      onChange={(event) => updateSkillOption(level.levelKey, skill.id, event.target.value)}
-                                    >
-                                      <option value="">Select</option>
-                                      {plannerState.template.options.map((option) => (
-                                        <option key={option.id} value={option.id}>
-                                          {option.label}
-                                        </option>
-                                      ))}
-                                    </select>
-                                  </label>
-                                  <button
-                                    type="button"
-                                    className="planner-remove-button"
-                                    onClick={() => removeSkill(level.levelKey, skill.id)}
-                                  >
-                                    Remove
-                                  </button>
+                        return (
+                          <Card key={level.levelKey} variant="subtle" className="planner-level-card">
+                            <CardContent className="planner-level-card__content">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                className="planner-level-head"
+                                onClick={() => toggleLevel(level.levelKey)}
+                              >
+                                <div>
+                                  <strong>{levelLabels[level.levelKey]}</strong>
+                                  <span>{level.skills.length} skills</span>
                                 </div>
-                              ))}
-                              <button type="button" className="planner-secondary-button" onClick={() => addExtraSkill(level.levelKey)}>
-                                Add extra skill
-                              </button>
-                            </div>
-                          ) : null}
-                        </article>
-                      );
-                    })}
-                  </div>
-                </section>
+                                <div className="planner-level-meta">
+                                  <span>Main {formatScore(levelSummary?.baseScore ?? 0)}</span>
+                                  <span>Extra {formatScore(levelSummary?.extraScore ?? 0)}</span>
+                                </div>
+                              </Button>
+
+                              {isOpen ? (
+                                <div className="planner-skill-list">
+                                  {level.skills.map((skill) => (
+                                    <div key={skill.id} className="planner-skill-row">
+                                      <Input
+                                        label={skill.isExtra ? "Extra skill" : "Skill"}
+                                        containerClassName="planner-skill-name-field"
+                                        value={skill.name}
+                                        onChange={(event) => updateSkillName(level.levelKey, skill.id, event.target.value)}
+                                      />
+                                      <Select
+                                        label="Evaluation"
+                                        containerClassName="planner-skill-option-field"
+                                        value={skill.optionId ?? ""}
+                                        onChange={(event) => updateSkillOption(level.levelKey, skill.id, event.target.value)}
+                                        placeholder="Select"
+                                      >
+                                        {plannerState.template.options.map((option) => (
+                                          <option key={option.id} value={option.id}>
+                                            {option.label}
+                                          </option>
+                                        ))}
+                                      </Select>
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                       
+                                        onClick={() => removeSkill(level.levelKey, skill.id)}
+                                      >
+                                        Remove
+                                      </Button>
+                                    </div>
+                                  ))}
+                                  <Button type="button" variant="secondary" size="sm" onClick={() => addExtraSkill(level.levelKey)}>
+                                    Add extra skill
+                                  </Button>
+                                </div>
+                              ) : null}
+                            </CardContent>
+                          </Card>
+                        );
+                      })}
+                    </div>
+                  </CardContent>
+                </Card>
               </>
             ) : null}
           </div>
 
           <aside className="planner-side-column">
-            <section className="surface-card panel-pad planner-panel-stack">
-              <div className="planner-section-head">
-                <div>
-                  <span className="metric-label">Live summary</span>
-                  <h2>Top levels</h2>
+            <Card radius="panel" className="planner-panel-stack">
+              <CardContent className="planner-panel-stack">
+                <SectionHeader eyebrow="Live summary" title="Top levels" />
+                <div className="planner-summary-list">
+                  {summary.topLevels.map((item) => (
+                    <div key={item.levelKey} className="planner-summary-row">
+                      <strong>{item.levelLabel}</strong>
+                      <span>Main {formatScore(item.baseScore)} / Extra {formatScore(item.extraScore)}</span>
+                    </div>
+                  ))}
                 </div>
-              </div>
-              <div className="planner-summary-list">
-                {summary.topLevels.map((item) => (
-                  <div key={item.levelKey} className="planner-summary-row">
-                    <strong>{item.levelLabel}</strong>
-                    <span>Main {formatScore(item.baseScore)} / Extra {formatScore(item.extraScore)}</span>
-                  </div>
-                ))}
-              </div>
-              <button type="button" className="planner-primary-button" onClick={saveEvaluation}>
-                Save athlete record
-              </button>
-            </section>
+                <Button onClick={saveEvaluation}>Save athlete record</Button>
+              </CardContent>
+            </Card>
 
-            <section className="surface-card panel-pad planner-panel-stack">
-              <div className="planner-section-head">
-                <div>
-                  <span className="metric-label">Recent</span>
-                  <h2>Latest evaluations</h2>
+            <Card radius="panel" className="planner-panel-stack">
+              <CardContent className="planner-panel-stack">
+                <SectionHeader eyebrow="Recent" title="Latest evaluations" />
+                <div className="planner-recent-list">
+                  {recentEvaluations.length ? recentEvaluations.map((evaluation) => (
+                    <Button
+                      key={evaluation.id}
+                      type="button"
+                      variant="ghost"
+                      className="planner-recent-card"
+                      onClick={() => loadEvaluation(evaluation)}
+                    >
+                      <strong>{getRecentAthleteLabel(evaluation)}</strong>
+                      <span>{evaluation.athleteSnapshot.registrationNumber}</span>
+                      <span>{new Date(evaluation.savedAt).toLocaleDateString("en-US")}</span>
+                    </Button>
+                  )) : (
+                    <EmptyState title="No tryout records saved yet." description="Saved evaluations will appear here for quick reload." />
+                  )}
                 </div>
-              </div>
-              <div className="planner-recent-list">
-                {recentEvaluations.length ? recentEvaluations.map((evaluation) => (
-                  <button
-                    key={evaluation.id}
-                    type="button"
-                    className="planner-recent-card"
-                    onClick={() => loadEvaluation(evaluation)}
-                  >
-                    <strong>{getRecentAthleteLabel(evaluation)}</strong>
-                    <span>{evaluation.athleteSnapshot.registrationNumber}</span>
-                    <span>{new Date(evaluation.savedAt).toLocaleDateString("en-US")}</span>
-                  </button>
-                )) : <p className="planner-inline-note">No tryout records saved yet.</p>}
-              </div>
-            </section>
+              </CardContent>
+            </Card>
           </aside>
         </div>
       ) : (
         <div className="planner-team-builder-stack">
           <section className="planner-team-stats-grid">
             {stats.map((stat) => (
-              <article key={stat.label} className="surface-card panel-pad planner-team-stat-card">
-                <span>{stat.label}</span>
-                <strong>{stat.value}</strong>
-                <p>{stat.note}</p>
-              </article>
+              <Card key={stat.label} radius="panel" className="planner-team-stat-card">
+                <CardContent className="planner-team-stat-card__content">
+                  <span>{stat.label}</span>
+                  <strong>{stat.value}</strong>
+                  <p>{stat.note}</p>
+                </CardContent>
+              </Card>
             ))}
           </section>
 
           <div className="planner-layout-grid">
             <div className="planner-main-column">
-              <section className="surface-card panel-pad planner-panel-stack">
-                <div className="planner-section-head">
-                  <div>
-                    <span className="metric-label">Qualification rules</span>
-                    <h2>Current thresholds</h2>
-                  </div>
-                  <button
-                    type="button"
-                    className="planner-text-button"
-                    onClick={() => setQualificationOpen((current) => !current)}
-                  >
-                    {qualificationOpen ? "Hide" : "Edit"}
-                  </button>
-                </div>
-                <div className={qualificationOpen ? "planner-team-rules-grid is-open" : "planner-team-rules-grid"}>
-                  {LEVEL_LABELS.map((levelLabel) => (
-                    <label key={levelLabel} className="profile-form-field">
-                      <span>{levelLabel}</span>
-                      <input
+              <Card radius="panel" className="planner-panel-stack">
+                <CardContent className="planner-panel-stack">
+                  <SectionHeader
+                    eyebrow="Qualification rules"
+                    title="Current thresholds"
+                    actions={
+                      <Button variant="ghost" size="sm" onClick={() => setQualificationOpen((current) => !current)}>
+                        {qualificationOpen ? "Hide" : "Edit"}
+                      </Button>
+                    }
+                  />
+                  <div className={qualificationOpen ? "planner-team-rules-grid is-open" : "planner-team-rules-grid"}>
+                    {LEVEL_LABELS.map((levelLabel) => (
+                      <Input
+                        key={levelLabel}
                         type="number"
                         step="0.1"
+                        label={levelLabel}
                         value={plannerState.qualificationRules[levelLabel]}
                         onChange={(event) => updateQualificationRule(levelLabel, event.target.value)}
                       />
-                    </label>
-                  ))}
-                </div>
-              </section>
-
-              <section className="surface-card panel-pad planner-panel-stack">
-                <div className="planner-section-head">
-                  <div>
-                    <span className="metric-label">Athlete pool</span>
-                    <h2>Latest saved tryouts</h2>
+                    ))}
                   </div>
-                  <button
-                    type="button"
-                    className="planner-primary-button"
-                    onClick={() => setCreateTeamOpen((current) => !current)}
-                  >
-                    {createTeamOpen ? "Close" : "Create team"}
-                  </button>
-                </div>
+                </CardContent>
+              </Card>
 
-                {createTeamOpen ? (
-                  <div className="planner-create-team-card">
-                    <label className="profile-form-field">
-                      <span>Team name</span>
-                      <input value={teamDraft.name} onChange={(event) => setTeamDraft((current) => ({ ...current, name: event.target.value }))} />
-                    </label>
-                    <label className="profile-form-field">
-                      <span>Team level</span>
-                      <select
-                        value={teamDraft.teamLevel}
-                        onChange={(event) => setTeamDraft((current) => ({ ...current, teamLevel: event.target.value as PlannerLevelLabel }))}
-                      >
-                        {LEVEL_LABELS.map((levelLabel) => (
-                          <option key={levelLabel} value={levelLabel}>{levelLabel}</option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="profile-form-field">
-                      <span>Team type</span>
-                      <input value={teamDraft.teamType} onChange={(event) => setTeamDraft((current) => ({ ...current, teamType: event.target.value }))} />
-                    </label>
-                    <button type="button" className="planner-primary-button" onClick={createTeam}>
-                      Save team
-                    </button>
-                  </div>
-                ) : null}
+              <Card radius="panel" className="planner-panel-stack">
+                <CardContent className="planner-panel-stack">
+                  <SectionHeader
+                    eyebrow="Athlete pool"
+                    title="Latest saved tryouts"
+                    actions={
+                      <Button onClick={() => setCreateTeamOpen((current) => !current)}>
+                        {createTeamOpen ? "Close" : "Create team"}
+                      </Button>
+                    }
+                  />
 
-                <div className="planner-team-filters">
-                  <label className="profile-form-field planner-athlete-grid-wide">
-                    <span>Search</span>
-                    <input value={filters.search} onChange={(event) => setFilters((current) => ({ ...current, search: event.target.value }))} />
-                  </label>
-                  <label className="profile-form-field">
-                    <span>Level</span>
-                    <select
+                  {createTeamOpen ? (
+                    <Card variant="subtle" className="planner-create-team-card">
+                      <CardContent className="planner-panel-stack">
+                        <Input label="Team name" value={teamDraft.name} onChange={(event) => setTeamDraft((current) => ({ ...current, name: event.target.value }))} />
+                        <Select
+                          label="Team level"
+                          value={teamDraft.teamLevel}
+                          onChange={(event) => setTeamDraft((current) => ({ ...current, teamLevel: event.target.value as PlannerLevelLabel }))}
+                        >
+                          {LEVEL_LABELS.map((levelLabel) => (
+                            <option key={levelLabel} value={levelLabel}>{levelLabel}</option>
+                          ))}
+                        </Select>
+                        <Input label="Team type" value={teamDraft.teamType} onChange={(event) => setTeamDraft((current) => ({ ...current, teamType: event.target.value }))} />
+                        <Button onClick={createTeam}>Save team</Button>
+                      </CardContent>
+                    </Card>
+                  ) : null}
+
+                  <div className="planner-team-filters">
+                    <Input
+                      label="Search"
+                      containerClassName="planner-athlete-grid-wide"
+                      value={filters.search}
+                      onChange={(event) => setFilters((current) => ({ ...current, search: event.target.value }))}
+                    />
+                    <Select
+                      label="Level"
                       value={filters.level}
                       onChange={(event) => setFilters((current) => ({ ...current, level: event.target.value as AthleteFilters["level"] }))}
                     >
@@ -1090,22 +1078,18 @@ export function CheerPlannerTryouts() {
                       {LEVEL_LABELS.map((levelLabel) => (
                         <option key={levelLabel} value={levelLabel}>{levelLabel}</option>
                       ))}
-                    </select>
-                  </label>
-                  <label className="profile-form-field">
-                    <span>Availability</span>
-                    <select
+                    </Select>
+                    <Select
+                      label="Availability"
                       value={filters.availability}
                       onChange={(event) => setFilters((current) => ({ ...current, availability: event.target.value as AthleteFilters["availability"] }))}
                     >
                       <option value="all">All</option>
                       <option value="available">Available</option>
                       <option value="assigned">Assigned</option>
-                    </select>
-                  </label>
-                  <label className="profile-form-field">
-                    <span>Sort</span>
-                    <select
+                    </Select>
+                    <Select
+                      label="Sort"
                       value={filters.sort}
                       onChange={(event) => setFilters((current) => ({ ...current, sort: event.target.value as AthleteFilters["sort"] }))}
                     >
@@ -1113,124 +1097,130 @@ export function CheerPlannerTryouts() {
                       <option value="name-asc">Name</option>
                       <option value="age-asc">Age low to high</option>
                       <option value="age-desc">Age high to low</option>
-                    </select>
-                  </label>
-                </div>
+                    </Select>
+                  </div>
 
-                <div className="planner-athlete-pool-list">
-                  {filteredAthletePool.length ? filteredAthletePool.map((athlete) => (
-                    <article key={athlete.registrationNumber} className="planner-athlete-pool-row">
-                      <div className="planner-athlete-pool-copy">
-                        <div className="planner-athlete-pool-title-row">
-                          <strong>{athlete.name}</strong>
-                          <span className="planner-athlete-pool-badge">{athlete.displayLevel}</span>
-                        </div>
-                        <p>
-                          {athlete.registrationNumber} / Age {athlete.age ?? "-"} / Source {athlete.sourceTeamName || "No source team"}
-                        </p>
-                        <p>
-                          Score {formatScore(athlete.displayScore)} / Extra {formatScore(athlete.extraScore)} / Assigned to {athlete.assignedTeamName}
-                        </p>
-                      </div>
-                      <label className="profile-form-field planner-athlete-assign-field">
-                        <span>Assign to team</span>
-                        <select
-                          value={athlete.assignedTeamId ?? ""}
-                          onChange={(event) => {
-                            const nextTeamId = event.target.value;
-                            if (!nextTeamId) {
-                              if (athlete.assignedTeamId) {
-                                removeFromTeam(athlete.registrationNumber, athlete.assignedTeamId);
+                  <div className="planner-athlete-pool-list">
+                    {filteredAthletePool.length ? filteredAthletePool.map((athlete) => (
+                      <Card key={athlete.registrationNumber} variant="subtle" className="planner-athlete-pool-row">
+                        <CardContent className="planner-athlete-pool-row__content">
+                          <div className="planner-athlete-pool-copy">
+                            <div className="planner-athlete-pool-title-row">
+                              <strong>{athlete.name}</strong>
+                              <Badge variant={athlete.displayLevel === "Unqualified" ? "subtle" : "dark"}>{athlete.displayLevel}</Badge>
+                            </div>
+                            <p>
+                              {athlete.registrationNumber} / Age {athlete.age ?? "-"} / Source {athlete.sourceTeamName || "No source team"}
+                            </p>
+                            <p>
+                              Score {formatScore(athlete.displayScore)} / Extra {formatScore(athlete.extraScore)} / Builder team {athlete.assignedTeamName}
+                            </p>
+                          </div>
+                          <Select
+                            label="Assign to builder team"
+                            containerClassName="planner-athlete-assign-field"
+                            value={athlete.assignedTeamId ?? ""}
+                            onChange={(event) => {
+                              const nextTeamId = event.target.value;
+                              if (!nextTeamId) {
+                                if (athlete.assignedTeamId) {
+                                  removeFromTeam(athlete.registrationNumber, athlete.assignedTeamId);
+                                }
+                                return;
                               }
-                              return;
-                            }
-                            assignToTeam(athlete.registrationNumber, nextTeamId);
-                          }}
-                        >
-                          <option value="">No team</option>
-                          {plannerState.teams.map((team) => (
-                            <option key={team.id} value={team.id}>{team.name}</option>
-                          ))}
-                        </select>
-                      </label>
-                    </article>
-                  )) : <p className="planner-inline-note">No athletes match the current filters.</p>}
-                </div>
-              </section>
+                              assignToTeam(athlete.registrationNumber, nextTeamId);
+                            }}
+                          >
+                            <option value="">No team</option>
+                            {plannerState.teams.map((team) => (
+                              <option
+                                key={team.id}
+                                value={team.id}
+                                disabled={athlete.assignedTeamId !== team.id && !canAssignQualifiedLevelToTeam(athlete.displayLevel, team.teamLevel)}
+                              >
+                                {team.name} ({team.teamLevel})
+                              </option>
+                            ))}
+                          </Select>
+                        </CardContent>
+                      </Card>
+                    )) : (
+                      <EmptyState title="No athletes match the current filters." description="Adjust filters or save more tryout evaluations." />
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
             </div>
 
             <aside className="planner-side-column">
-              <section className="surface-card panel-pad planner-panel-stack">
-                <div className="planner-section-head">
-                  <div>
-                    <span className="metric-label">Teams</span>
-                    <h2>Saved rosters</h2>
-                  </div>
-                </div>
+              <Card radius="panel" className="planner-panel-stack">
+                <CardContent className="planner-panel-stack">
+                  <SectionHeader eyebrow="Teams" title="Saved rosters" />
 
-                {teamEdit ? (
-                  <div className="planner-create-team-card planner-team-edit-card">
-                    <label className="profile-form-field">
-                      <span>Team name</span>
-                      <input value={teamEdit.name} onChange={(event) => setTeamEdit((current) => current ? { ...current, name: event.target.value } : current)} />
-                    </label>
-                    <label className="profile-form-field">
-                      <span>Team level</span>
-                      <select
-                        value={teamEdit.teamLevel}
-                        onChange={(event) => setTeamEdit((current) => current ? { ...current, teamLevel: event.target.value as PlannerLevelLabel } : current)}
-                      >
-                        {LEVEL_LABELS.map((levelLabel) => (
-                          <option key={levelLabel} value={levelLabel}>{levelLabel}</option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="profile-form-field">
-                      <span>Team type</span>
-                      <input value={teamEdit.teamType} onChange={(event) => setTeamEdit((current) => current ? { ...current, teamType: event.target.value } : current)} />
-                    </label>
-                    <div className="planner-inline-actions">
-                      <button type="button" className="planner-primary-button" onClick={confirmTeamEdit}>Save edits</button>
-                      <button type="button" className="planner-secondary-button" onClick={() => setTeamEdit(null)}>Cancel</button>
-                    </div>
-                  </div>
-                ) : null}
+                  {teamEdit ? (
+                    <Card variant="subtle" className="planner-team-edit-card">
+                      <CardContent className="planner-panel-stack">
+                        <Input label="Team name" value={teamEdit.name} onChange={(event) => setTeamEdit((current) => current ? { ...current, name: event.target.value } : current)} />
+                        <Select
+                          label="Team level"
+                          value={teamEdit.teamLevel}
+                          onChange={(event) => setTeamEdit((current) => current ? { ...current, teamLevel: event.target.value as PlannerLevelLabel } : current)}
+                        >
+                          {LEVEL_LABELS.map((levelLabel) => (
+                            <option key={levelLabel} value={levelLabel}>{levelLabel}</option>
+                          ))}
+                        </Select>
+                        <Input label="Team type" value={teamEdit.teamType} onChange={(event) => setTeamEdit((current) => current ? { ...current, teamType: event.target.value } : current)} />
+                        <div className="planner-inline-actions">
+                          <Button onClick={confirmTeamEdit}>Save edits</Button>
+                          <Button variant="secondary" onClick={() => setTeamEdit(null)}>Cancel</Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ) : null}
 
-                <div className="planner-team-card-list">
-                  {teamsWithMembers.length ? teamsWithMembers.map((team) => (
-                    <article key={team.id} className="planner-team-card">
-                      <div className="planner-team-card-head">
-                        <div>
-                          <strong>{team.name}</strong>
-                          <p>{team.teamLevel} / {team.teamType}</p>
-                        </div>
-                        <div className="planner-team-card-actions">
-                          <button type="button" className="planner-text-button" onClick={() => openTeamEdit(team)}>Edit</button>
-                          <button type="button" className="planner-text-button" onClick={() => clearTeam(team.id)}>Clear</button>
-                          <button type="button" className="planner-danger-button" onClick={() => deleteTeam(team.id)}>Delete</button>
-                        </div>
-                      </div>
-                      <div className="planner-team-summary-row">
-                        <span>{team.members.length} athletes</span>
-                        <span>Updated {new Date(team.updatedAt).toLocaleDateString("en-US")}</span>
-                      </div>
-                      <div className="planner-team-members-list">
-                        {team.members.length ? team.members.map((member) => (
-                          <div key={member.registrationNumber} className="planner-team-member-row">
+                  <div className="planner-team-card-list">
+                    {teamsWithMembers.length ? teamsWithMembers.map((team) => (
+                      <Card key={team.id} variant="subtle" className="planner-team-card">
+                        <CardContent className="planner-panel-stack">
+                          <div className="planner-team-card-head">
                             <div>
-                              <strong>{member.name}</strong>
-                              <p>{member.registrationNumber} / {member.displayLevel} / {formatScore(member.displayScore)}</p>
+                              <strong>{team.name}</strong>
+                              <p>{team.teamLevel} / {team.teamType}</p>
                             </div>
-                            <button type="button" className="planner-text-button" onClick={() => removeFromTeam(member.registrationNumber, team.id)}>
-                              Remove
-                            </button>
+                            <div className="planner-team-card-actions">
+                              <Button variant="ghost" size="sm" onClick={() => openTeamEdit(team)}>Edit</Button>
+                              <Button variant="ghost" size="sm" onClick={() => clearTeam(team.id)}>Clear</Button>
+                              <Button variant="danger" size="sm" onClick={() => deleteTeam(team.id)}>Delete</Button>
+                            </div>
                           </div>
-                        )) : <p className="planner-inline-note">No athletes assigned yet.</p>}
-                      </div>
-                    </article>
-                  )) : <p className="planner-inline-note">Create your first team to start assigning athletes.</p>}
-                </div>
-              </section>
+                          <div className="planner-team-summary-row">
+                            <span>{team.members.length} athletes</span>
+                            <span>Updated {new Date(team.updatedAt).toLocaleDateString("en-US")}</span>
+                          </div>
+                          <div className="planner-team-members-list">
+                            {team.members.length ? team.members.map((member) => (
+                              <div key={member.registrationNumber} className="planner-team-member-row">
+                                <div>
+                                  <strong>{member.name}</strong>
+                                  <p>{member.registrationNumber} / {member.displayLevel} / {formatScore(member.displayScore)}</p>
+                                </div>
+                                <Button variant="ghost" size="sm" onClick={() => removeFromTeam(member.registrationNumber, team.id)}>
+                                  Remove
+                                </Button>
+                              </div>
+                            )) : (
+                              <EmptyState title="No athletes assigned yet." description="Assign athletes from the pool to start building this roster." />
+                            )}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )) : (
+                      <EmptyState title="Create your first team to start assigning athletes." description="Team Builder will keep rosters as persistent planner objects." />
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
             </aside>
           </div>
         </div>

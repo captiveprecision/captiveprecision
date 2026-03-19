@@ -1,11 +1,11 @@
+import { WorkspacePlaceholderPage } from "@/components/layout/workspace-placeholder-page";
+
 export default function CoachEventsPage() {
   return (
-    <main className="workspace-shell page-stack">
-      <section className="surface-card panel-pad settings-hero">
-        <div className="metric-label">Events</div>
-        <h1 className="page-title settings-title">Events</h1>
-        <p className="page-copy">Coming soon.</p>
-      </section>
-    </main>
+    <WorkspacePlaceholderPage
+      eyebrow="Events"
+      title="Events"
+      description="Coach events and scheduling are planned next, but this route is intentionally kept lightweight for now."
+    />
   );
 }

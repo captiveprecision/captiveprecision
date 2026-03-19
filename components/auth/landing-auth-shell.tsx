@@ -1,7 +1,21 @@
-"use client";
+﻿"use client";
 
 import { useState } from "react";
 
+import {
+  Badge,
+  Button,
+  Card,
+  CardContent,
+  FormShell,
+  Input,
+  PageColumns,
+  PageHero,
+  PageMainColumn,
+  PageSideColumn,
+  Select,
+  StatGrid
+} from "@/components/ui";
 import type { AppRole } from "@/lib/auth/mock-auth";
 
 type RequestState = {
@@ -13,6 +27,21 @@ const roleOptions: Array<{ value: Extract<AppRole, "coach" | "gym">; label: stri
   { value: "coach", label: "Coach" },
   { value: "gym", label: "Gym" }
 ];
+
+const highlightCards = [
+  {
+    title: "For coaches",
+    body: "Score tools, team dashboards, and athlete progress in one structured workspace."
+  },
+  {
+    title: "For gyms",
+    body: "Coach licenses, shared oversight, teams, athletes, and organization visibility."
+  },
+  {
+    title: "For admins",
+    body: "Scoring systems, version control, and platform-wide operational settings."
+  }
+] as const;
 
 export function LandingAuthShell() {
   const [loginState, setLoginState] = useState<RequestState>({ mode: "idle" });
@@ -70,64 +99,111 @@ export function LandingAuthShell() {
   }
 
   return (
-    <main className="landing-shell">
-      <section className="landing-hero-card">
-        <div className="role-selection-badge">Captive Precision</div>
-        <h1 className="landing-title">Premium cheer tools for coaches, gyms, and system admins.</h1>
-        <p className="landing-copy">
-          Captive Precision centralizes scoring tools, team tracking, gym oversight, and future membership access into one premium workflow.
-        </p>
-
-        <div className="landing-highlights">
-          <div className="landing-highlight-card"><strong>For coaches</strong><span>Score tools, team dashboards, athlete-facing progress in one place.</span></div>
-          <div className="landing-highlight-card"><strong>For gyms</strong><span>Coach licenses, gym visibility, teams, athletes, and organization stats.</span></div>
-          <div className="landing-highlight-card"><strong>For admins</strong><span>Scoring systems, version control, and platform-wide configuration.</span></div>
-        </div>
-      </section>
-
-      <section className="landing-auth-grid">
-        <article className="surface-card panel-pad landing-auth-card">
-          <div className="metric-label">Sign in</div>
-          <h2>Access your workspace</h2>
-          <p className="muted-copy">Use your existing account to continue into coach, gym, or admin.</p>
-          <form className="landing-auth-form" onSubmit={handleLogin}>
-            <input type="email" placeholder="Email" value={loginEmail} onChange={(event) => setLoginEmail(event.target.value)} required />
-            <input type="password" placeholder="Password" value={loginPassword} onChange={(event) => setLoginPassword(event.target.value)} required />
-            <button type="submit" className="landing-auth-button">
-              {loginState.mode === "loading" ? "Signing in..." : "Sign in"}
-            </button>
-            {loginState.mode === "error" ? <p className="landing-auth-error">{loginState.message}</p> : null}
-          </form>
-        </article>
-
-        <article className="surface-card panel-pad landing-auth-card">
-          <div className="metric-label">Register</div>
-          <h2>Create a new account</h2>
-          <p className="muted-copy">New accounts can start as a coach or a gym. Admin access remains restricted.</p>
-          <form className="landing-auth-form" onSubmit={handleRegister}>
-            <input type="text" placeholder="Name" value={registerName} onChange={(event) => setRegisterName(event.target.value)} required />
-            <input type="email" placeholder="Email" value={registerEmail} onChange={(event) => setRegisterEmail(event.target.value)} required />
-            <input type="password" placeholder="Password" value={registerPassword} onChange={(event) => setRegisterPassword(event.target.value)} required />
-            <div className="landing-role-picker">
-              {roleOptions.map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  className="dashboard-tab"
-                  data-active={registerRole === option.value}
-                  onClick={() => setRegisterRole(option.value)}
-                >
-                  {option.label}
-                </button>
+    <main className="landing-shell page-stack">
+      <PageColumns className="landing-top-grid">
+        <PageMainColumn className="landing-main-column">
+          <PageHero
+            className="landing-hero-card"
+            contentClassName="landing-hero-content"
+            eyebrow={<Badge variant="accent">Captive Precision</Badge>}
+            title="Premium cheer software for coaches, gyms, and system admins."
+            description="Captive Precision centralizes scoring tools, team planning, gym oversight, and future membership access into one structured product workflow."
+          >
+            <StatGrid className="landing-highlights">
+              {highlightCards.map((card) => (
+                <Card key={card.title} className="landing-highlight-card">
+                  <CardContent className="landing-highlight-card__content">
+                    <span className="metric-label">{card.title}</span>
+                    <p className="landing-highlight-copy">{card.body}</p>
+                  </CardContent>
+                </Card>
               ))}
+            </StatGrid>
+          </PageHero>
+        </PageMainColumn>
+
+        <PageSideColumn className="landing-side-column">
+          <FormShell className="landing-auth-card" contentClassName="landing-auth-card__content">
+            <div className="landing-auth-card__intro">
+              <span className="metric-label">Sign in</span>
+              <h2 className="ui-card__title">Access your workspace</h2>
+              <p className="muted-copy">Use your existing account to continue into coach, gym, or admin.</p>
             </div>
-            <button type="submit" className="landing-auth-button">
-              {registerState.mode === "loading" ? "Creating account..." : "Create account"}
-            </button>
-            {registerState.mode === "error" ? <p className="landing-auth-error">{registerState.message}</p> : null}
-          </form>
-        </article>
-      </section>
+            <form className="landing-auth-form" onSubmit={handleLogin}>
+              <Input
+                id="login-email"
+                type="email"
+                label="Email"
+                value={loginEmail}
+                onChange={(event) => setLoginEmail(event.target.value)}
+                required
+              />
+              <Input
+                id="login-password"
+                type="password"
+                label="Password"
+                value={loginPassword}
+                onChange={(event) => setLoginPassword(event.target.value)}
+                required
+              />
+              <Button type="submit" variant="primary" size="lg">
+                {loginState.mode === "loading" ? "Signing in..." : "Sign in"}
+              </Button>
+              {loginState.mode === "error" ? <p className="landing-auth-error">{loginState.message}</p> : null}
+            </form>
+          </FormShell>
+
+          <FormShell className="landing-auth-card" contentClassName="landing-auth-card__content">
+            <div className="landing-auth-card__intro">
+              <span className="metric-label">Register</span>
+              <h2 className="ui-card__title">Create a new account</h2>
+              <p className="muted-copy">New accounts can start as a coach or a gym. Admin access remains restricted.</p>
+            </div>
+            <form className="landing-auth-form" onSubmit={handleRegister}>
+              <Input
+                id="register-name"
+                type="text"
+                label="Name"
+                value={registerName}
+                onChange={(event) => setRegisterName(event.target.value)}
+                required
+              />
+              <Input
+                id="register-email"
+                type="email"
+                label="Email"
+                value={registerEmail}
+                onChange={(event) => setRegisterEmail(event.target.value)}
+                required
+              />
+              <Input
+                id="register-password"
+                type="password"
+                label="Password"
+                value={registerPassword}
+                onChange={(event) => setRegisterPassword(event.target.value)}
+                required
+              />
+              <Select
+                id="register-role"
+                label="Workspace type"
+                value={registerRole}
+                onChange={(event) => setRegisterRole(event.target.value as "coach" | "gym")}
+              >
+                {roleOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </Select>
+              <Button type="submit" variant="primary" size="lg">
+                {registerState.mode === "loading" ? "Creating account..." : "Create account"}
+              </Button>
+              {registerState.mode === "error" ? <p className="landing-auth-error">{registerState.message}</p> : null}
+            </form>
+          </FormShell>
+        </PageSideColumn>
+      </PageColumns>
     </main>
   );
 }

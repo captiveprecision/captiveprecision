@@ -1,11 +1,21 @@
+﻿import { Card, CardContent, EmptyState, SectionHeader } from "@/components/ui";
+
 export default function AdminSettingsPage() {
   return (
     <main className="workspace-shell page-stack">
-      <section className="surface-card panel-pad settings-hero">
-        <div className="metric-label">Admin settings</div>
-        <h1 className="page-title settings-title">Settings</h1>
-        <p className="page-copy">Coming soon.</p>
-      </section>
+      <Card radius="panel" className="settings-hero">
+        <CardContent className="settings-hero">
+          <SectionHeader
+            eyebrow="Admin settings"
+            title="Settings"
+            description="Administrative configuration surfaces will expand here as platform controls move out of placeholder mode."
+          />
+          <EmptyState
+            title="Settings modules are coming next."
+            description="This placeholder stays aligned with the new system while admin configuration is still being defined."
+          />
+        </CardContent>
+      </Card>
     </main>
   );
 }

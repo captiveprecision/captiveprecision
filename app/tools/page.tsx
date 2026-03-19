@@ -1,43 +1,45 @@
-import Link from "next/link";
+import { ToolsListingShell } from "@/components/tools/tools-listing-shell";
 
 export default function ToolsPage() {
   return (
-    <main className="workspace-shell page-stack">
-      <section className="surface-card panel-pad">
-        <div className="metric-label">Tools</div>
-        <h1 className="page-title">Tools</h1>
-        <p className="page-copy">Coming soon.</p>
-      </section>
-
-      <section className="settings-layout">
-        <article className="surface-card panel-pad settings-section">
-          <div className="metric-label">Available now</div>
-          <h2>Cheer Score</h2>
-          <p className="muted-copy">The first active tool in the platform.</p>
-          <div className="settings-inline-actions">
-            <Link className="profile-edit-button" href="/coach/tools/cheer-score-calculator">
-              Open tool
-            </Link>
-          </div>
-        </article>
-
-        <article className="surface-card panel-pad settings-section">
-          <div className="metric-label">Coming soon</div>
-          <h2>Full out evaluator</h2>
-          <p className="muted-copy">Placeholder for a future performance review workflow.</p>
-        </article>
-
-        <article className="surface-card panel-pad settings-section">
-          <div className="metric-label">Live</div>
-          <h2>Cheer Planner</h2>
-          <p className="muted-copy">Step 1 of the planner is now live with tryout evaluations, local templates, and athlete records prepared for later planner phases.</p>
-          <div className="settings-inline-actions">
-            <Link className="profile-edit-button" href="/tools/cheer-planner">
-              Open tool
-            </Link>
-          </div>
-        </article>
-      </section>
-    </main>
+    <ToolsListingShell
+      title="Tools"
+      description="A central view of live workflow tools and the modules that are already planned into the platform."
+      heroBadges={["2 live tools", "Planner phase active"]}
+      tools={[
+        {
+          id: "cheer-score",
+          label: "Available now",
+          title: "Cheer Score",
+          description: "The first active tool in the platform.",
+          href: "/coach/tools/cheer-score-calculator",
+          actionLabel: "Open tool",
+          statusVariant: "accent"
+        },
+        {
+          id: "full-out-evaluator",
+          label: "Coming soon",
+          title: "Full Out Evaluator",
+          description: "Placeholder for a future performance review workflow.",
+          statusVariant: "subtle"
+        },
+        {
+          id: "cheer-planner",
+          label: "Live",
+          title: "Cheer Planner",
+          description: "Step 1 of the planner is now live with tryout evaluations, local templates, and athlete records prepared for later planner phases.",
+          href: "/tools/cheer-planner",
+          actionLabel: "Open tool",
+          statusVariant: "accent"
+        }
+      ]}
+      sideTitle="Platform rollout"
+      sideDescription="This surface stays intentionally simple while tools continue to move into the shared product system."
+      sideItems={[
+        { label: "Live now", value: "Cheer Score, Cheer Planner" },
+        { label: "Next in queue", value: "Full Out Evaluator" },
+        { label: "Access path", value: "Coach workspace default" }
+      ]}
+    />
   );
 }

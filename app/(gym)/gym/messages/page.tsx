@@ -1,11 +1,11 @@
+import { WorkspacePlaceholderPage } from "@/components/layout/workspace-placeholder-page";
+
 export default function GymMessagesPage() {
   return (
-    <main className="workspace-shell page-stack">
-      <section className="surface-card panel-pad settings-hero">
-        <div className="metric-label">Gym messages</div>
-        <h1 className="page-title settings-title">Messages</h1>
-        <p className="page-copy">Coming soon.</p>
-      </section>
-    </main>
+    <WorkspacePlaceholderPage
+      eyebrow="Gym messages"
+      title="Messages"
+      description="Organization-wide messaging for gym accounts is not live yet, but the route remains part of the current workspace shell."
+    />
   );
 }

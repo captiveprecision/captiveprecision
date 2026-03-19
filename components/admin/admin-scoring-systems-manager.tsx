@@ -1,7 +1,23 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
 
+import {
+  Badge,
+  Button,
+  Card,
+  CardContent,
+  DetailGrid,
+  Input,
+  PageColumns,
+  PageHero,
+  PageMainColumn,
+  PageSideColumn,
+  SectionHeader,
+  Select,
+  Tabs,
+  Textarea
+} from "@/components/ui";
 import { useScoringSystems } from "@/lib/scoring/use-scoring-systems";
 import { getSystemById, getVersionById, type ScoringSystem, type ScoringSystemVersion } from "@/lib/scoring/scoring-systems";
 
@@ -151,191 +167,204 @@ export function AdminScoringSystemsManager() {
     setDraftVersion(cloneVersion(nextSystem.versions[0]));
   };
 
+  const versionTabs = selectedSystem.versions.map((version) => ({
+    value: version.id,
+    label: (
+      <span className="scoring-admin-tab-copy">
+        <span>{version.label}</span>
+        <small>{version.status}</small>
+      </span>
+    )
+  }));
+
   return (
     <main className="workspace-shell page-stack scoring-admin-shell">
-      <section className="surface-card panel-pad scoring-admin-panel">
-        <div className="metric-label">Scoring systems</div>
-        <div className="scoring-admin-system-header">
-          <div className="scoring-admin-system-selector">
-            <label htmlFor="scoring-system-selector">System</label>
-            <select
-              id="scoring-system-selector"
-              value={selectedSystem.id}
-              onChange={(event) => setSelectedSystemId(event.target.value)}
-            >
-              {config.systems.map((system) => (
-                <option key={system.id} value={system.id}>
-                  {system.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <button type="button" className="profile-edit-button scoring-admin-secondary-action" onClick={createSystem}>
+      <PageHero
+        className="scoring-admin-hero"
+        contentClassName="scoring-admin-hero"
+        eyebrow="Scoring systems"
+        title={selectedSystem.name}
+        description="Versions by season and scoring structure."
+        actions={
+          <Button type="button" variant="secondary" onClick={createSystem}>
             Create new system
-          </button>
+          </Button>
+        }
+      >
+        <div className="scoring-admin-system-header">
+          <Select
+            id="scoring-system-selector"
+            label="System"
+            value={selectedSystem.id}
+            onChange={(event) => setSelectedSystemId(event.target.value)}
+            containerClassName="scoring-admin-system-selector"
+          >
+            {config.systems.map((system) => (
+              <option key={system.id} value={system.id}>
+                {system.name}
+              </option>
+            ))}
+          </Select>
         </div>
-        <h1 className="page-title settings-title">{selectedSystem.name}</h1>
-        <p className="page-copy">Versions by season and scoring structure.</p>
-      </section>
+      </PageHero>
 
-      <section className="scoring-admin-layout">
-        <div className="scoring-admin-main">
-          <article className="surface-card panel-pad scoring-admin-panel">
-            <div className="scoring-admin-panel-head">
-              <div>
-                <div className="metric-label">Versions</div>
-                <h2>Season list</h2>
-              </div>
-              <button
-                type="button"
-                className="profile-edit-button scoring-admin-secondary-action"
-                onClick={() => {
-                  setConfig((current) => ({
-                    ...current,
-                    activeSystemId: selectedSystem.id,
-                    systems: current.systems.map((system) => (
-                      system.id === selectedSystem.id
-                        ? { ...system, activeVersionId: selectedVersion.id }
-                        : system
-                    ))
-                  }));
-                }}
-              >
-                Set active version
-              </button>
-            </div>
+      <PageColumns className="scoring-admin-layout">
+        <PageMainColumn className="scoring-admin-main">
+          <Card radius="panel">
+            <CardContent className="scoring-admin-panel">
+              <SectionHeader
+                eyebrow="Versions"
+                title="Season list"
+                actions={
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => {
+                      setConfig((current) => ({
+                        ...current,
+                        activeSystemId: selectedSystem.id,
+                        systems: current.systems.map((system) => (
+                          system.id === selectedSystem.id
+                            ? { ...system, activeVersionId: selectedVersion.id }
+                            : system
+                        ))
+                      }));
+                    }}
+                  >
+                    Set active version
+                  </Button>
+                }
+              />
 
-            <div className="scoring-admin-tabs">
-              {selectedSystem.versions.map((version) => (
-                <button
-                  key={version.id}
-                  type="button"
-                  className="scoring-admin-tab"
-                  data-active={version.id === selectedVersion.id}
-                  onClick={() => setSelectedVersionId(version.id)}
-                >
-                  <span>{version.label}</span>
-                  <small>{version.status}</small>
-                </button>
-              ))}
-            </div>
-          </article>
+              <Tabs
+                items={versionTabs}
+                value={selectedVersion.id}
+                onValueChange={setSelectedVersionId}
+                className="scoring-admin-tabs-shell"
+                listClassName="scoring-admin-tabs"
+                triggerClassName="scoring-admin-tab"
+                ariaLabel="Scoring system versions"
+              />
+            </CardContent>
+          </Card>
 
-          <article className="surface-card panel-pad scoring-admin-panel">
-            <div className="scoring-admin-grid">
-              <div className="profile-form-field">
-                <label htmlFor="version-label">Version</label>
-                <input
+          <Card radius="panel">
+            <CardContent className="scoring-admin-panel">
+              <SectionHeader
+                eyebrow="Version settings"
+                title={draftVersion.label}
+                actions={<Badge variant="subtle">{draftVersion.status}</Badge>}
+              />
+
+              <div className="scoring-admin-grid">
+                <Input
                   id="version-label"
+                  label="Version"
                   type="text"
                   value={draftVersion.label}
                   onChange={(event) => updateDraftVersion((current) => ({ ...current, label: event.target.value }))}
                 />
-              </div>
-              <div className="profile-form-field">
-                <label htmlFor="version-season">Season</label>
-                <input
+                <Input
                   id="version-season"
+                  label="Season"
                   type="text"
                   value={draftVersion.season}
                   onChange={(event) => updateDraftVersion((current) => ({ ...current, season: event.target.value }))}
                 />
-              </div>
-              <div className="profile-form-field profile-form-field-full">
-                <label htmlFor="version-comments">Comments</label>
-                <textarea
+                <Textarea
                   id="version-comments"
+                  label="Comments"
                   rows={4}
+                  containerClassName="scoring-admin-grid__full"
                   value={draftVersion.comments}
                   onChange={(event) => updateDraftVersion((current) => ({ ...current, comments: event.target.value }))}
                 />
               </div>
-            </div>
-          </article>
+            </CardContent>
+          </Card>
 
-          <article className="surface-card panel-pad scoring-admin-panel">
-            <div className="scoring-admin-panel-head">
-              <div>
-                <div className="metric-label">Scoring breakdown</div>
-                <h2>{draftVersion.label}</h2>
+          <Card radius="panel">
+            <CardContent className="scoring-admin-panel">
+              <SectionHeader
+                eyebrow="Scoring breakdown"
+                title={draftVersion.label}
+                actions={<Badge variant="accent">{draftVersion.sections.length} items</Badge>}
+              />
+
+              <div className="scoring-admin-sections">
+                {draftVersion.sections.map((section, index) => (
+                  <Card key={section.id} variant="subtle" className="scoring-admin-section-card">
+                    <CardContent className="scoring-admin-section-row">
+                      <Badge variant="accent" className="scoring-admin-section-index">{index + 1}</Badge>
+                      <Input
+                        label="Section"
+                        type="text"
+                        value={section.name}
+                        onChange={(event) => {
+                          const nextValue = event.target.value;
+                          updateDraftVersion((current) => ({
+                            ...current,
+                            sections: current.sections.map((item) => (
+                              item.id === section.id ? { ...item, name: nextValue } : item
+                            ))
+                          }));
+                        }}
+                      />
+                      <Input
+                        label="Max"
+                        type="number"
+                        step="0.001"
+                        min="0"
+                        value={section.maxPoints}
+                        onChange={(event) => {
+                          const nextValue = parseNumericValue(event.target.value);
+                          updateDraftVersion((current) => ({
+                            ...current,
+                            sections: current.sections.map((item) => (
+                              item.id === section.id ? { ...item, maxPoints: nextValue } : item
+                            ))
+                          }));
+                        }}
+                      />
+                    </CardContent>
+                  </Card>
+                ))}
               </div>
-              <div className="scoring-admin-stat-pill">{draftVersion.sections.length} items</div>
-            </div>
 
-            <div className="scoring-admin-sections">
-              {draftVersion.sections.map((section, index) => (
-                <div className="scoring-admin-section-row" key={section.id}>
-                  <span className="scoring-admin-section-index">{index + 1}</span>
-                  <div className="scoring-admin-section-name">
-                    <label>Section</label>
-                    <input
-                      type="text"
-                      value={section.name}
-                      onChange={(event) => {
-                        const nextValue = event.target.value;
-                        updateDraftVersion((current) => ({
-                          ...current,
-                          sections: current.sections.map((item) => (
-                            item.id === section.id ? { ...item, name: nextValue } : item
-                          ))
-                        }));
-                      }}
-                    />
-                  </div>
-                  <div className="scoring-admin-section-points">
-                    <label>Max</label>
-                    <input
-                      type="number"
-                      step="0.001"
-                      min="0"
-                      value={section.maxPoints}
-                      onChange={(event) => {
-                        const nextValue = parseNumericValue(event.target.value);
-                        updateDraftVersion((current) => ({
-                          ...current,
-                          sections: current.sections.map((item) => (
-                            item.id === section.id ? { ...item, maxPoints: nextValue } : item
-                          ))
-                        }));
-                      }}
-                    />
-                  </div>
+              <div className="scoring-admin-save-row">
+                <Button type="button" variant="primary" size="lg" onClick={saveDraft}>
+                  Save
+                </Button>
+                <Button type="button" variant="secondary" size="lg" onClick={saveAsVersion}>
+                  Save as version
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </PageMainColumn>
+
+        <PageSideColumn className="scoring-admin-side">
+          <Card radius="panel">
+            <CardContent className="scoring-admin-panel">
+              <SectionHeader eyebrow="Live sync" title="Calculator" />
+              <DetailGrid className="scoring-admin-summary-list">
+                <div>
+                  <span className="profile-detail-label">System</span>
+                  <p className="profile-detail-value">{activeSystem.name}</p>
                 </div>
-              ))}
-            </div>
-
-            <div className="scoring-admin-save-row">
-              <button type="button" className="scoring-admin-save-button" onClick={saveDraft}>
-                Save
-              </button>
-              <button type="button" className="scoring-admin-save-button" onClick={saveAsVersion}>
-                Save as version
-              </button>
-            </div>
-          </article>
-        </div>
-
-        <aside className="scoring-admin-side">
-          <article className="surface-card panel-pad scoring-admin-panel">
-            <div className="metric-label">Live sync</div>
-            <h2>Calculator</h2>
-            <div className="scoring-admin-summary-list">
-              <div>
-                <span className="profile-detail-label">System</span>
-                <p className="profile-detail-value">{activeSystem.name}</p>
-              </div>
-              <div>
-                <span className="profile-detail-label">Version</span>
-                <p className="profile-detail-value">{activeVersion.label}</p>
-              </div>
-              <div>
-                <span className="profile-detail-label">Total max</span>
-                <p className="profile-detail-value">{totalMaxPoints}</p>
-              </div>
-            </div>
-          </article>
-        </aside>
-      </section>
+                <div>
+                  <span className="profile-detail-label">Version</span>
+                  <p className="profile-detail-value">{activeVersion.label}</p>
+                </div>
+                <div>
+                  <span className="profile-detail-label">Total max</span>
+                  <p className="profile-detail-value">{totalMaxPoints}</p>
+                </div>
+              </DetailGrid>
+            </CardContent>
+          </Card>
+        </PageSideColumn>
+      </PageColumns>
     </main>
   );
 }

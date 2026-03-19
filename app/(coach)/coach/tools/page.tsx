@@ -1,48 +1,47 @@
-import Link from "next/link";
+import { ToolsListingShell } from "@/components/tools/tools-listing-shell";
 
 export default function CoachToolsPage() {
   return (
-    <main className="workspace-shell page-stack">
-      <section className="surface-card panel-pad settings-hero">
-        <div className="metric-label">Tools</div>
-        <h1 className="page-title settings-title">Tools</h1>
-        <p className="page-copy">Available tools and upcoming releases.</p>
-      </section>
-
-      <section className="info-grid">
-        <article className="surface-card panel-pad settings-section">
-          <div className="metric-label">Live</div>
-          <h2>Cheer Score</h2>
-          <p className="muted-copy">The first active premium tool in the coach workspace.</p>
-          <div className="settings-inline-actions">
-            <Link className="profile-edit-button" href="/coach/tools/cheer-score-calculator">
-              Open tool
-            </Link>
-          </div>
-        </article>
-
-        <article className="surface-card panel-pad settings-section">
-          <div className="metric-label">Live</div>
-          <h2>Execution Evaluator</h2>
-          <p className="muted-copy">Routine execution scoring with central admin-controlled scoring values and local records saved by team.</p>
-          <div className="settings-inline-actions">
-            <Link className="profile-edit-button" href="/coach/tools/full-out-evaluator">
-              Open tool
-            </Link>
-          </div>
-        </article>
-
-        <article className="surface-card panel-pad settings-section">
-          <div className="metric-label">Live</div>
-          <h2>Cheer Planner</h2>
-          <p className="muted-copy">Step 1 of the planner is now live with tryout evaluations, local templates, and athlete records prepared for later planner phases.</p>
-          <div className="settings-inline-actions">
-            <Link className="profile-edit-button" href="/coach/tools/cheer-planner">
-              Open tool
-            </Link>
-          </div>
-        </article>
-      </section>
-    </main>
+    <ToolsListingShell
+      title="Tools"
+      description="Available tools and upcoming releases for the coach workspace."
+      heroBadges={["Coach workspace", "3 live tools"]}
+      tools={[
+        {
+          id: "cheer-score",
+          label: "Live",
+          title: "Cheer Score",
+          description: "The first active premium tool in the coach workspace.",
+          href: "/coach/tools/cheer-score-calculator",
+          actionLabel: "Open tool",
+          statusVariant: "accent"
+        },
+        {
+          id: "execution-evaluator",
+          label: "Live",
+          title: "Execution Evaluator",
+          description: "Routine execution scoring with central admin-controlled scoring values and local records saved by team.",
+          href: "/coach/tools/full-out-evaluator",
+          actionLabel: "Open tool",
+          statusVariant: "accent"
+        },
+        {
+          id: "cheer-planner",
+          label: "Live",
+          title: "Cheer Planner",
+          description: "Step 1 of the planner is now live with tryout evaluations, local templates, and athlete records prepared for later planner phases.",
+          href: "/coach/tools/cheer-planner",
+          actionLabel: "Open tool",
+          statusVariant: "accent"
+        }
+      ]}
+      sideTitle="Coach access"
+      sideDescription="This workspace focuses on live evaluation and planning tools that support team-level operational work."
+      sideItems={[
+        { label: "Current lineup", value: "Score, Execution, Planner" },
+        { label: "Primary use", value: "Evaluation and planning" },
+        { label: "Future modules", value: "Shared through Tools" }
+      ]}
+    />
   );
 }

@@ -47,9 +47,11 @@ export type PlannerAthleteSnapshot = {
   registrationNumber: string;
   name: string;
   dateOfBirth: string;
-  teamName: string;
+  evaluationTeamName: string;
   athleteNotes: string;
 };
+
+export type PlannerQualifiedLevel = PlannerLevelLabel | "Unqualified";
 
 export type PlannerTopLevel = {
   levelKey: PlannerLevelKey;
@@ -111,6 +113,17 @@ export const levelLabels: Record<PlannerLevelKey, PlannerLevelLabel> = {
 };
 
 export const LEVEL_LABELS = LEVEL_KEYS.map((levelKey) => levelLabels[levelKey]);
+
+export const LEVEL_RANKS: Record<PlannerLevelLabel, number> = {
+  "Beginner": 0,
+  "Level 1": 1,
+  "Level 2": 2,
+  "Level 3": 3,
+  "Level 4": 4,
+  "Level 5": 5,
+  "Level 6": 6,
+  "Level 7": 7
+};
 
 export const defaultSkillLibrary: Record<PlannerLevelKey, string[]> = {
   beginner: ["Forward Roll", "Handstand", "Bridge"],
@@ -177,10 +190,20 @@ export function cloneAthlete(athlete: PlannerAthleteRecord): PlannerAthleteRecor
   return { ...athlete };
 }
 
+export function normalizeAthleteSnapshot(snapshot: PlannerAthleteSnapshot & { teamName?: string }): PlannerAthleteSnapshot {
+  return {
+    registrationNumber: snapshot.registrationNumber,
+    name: snapshot.name,
+    dateOfBirth: snapshot.dateOfBirth,
+    evaluationTeamName: snapshot.evaluationTeamName ?? snapshot.teamName ?? "",
+    athleteNotes: snapshot.athleteNotes
+  };
+}
+
 export function cloneEvaluation(evaluation: PlannerTryoutEvaluation): PlannerTryoutEvaluation {
   return {
     ...evaluation,
-    athleteSnapshot: { ...evaluation.athleteSnapshot },
+    athleteSnapshot: normalizeAthleteSnapshot(evaluation.athleteSnapshot as PlannerAthleteSnapshot & { teamName?: string }),
     evaluations: evaluation.evaluations.map((level) => ({
       ...level,
       skills: level.skills.map((skill) => ({ ...skill }))
@@ -208,6 +231,37 @@ export function cloneCheerPlannerState(state: CheerPlannerState): CheerPlannerSt
     teams: state.teams.map(cloneTeam),
     qualificationRules: { ...state.qualificationRules }
   };
+}
+
+export function getPlannerLevelRank(level: PlannerLevelLabel) {
+  return LEVEL_RANKS[level];
+}
+
+export function getHighestQualifiedLevelFromEvaluation(
+  evaluation: PlannerTryoutEvaluation | null,
+  qualificationRules: PlannerQualificationRules
+): PlannerQualifiedLevel {
+  if (!evaluation) {
+    return "Unqualified";
+  }
+
+  const qualified = LEVEL_LABELS.filter((levelLabel) => {
+    const levelScore = evaluation.summary.levelScores.find((item) => item.levelLabel === levelLabel);
+    return levelScore ? levelScore.baseScore >= qualificationRules[levelLabel] : false;
+  });
+
+  return qualified.length ? qualified[qualified.length - 1] : "Unqualified";
+}
+
+export function canAssignQualifiedLevelToTeam(
+  qualifiedLevel: PlannerQualifiedLevel,
+  teamLevel: PlannerLevelLabel
+) {
+  if (qualifiedLevel === "Unqualified") {
+    return false;
+  }
+
+  return getPlannerLevelRank(qualifiedLevel) >= getPlannerLevelRank(teamLevel);
 }
 
 export function getNextRegistrationNumber(athletes: PlannerAthleteRecord[]) {

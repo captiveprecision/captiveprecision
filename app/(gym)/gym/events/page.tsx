@@ -1,11 +1,11 @@
+import { WorkspacePlaceholderPage } from "@/components/layout/workspace-placeholder-page";
+
 export default function GymEventsPage() {
   return (
-    <main className="workspace-shell page-stack">
-      <section className="surface-card panel-pad settings-hero">
-        <div className="metric-label">Gym events</div>
-        <h1 className="page-title settings-title">Events</h1>
-        <p className="page-copy">Coming soon.</p>
-      </section>
-    </main>
+    <WorkspacePlaceholderPage
+      eyebrow="Gym events"
+      title="Events"
+      description="Gym-wide scheduling and event coordination are planned, but this route stays intentionally minimal for now."
+    />
   );
 }

@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { Badge, ButtonLink, Card, DetailGrid, PageColumns, PageMainColumn, PageSideColumn, PageHero, StatGrid } from "@/components/ui";
 
 const teams = ["Senior Elite", "Junior Level 2", "Open Coed Prep"];
 const achievements = [
@@ -10,109 +10,135 @@ const achievements = [
 export default function CoachProfilePage() {
   return (
     <main className="workspace-shell page-stack">
-      <section className="surface-card profile-hero">
+      <Card radius="panel" className="profile-hero">
         <div className="profile-cover" />
-        <div className="profile-hero-body">
+        <div className="ui-card__content profile-hero-body">
           <div className="profile-avatar" aria-hidden="true">
             EM
           </div>
 
           <div className="profile-hero-main">
-            <div>
+            <div className="profile-hero-copy">
               <div className="metric-label">Profile</div>
               <h1 className="profile-name">Edith Morales</h1>
               <p className="profile-headline">Coach, choreographer, and owner at Captive Precision</p>
-              <p className="profile-meta">Miami, Florida · 12 years in cheer development</p>
+              <p className="profile-meta">Miami, Florida, 12 years in cheer development</p>
               <div className="profile-chip-row">
-                <span className="profile-chip">Independent Coach</span>
-                <span className="profile-chip">Eligible for gym assignment</span>
+                <Badge variant="subtle">Independent Coach</Badge>
+                <Badge variant="accent">Eligible for gym assignment</Badge>
               </div>
             </div>
 
-            <Link className="profile-edit-button" href="/coach/profile/edit">
-              Edit profile
-            </Link>
+            <ButtonLink variant="secondary" href="/coach/profile/edit">Edit profile</ButtonLink>
           </div>
         </div>
-      </section>
+      </Card>
 
-      <section className="profile-layout">
-        <div className="profile-main-column">
-          <article className="surface-card panel-pad profile-section">
-            <div className="metric-label">About</div>
-            <h2>Professional summary</h2>
-            <p className="muted-copy">
-              Captive Precision is building a premium toolkit for cheer coaches and program owners. This profile acts as the public-facing identity inside the platform and will later connect to saved tools, memberships, and history.
-            </p>
-          </article>
+      <PageColumns className="profile-layout">
+        <PageMainColumn className="profile-main-column">
+          <PageHero
+            className="profile-section"
+            contentClassName="profile-section"
+            eyebrow="About"
+            title="Professional summary"
+            description="Captive Precision is building a premium toolkit for cheer coaches and program owners. This profile acts as the public-facing identity inside the platform and will later connect to saved tools, memberships, and history."
+          />
 
-          <article className="surface-card panel-pad profile-section">
-            <div className="metric-label">Teams</div>
-            <h2>Current teams</h2>
-            <div className="profile-chip-row">
-              {teams.map((team) => (
-                <span className="profile-chip" key={team}>
-                  {team}
-                </span>
-              ))}
-            </div>
-          </article>
-
-          <article className="surface-card panel-pad profile-section">
-            <div className="metric-label">Highlights</div>
-            <h2>What this coach focuses on</h2>
-            <ul className="profile-list">
-              {achievements.map((achievement) => (
-                <li key={achievement}>{achievement}</li>
-              ))}
-            </ul>
-          </article>
-        </div>
-
-        <aside className="profile-side-column">
-          <article className="surface-card panel-pad profile-section">
-            <div className="metric-label">Details</div>
-            <div className="profile-detail-grid">
-              <div>
-                <span className="profile-detail-label">Full name</span>
-                <p className="profile-detail-value">Edith Morales</p>
+          <Card radius="panel" className="profile-section">
+            <div className="ui-card__content profile-section">
+              <div className="ui-section-header">
+                <div className="ui-section-header__copy">
+                  <span className="ui-section-header__eyebrow">Teams</span>
+                  <h2 className="ui-section-header__title">Current teams</h2>
+                </div>
               </div>
-              <div>
-                <span className="profile-detail-label">Gym</span>
-                <p className="profile-detail-value">Captive Precision Athletics</p>
-              </div>
-              <div>
-                <span className="profile-detail-label">Primary role</span>
-                <p className="profile-detail-value">Owner / Head Coach</p>
-              </div>
-              <div>
-                <span className="profile-detail-label">Teams</span>
-                <p className="profile-detail-value">3 active teams</p>
-              </div>
-              <div>
-                <span className="profile-detail-label">Coach type</span>
-                <p className="profile-detail-value">Independent coach</p>
+              <div className="profile-chip-row">
+                {teams.map((team) => (
+                  <Badge variant="neutral" key={team}>{team}</Badge>
+                ))}
               </div>
             </div>
-          </article>
+          </Card>
 
-          <article className="surface-card panel-pad profile-section">
-            <div className="metric-label">Quick stats</div>
-            <div className="profile-stat-grid">
-              <div className="metric-card-light">
-                <div className="metric-label">Tools used</div>
-                <div className="metric-value">1</div>
-                <div className="metric-subtext">Cheer Score Calculator</div>
+          <Card radius="panel" className="profile-section">
+            <div className="ui-card__content profile-section">
+              <div className="ui-section-header">
+                <div className="ui-section-header__copy">
+                  <span className="ui-section-header__eyebrow">Highlights</span>
+                  <h2 className="ui-section-header__title">What this coach focuses on</h2>
+                </div>
               </div>
-              <div className="metric-card-light">
-                <div className="metric-label">Programs</div>
-                <div className="metric-value">3</div>
-                <div className="metric-subtext">Tracked under this profile</div>
-              </div>
+              <ul className="profile-list">
+                {achievements.map((achievement) => (
+                  <li key={achievement}>{achievement}</li>
+                ))}
+              </ul>
             </div>
-          </article>
-        </aside>
-      </section>
+          </Card>
+        </PageMainColumn>
+
+        <PageSideColumn className="profile-side-column">
+          <Card radius="panel" className="profile-section">
+            <div className="ui-card__content profile-section">
+              <div className="ui-section-header">
+                <div className="ui-section-header__copy">
+                  <span className="ui-section-header__eyebrow">Details</span>
+                  <h2 className="ui-section-header__title">Profile details</h2>
+                </div>
+              </div>
+              <DetailGrid className="profile-detail-grid">
+                <div>
+                  <span className="profile-detail-label">Full name</span>
+                  <p className="profile-detail-value">Edith Morales</p>
+                </div>
+                <div>
+                  <span className="profile-detail-label">Gym</span>
+                  <p className="profile-detail-value">Captive Precision Athletics</p>
+                </div>
+                <div>
+                  <span className="profile-detail-label">Primary role</span>
+                  <p className="profile-detail-value">Owner / Head Coach</p>
+                </div>
+                <div>
+                  <span className="profile-detail-label">Teams</span>
+                  <p className="profile-detail-value">3 active teams</p>
+                </div>
+                <div>
+                  <span className="profile-detail-label">Coach type</span>
+                  <p className="profile-detail-value">Independent coach</p>
+                </div>
+              </DetailGrid>
+            </div>
+          </Card>
+
+          <Card radius="panel" className="profile-section">
+            <div className="ui-card__content profile-section">
+              <div className="ui-section-header">
+                <div className="ui-section-header__copy">
+                  <span className="ui-section-header__eyebrow">Quick stats</span>
+                  <h2 className="ui-section-header__title">Platform summary</h2>
+                </div>
+              </div>
+              <StatGrid className="profile-stat-grid">
+                <Card variant="subtle">
+                  <div className="profile-stat-card__content">
+                    <div className="metric-label">Tools used</div>
+                    <div className="metric-value">1</div>
+                    <div className="metric-subtext">Cheer Score Calculator</div>
+                  </div>
+                </Card>
+                <Card variant="subtle">
+                  <div className="profile-stat-card__content">
+                    <div className="metric-label">Programs</div>
+                    <div className="metric-value">3</div>
+                    <div className="metric-subtext">Tracked under this profile</div>
+                  </div>
+                </Card>
+              </StatGrid>
+            </div>
+          </Card>
+        </PageSideColumn>
+      </PageColumns>
     </main>
   );
 }

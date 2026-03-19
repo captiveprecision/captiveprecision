@@ -5,6 +5,9 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { Badge, Button } from "@/components/ui";
+import { cn } from "@/lib/utils/cn";
+
 type NavItem = {
   href: Route;
   title: string;
@@ -86,8 +89,10 @@ export function WorkspaceSidebar({
 
   return (
     <>
-      <button
+      <Button
         type="button"
+        variant="secondary"
+        size="sm"
         className="mobile-menu-trigger"
         data-open={mobileOpen}
         aria-label={mobileOpen ? "Close menu" : "Open menu"}
@@ -95,7 +100,7 @@ export function WorkspaceSidebar({
         onClick={() => setMobileOpen((value) => !value)}
       >
         Menu
-      </button>
+      </Button>
 
       <div
         className="mobile-menu-overlay"
@@ -111,23 +116,31 @@ export function WorkspaceSidebar({
               <span className="brand-mark">CP</span>
               <div className="brand-copy">
                 <p className="brand-title">Captive Precision</p>
-                <p className="brand-subtitle">{brandSubtitle}</p>
+                <Badge variant="subtle" className="brand-subtitle">
+                  {brandSubtitle}
+                </Badge>
               </div>
             </div>
 
             <div className="sidebar-top-actions">
               <div className="sidebar-top-separator" aria-hidden="true" />
-              <button
+              <Button
                 type="button"
+                variant="ghost"
+                size="sm"
                 className="mobile-header-close"
                 aria-label="Close menu"
                 onClick={() => setMobileOpen(false)}
               >
-                <span className="sidebar-toggle-glyph" aria-hidden="true">X</span>
-              </button>
+                <span className="sidebar-toggle-glyph" aria-hidden="true">
+                  X
+                </span>
+              </Button>
 
-              <button
+              <Button
                 type="button"
+                variant="ghost"
+                size="sm"
                 className="sidebar-toggle"
                 onClick={() => setCollapsed((value) => !value)}
                 aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
@@ -135,7 +148,7 @@ export function WorkspaceSidebar({
                 <span className="sidebar-toggle-glyph" aria-hidden="true">
                   {collapsed ? ">" : "<"}
                 </span>
-              </button>
+              </Button>
             </div>
           </div>
 
@@ -170,7 +183,9 @@ export function WorkspaceSidebar({
                   aria-expanded={toolsOpen}
                   title={collapsed ? "Tools" : undefined}
                 >
-                  <span className="nav-bullet" aria-hidden="true">L</span>
+                  <span className="nav-bullet" aria-hidden="true">
+                    L
+                  </span>
                   <span className="nav-title">Tools</span>
                   <span className="sidebar-tools-arrow" aria-hidden="true">
                     {toolsOpen ? "-" : "+"}
@@ -222,11 +237,14 @@ export function WorkspaceSidebar({
               <p className="sidebar-footer-copy">{footerCopy}</p>
             </div>
             {secondaryActionHref && secondaryActionLabel ? (
-              <a href={secondaryActionHref} className="sidebar-secondary-action">
+              <a
+                href={secondaryActionHref}
+                className={cn("ui-button", "ui-button--secondary", "ui-button--sm", "sidebar-secondary-action")}
+              >
                 {secondaryActionLabel}
               </a>
             ) : null}
-            <a href={logoutHref} className="sidebar-logout">
+            <a href={logoutHref} className={cn("ui-button", "ui-button--ghost", "ui-button--sm", "sidebar-logout")}>
               Log out
             </a>
           </div>

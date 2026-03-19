@@ -1,3 +1,5 @@
+﻿import { Badge, Card, CardContent, SectionHeader } from "@/components/ui";
+
 const gymMembershipItems = [
   { label: "Plan", value: "Gym Pro" },
   { label: "Status", value: "Active" },
@@ -8,43 +10,55 @@ const gymMembershipItems = [
 export default function GymSettingsPage() {
   return (
     <main className="workspace-shell page-stack">
-      <section className="surface-card panel-pad settings-hero">
-        <div className="metric-label">Gym settings</div>
-        <h1 className="page-title settings-title">Organization settings</h1>
-        <p className="page-copy">Membership, coach license allocation, and gym-level visibility controls.</p>
-      </section>
+      <Card radius="panel" className="settings-hero">
+        <CardContent className="settings-hero">
+          <SectionHeader
+            eyebrow="Gym settings"
+            title="Organization settings"
+            description="Membership, coach license allocation, and gym-level visibility controls."
+          />
+        </CardContent>
+      </Card>
 
       <section className="settings-layout">
         <div className="settings-main-column">
-          <article className="surface-card panel-pad settings-section">
-            <div className="metric-label">Coach licenses</div>
-            <h2>Assignment rules</h2>
-            <div className="dashboard-note-list">
-              <div className="dashboard-note-item">
-                <span className="dashboard-note-bullet" aria-hidden="true" />
-                <p>Gym memberships define how many coach accounts can be attached to the organization.</p>
+          <Card radius="panel" className="settings-section">
+            <CardContent className="settings-section">
+              <SectionHeader eyebrow="Coach licenses" title="Assignment rules" />
+              <div className="settings-security-list">
+                <div className="settings-security-item">
+                  <div className="settings-card-topline">
+                    <span className="settings-row-title">License capacity</span>
+                    <Badge variant="accent">Gym plan</Badge>
+                  </div>
+                  <p className="settings-row-copy">Gym memberships define how many coach accounts can be attached to the organization.</p>
+                </div>
+                <div className="settings-security-item">
+                  <div className="settings-card-topline">
+                    <span className="settings-row-title">Coach visibility</span>
+                    <Badge variant="subtle">Shared</Badge>
+                  </div>
+                  <p className="settings-row-copy">Assigned coaches keep their own coach workspace while also gaining gym-linked visibility.</p>
+                </div>
               </div>
-              <div className="dashboard-note-item">
-                <span className="dashboard-note-bullet" aria-hidden="true" />
-                <p>Assigned coaches keep their own coach workspace while also gaining gym-linked visibility.</p>
-              </div>
-            </div>
-          </article>
+            </CardContent>
+          </Card>
         </div>
 
         <aside className="settings-side-column">
-          <article className="surface-card panel-pad settings-section">
-            <div className="metric-label">Membership</div>
-            <h2>Gym plan</h2>
-            <div className="settings-detail-grid">
-              {gymMembershipItems.map((item) => (
-                <div key={item.label}>
-                  <span className="profile-detail-label">{item.label}</span>
-                  <p className="profile-detail-value">{item.value}</p>
-                </div>
-              ))}
-            </div>
-          </article>
+          <Card radius="panel" className="settings-section">
+            <CardContent className="settings-section">
+              <SectionHeader eyebrow="Membership" title="Gym plan" />
+              <div className="settings-detail-grid">
+                {gymMembershipItems.map((item) => (
+                  <div key={item.label} className="settings-detail-item">
+                    <span className="profile-detail-label">{item.label}</span>
+                    <p className="profile-detail-value">{item.value}</p>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
         </aside>
       </section>
     </main>

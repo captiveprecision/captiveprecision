@@ -1,5 +1,18 @@
-"use client";
+﻿"use client";
 
+import {
+  Badge,
+  Button,
+  ButtonLink,
+  Card,
+  CardContent,
+  DetailGrid,
+  PageColumns,
+  PageHero,
+  PageMainColumn,
+  PageSideColumn,
+  StatGrid
+} from "@/components/ui";
 import type { AuthSession } from "@/lib/auth/mock-auth";
 
 type WorkspaceSelectionShellProps = {
@@ -25,34 +38,68 @@ export function WorkspaceSelectionShell({ session }: WorkspaceSelectionShellProp
   }
 
   return (
-    <main className="landing-shell">
-      <section className="landing-hero-card">
-        <div className="role-selection-badge">Captive Precision</div>
-        <h1 className="landing-title">Choose your workspace.</h1>
-        <p className="landing-copy">
-          This account can move across multiple workspace types. Select the environment you want to open for this session.
-        </p>
+    <main className="landing-shell page-stack">
+      <PageColumns className="landing-top-grid">
+        <PageMainColumn className="landing-main-column">
+          <PageHero
+            className="landing-hero-card"
+            contentClassName="landing-hero-content"
+            eyebrow={<Badge variant="accent">Captive Precision</Badge>}
+            title="Choose your workspace."
+            description="This account can move across multiple workspace types. Select the environment you want to open for this session."
+          >
+            <DetailGrid className="landing-session-grid">
+              <div className="landing-session-block">
+                <span className="metric-label">Signed in as</span>
+                <p className="landing-session-value">{session.displayName}</p>
+                <p className="landing-session-meta">{session.email}</p>
+              </div>
+              <div className="landing-session-block">
+                <span className="metric-label">Workspace access</span>
+                <div className="landing-session-badges">
+                  {session.roles.map((role) => (
+                    <Badge key={role} variant="subtle">
+                      {roleLabel[role]}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            </DetailGrid>
 
-        <div className="landing-role-grid">
-          {session.roles.map((role) => (
-            <a key={role} className="landing-role-card" href={`/${role}`}>
-              <strong>{roleLabel[role]}</strong>
-              <span>{roleCopy[role]}</span>
-            </a>
-          ))}
-        </div>
+            <StatGrid className="landing-role-grid">
+              {session.roles.map((role) => (
+                <Card key={role} className="landing-role-card">
+                  <CardContent className="landing-role-card__content">
+                    <div className="landing-role-card__copy">
+                      <span className="metric-label">Workspace</span>
+                      <h3 className="ui-card__title">{roleLabel[role]}</h3>
+                      <p className="muted-copy">{roleCopy[role]}</p>
+                    </div>
+                    <ButtonLink href={`/${role}`} variant="secondary" size="lg">
+                      Open {roleLabel[role]}
+                    </ButtonLink>
+                  </CardContent>
+                </Card>
+              ))}
+            </StatGrid>
+          </PageHero>
+        </PageMainColumn>
 
-        <div className="landing-session-row">
-          <div>
-            <div className="metric-label">Signed in as</div>
-            <p className="landing-session-value">{session.displayName}</p>
-            <p className="landing-session-meta">{session.email}</p>
-          </div>
-          <button type="button" className="landing-auth-button landing-auth-button-secondary" onClick={handleLogout}>
-            Log out
-          </button>
-        </div>
-      </section>
+        <PageSideColumn className="landing-side-column">
+          <Card radius="panel" className="landing-auth-card">
+            <CardContent className="landing-auth-card__content">
+              <div className="landing-auth-card__intro">
+                <span className="metric-label">Session</span>
+                <h2 className="ui-card__title">Account controls</h2>
+                <p className="muted-copy">Leave this session and return to the landing screen to sign in with another account.</p>
+              </div>
+              <Button type="button" variant="secondary" size="lg" onClick={handleLogout}>
+                Log out
+              </Button>
+            </CardContent>
+          </Card>
+        </PageSideColumn>
+      </PageColumns>
     </main>
   );
 }

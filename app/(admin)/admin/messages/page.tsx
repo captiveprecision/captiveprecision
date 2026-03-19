@@ -1,11 +1,11 @@
+import { WorkspacePlaceholderPage } from "@/components/layout/workspace-placeholder-page";
+
 export default function AdminMessagesPage() {
   return (
-    <main className="workspace-shell page-stack">
-      <section className="surface-card panel-pad settings-hero">
-        <div className="metric-label">Admin messages</div>
-        <h1 className="page-title settings-title">Messages</h1>
-        <p className="page-copy">Coming soon.</p>
-      </section>
-    </main>
+    <WorkspacePlaceholderPage
+      eyebrow="Admin messages"
+      title="Messages"
+      description="Messaging for internal admin communication is not live yet, but the route remains part of the current workspace structure."
+    />
   );
 }

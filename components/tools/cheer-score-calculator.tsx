@@ -1,8 +1,23 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
+import {
+  Badge,
+  Button,
+  ButtonLink,
+  Card,
+  CardContent,
+  EmptyState,
+  Input,
+  PageColumns,
+  PageHero,
+  PageMainColumn,
+  PageSideColumn,
+  SectionHeader,
+  StatGrid,
+  Tabs
+} from "@/components/ui";
 import { useScoringSystems } from "@/lib/scoring/use-scoring-systems";
 import { getSystemById, getVersionById } from "@/lib/scoring/scoring-systems";
 
@@ -182,223 +197,273 @@ export function CheerScoreCalculator() {
   const canEditStructure = selectedVersionId === CUSTOM_VERSION_ID || isEditingTemplate;
   const progressWidth = clamp(totals.finalPercent, 0, 100);
 
+  const modeItems = [
+    { value: "full" as const, label: "Sections" },
+    { value: "quick" as const, label: "Final Score" }
+  ];
+
+  const versionItems = availableVersions.map((version) => ({
+    value: version.id,
+    label: version.label
+  }));
+
   if (!isReady) {
     return null;
   }
 
   return (
-    <div className="cp-tool">
-      <div className="cp-wrap">
-        <div className="cp-card cp-stack-12">
-          <div className="cp-stack-14">
-            <h1>Cheer Score Calculator</h1>
-            <p className="cp-subtext">Select how you want to calculate the result.</p>
-          </div>
+    <main className="workspace-shell page-stack scorecalc-shell">
+      <PageHero
+        eyebrow="Live tool"
+        title="Cheer Score Calculator"
+        description="Calculate the final routine result from section-based raw scores or a quick final-score pass."
+        actions={<Badge variant="dark">{selectedMode === "full" ? "Sections mode" : "Final score mode"}</Badge>}
+      >
+        <div className="scorecalc-hero-badges">
+          <Badge variant="accent">{activeSystem.name}</Badge>
+          <Badge variant="subtle">{selectedVersionId === CUSTOM_VERSION_ID ? "Custom template" : activeVersion.label}</Badge>
+        </div>
+      </PageHero>
 
-          <div className="cp-tab-row">
-            <button className={`cp-tab ${selectedMode === "full" ? "active" : ""}`} onClick={() => setSelectedMode("full")}>
-              Sections
-            </button>
-            <button className={`cp-tab ${selectedMode === "quick" ? "active" : ""}`} onClick={() => setSelectedMode("quick")}>
-              Final Score
-            </button>
-          </div>
+      <PageColumns>
+        <PageMainColumn>
+          <Card radius="panel">
+            <CardContent className="scorecalc-panel__content">
+              <SectionHeader
+                eyebrow="Calculation mode"
+                title="Choose how you want to calculate"
+                description="Switch between section-based scoring and a quick final-score pass without changing the underlying scoring logic."
+              />
 
-          {selectedMode === "full" ? (
-            <>
-              <div className="cp-stack-12">
-                <h3>{activeSystem.name}</h3>
-                <div className="cp-btn-row">
-                  {availableVersions.map((version) => (
-                    <button
-                      key={version.id}
-                      className={`cp-tab ${selectedVersionId === version.id ? "active" : ""}`}
-                      onClick={() => setVersion(version.id)}
-                    >
-                      {version.label}
-                    </button>
-                  ))}
+              <Tabs
+                items={modeItems}
+                value={selectedMode}
+                onValueChange={(value) => setSelectedMode(value)}
+                ariaLabel="Calculator mode"
+                className="scorecalc-mode-tabs"
+              />
+
+              {selectedMode === "full" ? (
+                <div className="scorecalc-template-grid">
+                  <Card variant="subtle">
+                    <CardContent className="scorecalc-card__content">
+                      <SectionHeader
+                        eyebrow="Scoring system"
+                        title={activeSystem.name}
+                        description="Load a published version from admin before entering section scores."
+                      />
+                      <Tabs
+                        items={versionItems}
+                        value={selectedVersionId === CUSTOM_VERSION_ID ? activeSystem.activeVersionId : selectedVersionId}
+                        onValueChange={setVersion}
+                        ariaLabel="Scoring version"
+                        className="scorecalc-version-tabs"
+                      />
+                    </CardContent>
+                  </Card>
+
+                  <Card variant="subtle">
+                    <CardContent className="scorecalc-card__content">
+                      <SectionHeader
+                        eyebrow="Create your own"
+                        title="Custom template"
+                        description="Start from scratch when you need a manual layout outside the published versions."
+                      />
+                      <div className="scorecalc-custom-action">
+                        <Button
+                          variant={selectedVersionId === CUSTOM_VERSION_ID ? "primary" : "secondary"}
+                          onClick={() => setVersion(CUSTOM_VERSION_ID)}
+                        >
+                          Custom
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
                 </div>
-              </div>
+              ) : (
+                <Card variant="subtle">
+                  <CardContent className="scorecalc-card__content">
+                    <SectionHeader
+                      eyebrow="Quick mode"
+                      title="Fast final-score pass"
+                      description="Quick mode skips sections and asks only for max raw score, current raw score, deductions, and target score."
+                    />
+                  </CardContent>
+                </Card>
+              )}
+            </CardContent>
+          </Card>
 
-              <div className="cp-stack-10">
-                <h3>Create Your Own</h3>
-                <div className="cp-btn-row">
-                  <button className={`cp-tab ${selectedVersionId === CUSTOM_VERSION_ID ? "active" : ""}`} onClick={() => setVersion(CUSTOM_VERSION_ID)}>
-                    Custom
-                  </button>
+          {selectedMode === "quick" ? (
+            <Card radius="panel">
+              <CardContent className="scorecalc-panel__content">
+                <SectionHeader
+                  eyebrow="Quick inputs"
+                  title="Final score mode"
+                  description="Use this version when you already know the max raw score of the routine and only want a fast answer."
+                  actions={<Button variant="secondary" onClick={resetCalculator}>Reset</Button>}
+                />
+
+                <div className="scorecalc-quick-grid">
+                  <Input label="Max Raw Score" type="number" step="0.001" min="0" value={quickMaxRaw || ""} onChange={(event) => setQuickMaxRaw(Number(event.target.value) || 0)} />
+                  <Input label="Current Raw Score" type="number" step="0.001" min="0" max={quickMaxRaw} value={quickEarnedRaw || ""} onChange={(event) => setQuickEarnedRaw(Number(event.target.value) || 0)} />
+                  <Input label="Deductions" type="number" step="0.001" min="0" value={deductions || ""} onChange={(event) => setDeductions(Number(event.target.value) || 0)} />
+                  <Input label="Target Score" type="number" step="0.001" min="0" max="100" value={goalPercent || ""} onChange={(event) => setGoalPercent(Number(event.target.value) || 0)} />
                 </div>
-              </div>
-            </>
+              </CardContent>
+            </Card>
           ) : (
-            <p className="cp-subtext">Quick mode skips sections and asks only for max raw score, current raw score, deductions, and target score.</p>
-          )}
-        </div>
+            <>
+              <StatGrid className="scorecalc-summary-grid">
+                <Card variant="subtle">
+                  <CardContent className="scorecalc-card__content">
+                    <SectionHeader
+                      eyebrow="Deductions"
+                      title="Final-score deductions"
+                      description="These reduce the final percentage score, not the raw score."
+                    />
+                    <Input label="Total Deductions" type="number" step="0.001" min="0" value={deductions || ""} onChange={(event) => setDeductions(Number(event.target.value) || 0)} />
+                  </CardContent>
+                </Card>
 
-        <div className="cp-card-dark cp-stack-10">
-          <h2>Calculated Result</h2>
+                <Card variant="subtle">
+                  <CardContent className="scorecalc-card__content">
+                    <SectionHeader
+                      eyebrow="Goal"
+                      title="Target percentage"
+                      description="The calculator estimates how many raw points are still needed to reach this score."
+                    />
+                    <Input label="Target Percentage" type="number" step="0.001" min="0" max="100" value={goalPercent || ""} onChange={(event) => setGoalPercent(Number(event.target.value) || 0)} />
+                  </CardContent>
+                </Card>
+              </StatGrid>
 
-          <div className="cp-result-meter" aria-hidden="true">
-            <div className="cp-result-meter-fill" style={{ width: `${progressWidth}%` }} />
-          </div>
-
-          <div className="cp-result-grid">
-            <div className="cp-result-box">
-              <div className="cp-result-label">Current Raw Score</div>
-              <div className="cp-result-value">{formatNumber(totals.earnedRaw)}</div>
-              <div className="cp-result-sub">out of {formatNumber(totals.maxRaw)}</div>
-            </div>
-            <div className="cp-result-box">
-              <div className="cp-result-label">Final Score</div>
-              <div className="cp-result-value">{formatNumber(totals.finalPercent)}%</div>
-              <div className="cp-result-sub">after deductions</div>
-            </div>
-            <div className="cp-result-box">
-              <div className="cp-result-label">Points Needed For Goal</div>
-              <div className="cp-result-value">{formatNumber(totals.rawPointsNeeded)}</div>
-              <div className="cp-result-sub">Goal raw: {formatNumber(totals.targetRaw)}</div>
-            </div>
-          </div>
-
-          <div className="cp-callout">
-            <div className="cp-callout-top">
-              Base {formatNumber(totals.basePercent)}% - Deductions -{formatNumber(totals.deductions)}%
-            </div>
-            <p>
-              {totals.isGoalReachable
-                ? `Need ${formatNumber(totals.rawPointsNeeded)} more raw points to reach ${formatNumber(goalPercent)}%.`
-                : "Goal is above the maximum possible score for this setup."}
-            </p>
-            <div className="cp-cta-row">
-              <Link className="cp-link" href="https://www.captiveprecision.com" target="_blank" rel="noopener noreferrer">
-                Need expert help with your routine?
-              </Link>
-            </div>
-          </div>
-        </div>
-
-        {selectedMode === "quick" ? (
-          <div className="cp-card cp-stack-10">
-            <div className="cp-toolbar" style={{ alignItems: "center", marginBottom: 2 }}>
-              <h2>Quick Inputs</h2>
-              <div className="cp-btn-row">
-                <button className="cp-btn" onClick={resetCalculator}>Reset</button>
-              </div>
-            </div>
-            <div className="cp-final-grid">
-              <div className="cp-field-group">
-                <label>Max Raw Score</label>
-                <input type="number" step="0.001" min="0" value={quickMaxRaw || ""} onChange={(event) => setQuickMaxRaw(Number(event.target.value) || 0)} />
-              </div>
-              <div className="cp-field-group">
-                <label>Current Raw Score</label>
-                <input type="number" step="0.001" min="0" max={quickMaxRaw} value={quickEarnedRaw || ""} onChange={(event) => setQuickEarnedRaw(Number(event.target.value) || 0)} />
-              </div>
-              <div className="cp-field-group">
-                <label>Deductions</label>
-                <input type="number" step="0.001" min="0" value={deductions || ""} onChange={(event) => setDeductions(Number(event.target.value) || 0)} />
-              </div>
-              <div className="cp-field-group">
-                <label>Target Score</label>
-                <input type="number" step="0.001" min="0" max="100" value={goalPercent || ""} onChange={(event) => setGoalPercent(Number(event.target.value) || 0)} />
-              </div>
-            </div>
-            <p className="cp-subtext">Use this version when you already know the max raw score of the routine and only want a fast answer.</p>
-          </div>
-        ) : (
-          <>
-            <div className="cp-summary-grid">
-              <div className="cp-card cp-stack-10">
-                <h2>Deductions</h2>
-                <div className="cp-field-group">
-                  <label>Total Deductions</label>
-                  <input type="number" step="0.001" min="0" value={deductions || ""} onChange={(event) => setDeductions(Number(event.target.value) || 0)} />
-                </div>
-                <p className="cp-subtext">Enter the total deductions from the judges. These reduce the final percentage score, not the raw score.</p>
-              </div>
-              <div className="cp-card cp-stack-10">
-                <h2>Goal</h2>
-                <div className="cp-field-group">
-                  <label>Target Percentage</label>
-                  <input type="number" step="0.001" min="0" max="100" value={goalPercent || ""} onChange={(event) => setGoalPercent(Number(event.target.value) || 0)} />
-                </div>
-                <p className="cp-subtext">Enter the percentage you want to reach and the calculator will estimate the raw points still needed.</p>
-              </div>
-            </div>
-
-            <div className="cp-card cp-stack-12">
-              <div className="cp-toolbar">
-                <div className="cp-stack-6">
-                  <h2>Scoring Breakdown</h2>
-                  <p className="cp-subtext">
-                    {selectedVersionId === CUSTOM_VERSION_ID
-                      ? "Build your own scoresheet from scratch."
-                      : isEditingTemplate
-                        ? `Editing ${activeVersion.label} as a starting point.`
-                        : `${activeSystem.name} / ${activeVersion.label} is loaded from admin.`}
-                  </p>
-                </div>
-                <div className="cp-btn-row">
-                  {selectedVersionId !== CUSTOM_VERSION_ID && !isEditingTemplate ? (
-                    <button className="cp-btn" onClick={() => setIsEditingTemplate(true)}>
-                      Edit Template
-                    </button>
-                  ) : null}
-                  <button className="cp-btn" onClick={resetCalculator}>Reset</button>
-                  {canEditStructure ? (
-                    <button className="cp-btn cp-btn-secondary" onClick={addSection}>
-                      Add Section
-                    </button>
-                  ) : null}
-                </div>
-              </div>
-
-              <div className="cp-sections-list">
-                {sections.map((section, index) => {
-                  const percent = section.maxPoints > 0 ? (section.earnedPoints / section.maxPoints) * 100 : 0;
-
-                  return (
-                    <div className="cp-section-card" key={section.id}>
-                      <div className="cp-section-head">
-                        <div className="cp-section-title-row">
-                          <span className="cp-section-title-label">Section</span>
-                          <span className="cp-section-index">{index + 1}</span>
-                        </div>
-                        <div className="cp-section-meta">
-                          <span className="cp-chip">{formatNumber(percent)}%</span>
-                          {canEditStructure ? (
-                            <button className="cp-remove" onClick={() => removeSection(section.id)}>
-                              Remove
-                            </button>
-                          ) : (
-                            <span className="cp-locked">Locked</span>
-                          )}
-                        </div>
+              <Card radius="panel">
+                <CardContent className="scorecalc-panel__content">
+                  <SectionHeader
+                    eyebrow="Scoring breakdown"
+                    title="Section input"
+                    description={
+                      selectedVersionId === CUSTOM_VERSION_ID
+                        ? "Build your own scoresheet from scratch."
+                        : isEditingTemplate
+                          ? `Editing ${activeVersion.label} as a starting point.`
+                          : `${activeSystem.name} / ${activeVersion.label} is loaded from admin.`
+                    }
+                    actions={
+                      <div className="scorecalc-action-row">
+                        {selectedVersionId !== CUSTOM_VERSION_ID && !isEditingTemplate ? (
+                          <Button variant="secondary" onClick={() => setIsEditingTemplate(true)}>
+                            Edit Template
+                          </Button>
+                        ) : null}
+                        <Button variant="ghost" onClick={resetCalculator}>Reset</Button>
+                        {canEditStructure ? (
+                          <Button onClick={addSection}>Add Section</Button>
+                        ) : null}
                       </div>
+                    }
+                  />
 
-                      <div className="cp-section-inputs-compact">
-                        <div className="cp-field-group">
-                          <input type="text" value={section.name} readOnly={!canEditStructure} onChange={(event) => updateSection(section.id, "name", event.target.value)} />
-                        </div>
-                        <div className="cp-inline-pair">
-                          <div className="cp-field-group">
-                            <label>Max Value</label>
-                            <input type="number" step="0.001" min="0" value={section.maxPoints || ""} readOnly={!canEditStructure} onChange={(event) => updateSection(section.id, "maxPoints", event.target.value)} />
-                          </div>
-                          <div className="cp-field-group">
-                            <label>Score</label>
-                            <input type="number" step="0.001" min="0" max={section.maxPoints} value={section.earnedPoints || ""} onChange={(event) => updateSection(section.id, "earnedPoints", event.target.value)} />
-                          </div>
-                        </div>
-                      </div>
+                  {sections.length ? (
+                    <div className="scorecalc-sections-list">
+                      {sections.map((section, index) => {
+                        const percent = section.maxPoints > 0 ? (section.earnedPoints / section.maxPoints) * 100 : 0;
+
+                        return (
+                          <Card key={section.id} variant="subtle" className="scorecalc-section-card">
+                            <CardContent className="scorecalc-section-card__content">
+                              <div className="scorecalc-section-head">
+                                <div className="scorecalc-section-title-row">
+                                  <span className="scorecalc-section-title-label">Section</span>
+                                  <span className="scorecalc-section-index">{index + 1}</span>
+                                </div>
+                                <div className="scorecalc-section-meta">
+                                  <Badge variant="accent">{formatNumber(percent)}%</Badge>
+                                  {canEditStructure ? (
+                                    <Button size="sm" variant="ghost" onClick={() => removeSection(section.id)}>
+                                      Remove
+                                    </Button>
+                                  ) : (
+                                    <Badge variant="subtle">Locked</Badge>
+                                  )}
+                                </div>
+                              </div>
+
+                              <div className="scorecalc-section-grid">
+                                <Input label="Section name" type="text" value={section.name} readOnly={!canEditStructure} onChange={(event) => updateSection(section.id, "name", event.target.value)} />
+                                <Input label="Max Value" type="number" step="0.001" min="0" value={section.maxPoints || ""} readOnly={!canEditStructure} onChange={(event) => updateSection(section.id, "maxPoints", event.target.value)} />
+                                <Input label="Score" type="number" step="0.001" min="0" max={section.maxPoints} value={section.earnedPoints || ""} onChange={(event) => updateSection(section.id, "earnedPoints", event.target.value)} />
+                              </div>
+                            </CardContent>
+                          </Card>
+                        );
+                      })}
                     </div>
-                  );
-                })}
+                  ) : (
+                    <EmptyState
+                      title="No sections added"
+                      description="Add a section to start building the score breakdown."
+                      action={canEditStructure ? <Button onClick={addSection}>Add Section</Button> : undefined}
+                    />
+                  )}
+                </CardContent>
+              </Card>
+            </>
+          )}
+        </PageMainColumn>
+
+        <PageSideColumn>
+          <Card radius="panel" variant="dark" className="scorecalc-result-card">
+            <CardContent className="scorecalc-result-card__content">
+              <SectionHeader
+                className="scorecalc-result-header"
+                eyebrow="Calculated result"
+                title="Score output"
+                description="Live result based on the current inputs and deductions."
+              />
+
+              <div className="scorecalc-result-meter" aria-hidden="true">
+                <div className="scorecalc-result-meter-fill" style={{ width: `${progressWidth}%` }} />
               </div>
-            </div>
-          </>
-        )}
-      </div>
-    </div>
+
+              <StatGrid className="scorecalc-result-grid">
+                <div className="scorecalc-result-box">
+                  <div className="scorecalc-result-label">Current Raw Score</div>
+                  <div className="scorecalc-result-value">{formatNumber(totals.earnedRaw)}</div>
+                  <div className="scorecalc-result-sub">out of {formatNumber(totals.maxRaw)}</div>
+                </div>
+                <div className="scorecalc-result-box">
+                  <div className="scorecalc-result-label">Final Score</div>
+                  <div className="scorecalc-result-value">{formatNumber(totals.finalPercent)}%</div>
+                  <div className="scorecalc-result-sub">after deductions</div>
+                </div>
+                <div className="scorecalc-result-box">
+                  <div className="scorecalc-result-label">Points Needed For Goal</div>
+                  <div className="scorecalc-result-value">{formatNumber(totals.rawPointsNeeded)}</div>
+                  <div className="scorecalc-result-sub">Goal raw: {formatNumber(totals.targetRaw)}</div>
+                </div>
+              </StatGrid>
+
+              <div className="scorecalc-callout">
+                <div className="scorecalc-callout-top">
+                  Base {formatNumber(totals.basePercent)}% - Deductions -{formatNumber(totals.deductions)}%
+                </div>
+                <p>
+                  {totals.isGoalReachable
+                    ? `Need ${formatNumber(totals.rawPointsNeeded)} more raw points to reach ${formatNumber(goalPercent)}%.`
+                    : "Goal is above the maximum possible score for this setup."}
+                </p>
+                <div className="scorecalc-cta-row">
+                  <ButtonLink href="https://www.captiveprecision.com" variant="secondary" target="_blank" rel="noopener noreferrer">
+                    Need expert help with your routine?
+                  </ButtonLink>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </PageSideColumn>
+      </PageColumns>
+    </main>
   );
 }

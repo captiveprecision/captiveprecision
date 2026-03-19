@@ -1,11 +1,20 @@
+import { Badge, EmptyState, PageHero } from "@/components/ui";
+
 export default function GymProfilePage() {
   return (
     <main className="workspace-shell page-stack">
-      <section className="surface-card panel-pad settings-hero">
-        <div className="metric-label">Gym profile</div>
-        <h1 className="page-title settings-title">Captive Precision Athletics</h1>
-        <p className="page-copy">Gym identity, membership tier, and assigned coach license overview.</p>
-      </section>
+      <PageHero
+        contentClassName="profile-section"
+        eyebrow="Gym profile"
+        title="Captive Precision Athletics"
+        description="Gym identity, membership tier, and assigned coach license overview."
+        actions={<Badge variant="accent">Gym Pro</Badge>}
+      >
+        <EmptyState
+          title="Expanded gym profile modules are coming next."
+          description="This surface stays aligned with the new system while organization profile controls remain in placeholder mode."
+        />
+      </PageHero>
     </main>
   );
 }
