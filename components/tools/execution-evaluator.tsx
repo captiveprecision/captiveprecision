@@ -58,6 +58,24 @@ const deductionStepItems = deductionSteps.map((step) => ({
   label: step.toFixed(2)
 }));
 
+const unitedExecutionSectionIds = new Set([
+  "stunt",
+  "pyramid",
+  "standing-tumbling",
+  "running-tumbling",
+  "jumps",
+  "dance"
+]);
+
+const executionCategoryDefinitions = [
+  { id: "standing-tumbling", label: "Standing Tumbling", sectionIds: ["standing-tumbling"] },
+  { id: "stunts", label: "Stunts", sectionIds: ["stunt"] },
+  { id: "running-tumbling", label: "Running Tumbling", sectionIds: ["running-tumbling"] },
+  { id: "jumps", label: "Jumps", sectionIds: ["jumps"] },
+  { id: "pyramid", label: "Pyramid", sectionIds: ["pyramid"] },
+  { id: "dance", label: "Dance", sectionIds: ["dance"] }
+] as const;
+
 function round(value: number, decimals = 2) {
   if (!Number.isFinite(value)) {
     return 0;
@@ -74,39 +92,63 @@ function formatNumber(value: number) {
   });
 }
 
+function formatPercent(value: number) {
+  return round(value).toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  });
+}
+
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
 }
 
-function getSectionMode(name: string): SectionMode {
+function getSectionMode(systemId: string, id: string, name: string): SectionMode {
+  if (systemId === "united-scoring-system" && unitedExecutionSectionIds.has(id)) {
+    return "execution";
+  }
+
   return /execution/i.test(name) ? "execution" : "manual";
 }
 
-function normalizeSavedSection(section: ExecutionSectionSnapshot): ExecutionSectionState {
-  const mode = section.mode ?? getSectionMode(section.name);
-  const earnedPoints = section.earnedPoints ?? Math.max(0, round(section.maxPoints - section.deductions));
+function getAdjustedSectionMaxPoints(systemId: string, level: number, section: Pick<ExecutionSectionSnapshot, "id" | "maxPoints">) {
+  if (systemId === "united-scoring-system" && level === 1 && section.id === "tosses") {
+    return 0;
+  }
+
+  return section.maxPoints;
+}
+
+function normalizeSavedSection(systemId: string, level: number, section: ExecutionSectionSnapshot): ExecutionSectionState {
+  const mode = section.mode ?? getSectionMode(systemId, section.id, section.name);
+  const maxPoints = getAdjustedSectionMaxPoints(systemId, level, section);
+  const earnedPoints = section.earnedPoints ?? Math.max(0, round(maxPoints - section.deductions));
 
   return {
     id: section.id,
     name: section.name,
-    maxPoints: section.maxPoints,
-    earnedPoints: clamp(earnedPoints, 0, section.maxPoints),
-    deductions: mode === "execution" ? clamp(section.deductions, 0, section.maxPoints) : 0,
+    maxPoints,
+    earnedPoints: clamp(earnedPoints, 0, maxPoints),
+    deductions: mode === "execution" ? clamp(section.deductions, 0, maxPoints) : 0,
     step: section.step || 0.1,
     mode
   };
 }
 
-function buildSections(version: ReturnType<typeof getVersionById>) {
-  return version.sections.map((section) => ({
-    id: section.id,
-    name: section.name,
-    maxPoints: section.maxPoints,
-    earnedPoints: section.maxPoints,
-    deductions: 0,
-    step: 0.1,
-    mode: getSectionMode(section.name)
-  }));
+function buildSections(systemId: string, level: number, version: ReturnType<typeof getVersionById>) {
+  return version.sections.map((section) => {
+    const maxPoints = getAdjustedSectionMaxPoints(systemId, level, section);
+
+    return {
+      id: section.id,
+      name: section.name,
+      maxPoints,
+      earnedPoints: maxPoints,
+      deductions: 0,
+      step: 0.1,
+      mode: getSectionMode(systemId, section.id, section.name)
+    };
+  });
 }
 
 function buildTotals(
@@ -136,12 +178,16 @@ export function ExecutionEvaluator() {
   const [level, setLevel] = useState(2);
   const [routineName, setRoutineName] = useState("Routine Practice Score");
   const [teamName, setTeamName] = useState("");
+  const [draftLevel, setDraftLevel] = useState(2);
+  const [draftRoutineName, setDraftRoutineName] = useState("Routine Practice Score");
+  const [draftTeamName, setDraftTeamName] = useState("");
   const [generalDeductions, setGeneralDeductions] = useState(0);
   const [illegalityDeductions, setIllegalityDeductions] = useState(0);
   const [generalStep, setGeneralStep] = useState(0.5);
   const [sections, setSections] = useState<ExecutionSectionState[]>([]);
   const [records, setRecords] = useState<ExecutionEvaluatorRecord[]>([]);
   const [openManualSections, setOpenManualSections] = useState<string[]>([]);
+  const [isSetupOpen, setIsSetupOpen] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
 
   const activeSystem = useMemo(() => getSystemById(config, config.activeSystemId), [config]);
@@ -155,10 +201,10 @@ export function ExecutionEvaluator() {
       return;
     }
 
-    setSections(buildSections(activeVersion));
+    setSections(buildSections(activeSystem.id, level, activeVersion));
     setOpenManualSections([]);
     setRecords(readExecutionEvaluatorRecords());
-  }, [activeVersion, isReady]);
+  }, [activeSystem.id, activeVersion, isReady, level]);
 
   useEffect(() => {
     if (!saveMessage) {
@@ -168,6 +214,12 @@ export function ExecutionEvaluator() {
     const timeout = window.setTimeout(() => setSaveMessage(null), 2200);
     return () => window.clearTimeout(timeout);
   }, [saveMessage]);
+
+  useEffect(() => {
+    setDraftLevel(level);
+    setDraftRoutineName(routineName);
+    setDraftTeamName(teamName);
+  }, [level, routineName, teamName]);
 
   const executionSections = useMemo(
     () => sections.filter((section) => section.mode === "execution"),
@@ -189,6 +241,20 @@ export function ExecutionEvaluator() {
     [normalizedCurrentTeam, records]
   );
   const groupedRecords = useMemo(() => groupExecutionRecordsByTeam(records), [records]);
+  const executionCategories = useMemo(
+    () => executionCategoryDefinitions.map((category) => {
+      const categorySections = sections.filter((section) => (category.sectionIds as readonly string[]).includes(section.id));
+      const deductions = round(categorySections.reduce((sum, section) => sum + section.deductions, 0));
+      const maxPoints = round(categorySections.reduce((sum, section) => sum + section.maxPoints, 0));
+
+      return {
+        ...category,
+        deductions,
+        maxPoints
+      };
+    }),
+    [sections]
+  );
 
   const updateExecutionDeduction = (id: string, direction: 1 | -1) => {
     setSections((current) => current.map((section) => {
@@ -206,6 +272,46 @@ export function ExecutionEvaluator() {
         earnedPoints: round(Math.max(0, section.maxPoints - nextDeductions))
       };
     }));
+  };
+
+  const updateExecutionCategoryDeduction = (categoryId: string, direction: 1 | -1) => {
+    const category = executionCategoryDefinitions.find((item) => item.id === categoryId);
+
+    if (!category) {
+      return;
+    }
+
+    setSections((current) => {
+      const targetIds = direction === 1 ? category.sectionIds : [...category.sectionIds].reverse();
+
+      for (const targetId of targetIds) {
+        const nextSections = current.map((section) => {
+          if (section.id !== targetId || section.mode !== "execution") {
+            return section;
+          }
+
+          const nextDeductions = direction === 1
+            ? Math.min(section.maxPoints, round(section.deductions + section.step))
+            : Math.max(0, round(section.deductions - section.step));
+
+          if (nextDeductions === section.deductions) {
+            return section;
+          }
+
+          return {
+            ...section,
+            deductions: nextDeductions,
+            earnedPoints: round(Math.max(0, section.maxPoints - nextDeductions))
+          };
+        });
+
+        if (nextSections.some((section, index) => section !== current[index])) {
+          return nextSections;
+        }
+      }
+
+      return current;
+    });
   };
 
   const resetExecutionDeduction = (id: string) => {
@@ -230,11 +336,16 @@ export function ExecutionEvaluator() {
   const resetEvaluator = () => {
     setLevel(2);
     setRoutineName("Routine Practice Score");
+    setTeamName("");
+    setDraftLevel(2);
+    setDraftRoutineName("Routine Practice Score");
+    setDraftTeamName("");
     setGeneralDeductions(0);
     setIllegalityDeductions(0);
     setGeneralStep(0.5);
-    setSections(buildSections(activeVersion));
+    setSections(buildSections(activeSystem.id, 2, activeVersion));
     setOpenManualSections([]);
+    setIsSetupOpen(false);
   };
 
   const toggleManualSection = (id: string) => {
@@ -283,8 +394,15 @@ export function ExecutionEvaluator() {
     setSaveMessage(`Saved under ${safeTeamName}.`);
   };
 
+  const applySetup = () => {
+    setLevel(draftLevel);
+    setRoutineName(draftRoutineName.trim() || "Routine Practice Score");
+    setTeamName(draftTeamName.trim());
+    setIsSetupOpen(false);
+  };
+
   const loadSnapshot = (record: ExecutionEvaluatorRecord) => {
-    const nextSections = record.sections.map(normalizeSavedSection);
+    const nextSections = record.sections.map((section) => normalizeSavedSection(activeSystem.id, record.level, section));
 
     setLevel(record.level);
     setRoutineName(record.routineName);
@@ -313,13 +431,13 @@ export function ExecutionEvaluator() {
           <div className="execution-hero-badges">
             <Badge variant="accent">{activeSystem.name}</Badge>
             <Badge variant="subtle">Level {level}</Badge>
-            <Badge variant="subtle">{executionSections.length} execution / {manualSections.length} manual</Badge>
+            <Badge variant="subtle">Max {formatNumber(totals.startScore)}</Badge>
           </div>
           <Card variant="subtle" className="execution-score-box">
             <CardContent className="execution-score-box__content">
               <span className="execution-score-label">Live score</span>
               <strong>{formatNumber(totals.finalScore)}</strong>
-              <span className="execution-score-subcopy">out of {formatNumber(totals.startScore)}</span>
+              <span className="execution-score-subcopy"><strong>{formatPercent(totals.startScore > 0 ? (totals.finalScore / totals.startScore) * 100 : 0)}%</strong> of {formatNumber(totals.startScore)}</span>
             </CardContent>
           </Card>
         </div>
@@ -330,25 +448,72 @@ export function ExecutionEvaluator() {
           <Card radius="panel">
             <CardContent className="execution-panel__content">
               <SectionHeader
-                eyebrow="Active evaluation"
-                title="Routine setup"
-                description="Set the level, routine label, and team before applying deductions."
+                eyebrow="Execution focus"
+                title="Primary deductions"
+                description="United execution summary for the categories with the biggest scoring impact."
+                actions={
+                  <Button variant="secondary" onClick={() => setIsSetupOpen(!isSetupOpen)}>
+                    {isSetupOpen ? "Close set up" : "Set up"}
+                  </Button>
+                }
               />
 
-              <div className="execution-top-fields">
-                <Select id="execution-level" label="Level" value={level} onChange={(event) => setLevel(Number(event.target.value))}>
-                  {[1, 2, 3, 4, 5, 6, 7].map((value) => (
-                    <option key={value} value={value}>Level {value}</option>
-                  ))}
-                </Select>
-                <Input id="execution-routine" label="Routine name" type="text" value={routineName} onChange={(event) => setRoutineName(event.target.value)} />
-                <Input id="execution-team" label="Team name" type="text" value={teamName} onChange={(event) => setTeamName(event.target.value)} placeholder="Example: Senior Elite" />
-              </div>
+              {isSetupOpen ? (
+                <Card variant="subtle" className="execution-setup-card">
+                  <CardContent className="execution-panel__content">
+                    <div className="execution-top-fields">
+                      <Select id="execution-level" label="Level" value={draftLevel} onChange={(event) => setDraftLevel(Number(event.target.value))}>
+                        {[1, 2, 3, 4, 5, 6, 7].map((value) => (
+                          <option key={value} value={value}>Level {value}</option>
+                        ))}
+                      </Select>
+                      <Input id="execution-routine" label="Routine name" type="text" value={draftRoutineName} onChange={(event) => setDraftRoutineName(event.target.value)} />
+                      <Input id="execution-team" label="Team name" type="text" value={draftTeamName} onChange={(event) => setDraftTeamName(event.target.value)} placeholder="Example: Senior Elite" />
+                    </div>
 
-              <div className="execution-system-bar">
-                <Badge variant="subtle">{activeSystem.name}</Badge>
-                <Badge variant="subtle">{activeVersion.label}</Badge>
-                <Badge variant="subtle">{executionSections.length} execution / {manualSections.length} manual</Badge>
+                    <div className="execution-system-bar">
+                      <Badge variant="subtle">{activeSystem.name}</Badge>
+                      <Badge variant="subtle">{activeVersion.label}</Badge>
+                      <Badge variant="subtle">Level 1: 46.00 max / Level 2-7: 50.00 max</Badge>
+                    </div>
+
+                    <div className="execution-actions-row">
+                      <Button onClick={applySetup}>Apply</Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ) : null}
+
+              <div className="execution-category-grid">
+                {executionCategories.map((category) => (
+                  <Card key={category.id} variant="subtle" className="execution-category-card">
+                    <CardContent className="execution-category-card__content">
+                      <div className="execution-category-copy">
+                        <span>{category.label}</span>
+                        <strong>-{formatNumber(category.deductions)}</strong>
+                      </div>
+
+                      <div className="execution-category-actions">
+                        <button
+                          type="button"
+                          className="execution-symbol-button"
+                          onClick={() => updateExecutionCategoryDeduction(category.id, -1)}
+                          aria-label={`Remove ${category.label} deduction`}
+                        >
+                          -
+                        </button>
+                        <button
+                          type="button"
+                          className="execution-symbol-button execution-symbol-button--plus"
+                          onClick={() => updateExecutionCategoryDeduction(category.id, 1)}
+                          aria-label={`Add ${category.label} deduction`}
+                        >
+                          +
+                        </button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
               </div>
             </CardContent>
           </Card>
@@ -356,69 +521,60 @@ export function ExecutionEvaluator() {
           <Card radius="panel">
             <CardContent className="execution-panel__content">
               <SectionHeader
-                eyebrow="Execution sections"
-                title="Deductions enabled"
-                description="These sections subtract directly from the section maximum."
-                actions={<Button variant="secondary" onClick={resetEvaluator}>Reset</Button>}
+                eyebrow="Routine deductions"
+                title="General controls"
+                description="Apply routine-level deductions and illegalities."
               />
 
-              {executionSections.length ? (
-                <div className="execution-sections-grid">
-                  {executionSections.map((section) => {
-                    const lossPct = section.maxPoints > 0 ? round((section.deductions / section.maxPoints) * 100) : 0;
+              <Tabs
+                items={deductionStepItems}
+                value={`${generalStep}`}
+                onValueChange={(value) => setGeneralStep(Number(value))}
+                ariaLabel="Routine deduction step"
+                className="execution-step-tabs"
+              />
 
-                    return (
-                      <Card key={section.id} variant="subtle" className="execution-section-card">
-                        <CardContent className="execution-section-card__content">
-                          <div className="execution-section-header">
-                            <div className="execution-section-copy">
-                              <h3>{section.name}</h3>
-                              <p>Deduction-based section.</p>
-                            </div>
-                            <Badge variant="accent">Max {formatNumber(section.maxPoints)}</Badge>
-                          </div>
+              <Card variant="subtle" className="execution-deduction-card">
+                <CardContent className="execution-deduction-card__content">
+                  <div className="execution-deduction-copy">
+                    <h3>General deductions</h3>
+                    <p>Falls or major routine-wide errors.</p>
+                  </div>
+                  <strong>-{formatNumber(generalDeductions)}</strong>
+                </CardContent>
+              </Card>
+              <div className="execution-actions-row">
+                <Button variant="secondary" onClick={() => setGeneralDeductions((value) => Math.max(0, round(value - generalStep)))}>
+                  Remove
+                </Button>
+                <Button onClick={() => setGeneralDeductions((value) => round(value + generalStep))}>
+                  Add
+                </Button>
+                <Button variant="ghost" onClick={() => setGeneralDeductions(0)}>
+                  Reset
+                </Button>
+              </div>
 
-                          <StatGrid className="execution-metrics-grid">
-                            <div className="execution-metric-box">
-                              <span>Start</span>
-                              <strong>{formatNumber(section.maxPoints)}</strong>
-                            </div>
-                            <div className="execution-metric-box">
-                              <span>Deductions</span>
-                              <strong>-{formatNumber(section.deductions)}</strong>
-                            </div>
-                            <div className="execution-metric-box">
-                              <span>Execution</span>
-                              <strong>{formatNumber(section.earnedPoints)}</strong>
-                            </div>
-                            <div className="execution-metric-box">
-                              <span>Loss</span>
-                              <strong>{lossPct.toFixed(0)}%</strong>
-                            </div>
-                          </StatGrid>
-
-                          <div className="execution-actions-row">
-                            <Button variant="secondary" onClick={() => updateExecutionDeduction(section.id, -1)}>
-                              Remove deduction
-                            </Button>
-                            <Button onClick={() => updateExecutionDeduction(section.id, 1)}>
-                              Add deduction
-                            </Button>
-                            <Button variant="ghost" onClick={() => resetExecutionDeduction(section.id)}>
-                              Reset
-                            </Button>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    );
-                  })}
-                </div>
-              ) : (
-                <EmptyState
-                  title="No execution sections available"
-                  description="The active scoring version does not currently include sections labeled as execution."
-                />
-              )}
+              <Card variant="subtle" className="execution-deduction-card">
+                <CardContent className="execution-deduction-card__content">
+                  <div className="execution-deduction-copy">
+                    <h3>Illegalities</h3>
+                    <p>Separate routine-level impact.</p>
+                  </div>
+                  <strong>-{formatNumber(illegalityDeductions)}</strong>
+                </CardContent>
+              </Card>
+              <div className="execution-actions-row">
+                <Button variant="secondary" onClick={() => setIllegalityDeductions((value) => Math.max(0, round(value - generalStep)))}>
+                  Remove
+                </Button>
+                <Button onClick={() => setIllegalityDeductions((value) => round(value + generalStep))}>
+                  Add
+                </Button>
+                <Button variant="ghost" onClick={() => setIllegalityDeductions(0)}>
+                  Reset
+                </Button>
+              </div>
             </CardContent>
           </Card>
 
@@ -501,66 +657,6 @@ export function ExecutionEvaluator() {
           <Card radius="panel">
             <CardContent className="execution-panel__content">
               <SectionHeader
-                eyebrow="Routine deductions"
-                title="General controls"
-                description="Apply routine-level deductions and illegalities."
-              />
-
-              <Tabs
-                items={deductionStepItems}
-                value={`${generalStep}`}
-                onValueChange={(value) => setGeneralStep(Number(value))}
-                ariaLabel="Routine deduction step"
-                className="execution-step-tabs"
-              />
-
-              <Card variant="subtle" className="execution-deduction-card">
-                <CardContent className="execution-deduction-card__content">
-                  <div className="execution-deduction-copy">
-                    <h3>General deductions</h3>
-                    <p>Falls or major routine-wide errors.</p>
-                  </div>
-                  <strong>-{formatNumber(generalDeductions)}</strong>
-                </CardContent>
-              </Card>
-              <div className="execution-actions-row">
-                <Button variant="secondary" onClick={() => setGeneralDeductions((value) => Math.max(0, round(value - generalStep)))}>
-                  Remove
-                </Button>
-                <Button onClick={() => setGeneralDeductions((value) => round(value + generalStep))}>
-                  Add
-                </Button>
-                <Button variant="ghost" onClick={() => setGeneralDeductions(0)}>
-                  Reset
-                </Button>
-              </div>
-
-              <Card variant="subtle" className="execution-deduction-card">
-                <CardContent className="execution-deduction-card__content">
-                  <div className="execution-deduction-copy">
-                    <h3>Illegalities</h3>
-                    <p>Separate routine-level impact.</p>
-                  </div>
-                  <strong>-{formatNumber(illegalityDeductions)}</strong>
-                </CardContent>
-              </Card>
-              <div className="execution-actions-row">
-                <Button variant="secondary" onClick={() => setIllegalityDeductions((value) => Math.max(0, round(value - generalStep)))}>
-                  Remove
-                </Button>
-                <Button onClick={() => setIllegalityDeductions((value) => round(value + generalStep))}>
-                  Add
-                </Button>
-                <Button variant="ghost" onClick={() => setIllegalityDeductions(0)}>
-                  Reset
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card radius="panel">
-            <CardContent className="execution-panel__content">
-              <SectionHeader
                 eyebrow="Saved records"
                 title="By team name"
                 description="Save the current snapshot and reopen recent saved evaluations."
@@ -613,4 +709,14 @@ export function ExecutionEvaluator() {
     </main>
   );
 }
+
+
+
+
+
+
+
+
+
+
 

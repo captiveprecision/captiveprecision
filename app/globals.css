@@ -2169,6 +2169,12 @@ input {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.execution-category-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
 .execution-sections-grid,
 .execution-team-groups,
 .execution-record-list {
@@ -2177,9 +2183,22 @@ input {
 }
 
 .execution-section-card__content,
-.execution-deduction-card__content {
+.execution-deduction-card__content,
+.execution-category-card__content {
   display: grid;
   gap: 16px;
+  justify-items: center;
+  text-align: center;
+}
+
+.execution-category-card {
+  border-color: color-mix(in srgb, var(--cp-text) 12%, var(--cp-border));
+  background: #fff;
+}
+
+.execution-setup-card {
+  border-style: dashed;
+  background: var(--cp-page-bg);
 }
 
 .execution-section-header,
@@ -2195,9 +2214,59 @@ input {
 }
 
 .execution-section-copy,
-.execution-deduction-copy {
+.execution-deduction-copy,
+.execution-category-copy {
   display: grid;
   gap: 6px;
+}
+
+.execution-category-copy span,
+.execution-category-copy small {
+  color: var(--cp-muted);
+}
+
+.execution-category-copy strong {
+  font-size: clamp(1.6rem, 2.5vw, 2.2rem);
+  line-height: 1;
+}
+
+.execution-category-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+
+.execution-symbol-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border: 1px solid var(--cp-border);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--cp-text);
+  font-size: 1.6rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    transform 140ms ease,
+    box-shadow 140ms ease,
+    border-color 140ms ease,
+    background-color 140ms ease;
+}
+
+.execution-symbol-button:hover {
+  border-color: var(--cp-accent);
+  box-shadow: 0 10px 22px rgba(15, 15, 15, 0.08);
+  transform: translateY(-1px);
+}
+
+.execution-symbol-button--plus {
+  background: var(--cp-accent);
+  border-color: var(--cp-accent);
+  color: #fff;
 }
 
 .execution-section-copy h3,
@@ -2347,6 +2416,10 @@ input {
 @media (max-width: 1080px) {
   .execution-hero-meta {
     grid-template-columns: 1fr;
+  }
+
+  .execution-category-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -2956,3 +3029,16 @@ input {
 }
 
 
+
+
+
+
+
+
+
+.execution-score-subcopy strong {
+  font-size: inherit;
+  line-height: inherit;
+  letter-spacing: normal;
+  font-weight: var(--cp-font-weight-semibold);
+}
