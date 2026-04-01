@@ -1,22 +1,16 @@
-import { redirect } from "next/navigation";
-
 import { AdminSidebar } from "@/components/navigation/admin-sidebar";
-import { getAuthSession } from "@/lib/auth/mock-auth";
+import { requireAuthSession } from "@/lib/auth/session";
 
 export default async function AdminLayout({
   children
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const session = await getAuthSession();
-
-  if (!session || !session.roles.includes("admin")) {
-    redirect("/");
-  }
+  const session = await requireAuthSession("admin");
 
   return (
     <div className="app-frame">
-      <AdminSidebar />
+      <AdminSidebar availableWorkspaces={session.roles} />
       <div className="app-main">{children}</div>
     </div>
   );

@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { WorkspaceSelectionShell } from "@/components/auth/workspace-selection-shell";
-import { getAuthSession } from "@/lib/auth/mock-auth";
+import { getAuthSession, getNextPathForSession } from "@/lib/auth/session";
 
 export default async function WorkspaceSelectionPage() {
   const session = await getAuthSession();
@@ -11,7 +11,7 @@ export default async function WorkspaceSelectionPage() {
   }
 
   if (session.roles.length === 1) {
-    redirect(`/${session.roles[0]}`);
+    redirect(getNextPathForSession(session));
   }
 
   return <WorkspaceSelectionShell session={session} />;

@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useMemo, useState } from "react";
 
@@ -41,32 +41,47 @@ function buildNewSystem(systemCount: number): ScoringSystem {
   const index = buildNewSystemIndex(systemCount);
   const systemStamp = Date.now();
   const versionId = `custom-version-${systemStamp}`;
+  const now = new Date().toISOString();
 
   return {
     id: `custom-system-${systemStamp}`,
     name: `Custom System ${index}`,
     slug: `custom-system-${index}`,
+    status: "draft",
     activeVersionId: versionId,
+    createdAt: now,
+    updatedAt: now,
     versions: [
       {
         id: versionId,
         label: "2025-2026",
         season: "2025-2026",
-        status: "Draft",
+        seasonLabel: "2025-2026",
+        status: "draft",
         comments: "Custom scoring system in progress.",
-        sections: [{ id: `section-${systemStamp}`, name: "Section 1", maxPoints: 0 }]
+        isActive: true,
+        createdAt: now,
+        updatedAt: now,
+        sections: [{ id: `section-${systemStamp}`, key: `section-${systemStamp}`, name: "Section 1", maxPoints: 0, guidance: null, sortOrder: 1, createdAt: now, updatedAt: now }]
       }
     ]
   };
 }
 
-function buildVersionCopy(version: ScoringSystemVersion) {
+function buildVersionCopy(version: ScoringSystemVersion): ScoringSystemVersion {
+  const now = new Date().toISOString();
+  const nextSeason = `${version.season} Copy`;
+
   return {
     ...cloneVersion(version),
     id: `version-${Date.now()}`,
     label: `${version.label} Copy`,
-    season: `${version.season} Copy`,
-    status: "Draft"
+    season: nextSeason,
+    seasonLabel: nextSeason,
+    status: "draft",
+    isActive: false,
+    createdAt: now,
+    updatedAt: now
   };
 }
 
@@ -269,7 +284,7 @@ export function AdminScoringSystemsManager() {
                   label="Season"
                   type="text"
                   value={draftVersion.season}
-                  onChange={(event) => updateDraftVersion((current) => ({ ...current, season: event.target.value }))}
+                  onChange={(event) => updateDraftVersion((current) => ({ ...current, season: event.target.value, seasonLabel: event.target.value }))}
                 />
                 <Textarea
                   id="version-comments"
@@ -368,4 +383,3 @@ export function AdminScoringSystemsManager() {
     </main>
   );
 }
-

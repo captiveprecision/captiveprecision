@@ -1,15 +1,15 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
-import { SESSION_COOKIE_NAME } from "@/lib/auth/mock-auth";
+import { createServerSupabaseClient } from "@/lib/supabase/server";
 
-export async function GET() {
-  const response = NextResponse.redirect(new URL("/", "http://localhost"));
-  response.cookies.delete(SESSION_COOKIE_NAME);
-  return response;
+export async function GET(request: NextRequest) {
+  const supabase = await createServerSupabaseClient();
+  await supabase.auth.signOut();
+  return NextResponse.redirect(new URL("/", request.url));
 }
 
 export async function POST() {
-  const response = NextResponse.json({ ok: true });
-  response.cookies.delete(SESSION_COOKIE_NAME);
-  return response;
+  const supabase = await createServerSupabaseClient();
+  await supabase.auth.signOut();
+  return NextResponse.json({ ok: true });
 }

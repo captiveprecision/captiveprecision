@@ -2,10 +2,11 @@
 
 import type { Route } from "next";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useState, type ChangeEvent } from "react";
 
 import { Badge, Button } from "@/components/ui";
+import type { AppRole } from "@/lib/auth/session";
 import { cn } from "@/lib/utils/cn";
 
 type NavItem = {
@@ -15,6 +16,8 @@ type NavItem = {
 };
 
 type SidebarProps = {
+  currentWorkspace: AppRole;
+  availableWorkspaces: AppRole[];
   brandSubtitle: string;
   navItems: NavItem[];
   toolItems?: NavItem[];
@@ -23,6 +26,12 @@ type SidebarProps = {
   secondaryActionHref?: string;
   secondaryActionLabel?: string;
   logoutHref: string;
+};
+
+const workspaceLabel: Record<AppRole, string> = {
+  admin: "Admin",
+  coach: "Coach",
+  gym: "Gym"
 };
 
 function isDashboardRoute(pathname: string, href: string, index: number) {
@@ -62,6 +71,8 @@ function SidebarLink({
 }
 
 export function WorkspaceSidebar({
+  currentWorkspace,
+  availableWorkspaces,
   brandSubtitle,
   navItems,
   toolItems,
@@ -72,10 +83,12 @@ export function WorkspaceSidebar({
   logoutHref
 }: SidebarProps) {
   const pathname = usePathname();
+  const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const toolsActive = Boolean(toolItems?.some((item) => pathname === item.href || pathname.startsWith(`${item.href}/`)));
   const [toolsOpen, setToolsOpen] = useState(toolsActive);
+  const showWorkspaceSwitcher = availableWorkspaces.length > 1;
 
   useEffect(() => {
     if (toolsActive) {
@@ -84,6 +97,15 @@ export function WorkspaceSidebar({
   }, [toolsActive]);
 
   const handleNavigate = () => setMobileOpen(false);
+  const handleWorkspaceChange = (event: ChangeEvent<HTMLSelectElement>) => {
+    const nextWorkspace = event.target.value as AppRole;
+    if (!nextWorkspace || nextWorkspace === currentWorkspace) {
+      return;
+    }
+
+    setMobileOpen(false);
+    router.push(`/${nextWorkspace}` as Route);
+  };
   const itemsBeforeTools = toolItems ? navItems.slice(0, 3) : navItems;
   const itemsAfterTools = toolItems ? navItems.slice(3) : [];
 
@@ -153,6 +175,24 @@ export function WorkspaceSidebar({
           </div>
 
           <div className="sidebar-divider" />
+
+          {showWorkspaceSwitcher ? (
+            <div className="sidebar-workspaces" aria-label="Workspace switcher">
+              <span className="metric-label">Workspace access</span>
+              <select
+                className="ui-select sidebar-workspace-select"
+                value={currentWorkspace}
+                onChange={handleWorkspaceChange}
+                aria-label="Switch workspace"
+              >
+                {availableWorkspaces.map((workspace) => (
+                  <option key={workspace} value={workspace}>
+                    {workspaceLabel[workspace]}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : null}
 
           <nav className="sidebar-group" aria-label="Main navigation">
             {itemsBeforeTools.map((item, index) => (
@@ -253,3 +293,4 @@ export function WorkspaceSidebar({
     </>
   );
 }
+

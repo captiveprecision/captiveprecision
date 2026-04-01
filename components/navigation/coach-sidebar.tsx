@@ -1,6 +1,7 @@
 import type { Route } from "next";
 
 import { WorkspaceSidebar } from "@/components/navigation/workspace-sidebar";
+import type { AppRole } from "@/lib/auth/session";
 
 const coachNavItems = [
   { href: "/coach" as Route, title: "Dashboard", shortLabel: "D" },
@@ -17,9 +18,11 @@ const coachToolItems = [
   { href: "/coach/tools/cheer-planner" as Route, title: "Cheer Planner", shortLabel: "P" }
 ];
 
-export function CoachSidebar() {
+export function CoachSidebar({ availableWorkspaces }: { availableWorkspaces: AppRole[] }) {
   return (
     <WorkspaceSidebar
+      currentWorkspace="coach"
+      availableWorkspaces={availableWorkspaces}
       brandSubtitle="Coach workspace"
       navItems={coachNavItems}
       toolItems={coachToolItems}

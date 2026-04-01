@@ -3,12 +3,11 @@ create table if not exists public.gyms (
   owner_profile_id uuid not null references public.profiles(id) on delete cascade,
   name text not null,
   slug text not null unique,
-  membership_plan_id uuid references public.membership_plans(id) on delete set null,
   coach_license_limit integer not null default 0,
+  membership_plan_id uuid references public.membership_plans(id) on delete set null,
   metadata jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default timezone('utc'::text, now()),
-  updated_at timestamptz not null default timezone('utc'::text, now()),
-  unique (owner_profile_id)
+  updated_at timestamptz not null default timezone('utc'::text, now())
 );
 
 alter table public.profiles
@@ -30,12 +29,12 @@ create table if not exists public.gym_coach_licenses (
   id uuid primary key default gen_random_uuid(),
   gym_id uuid not null references public.gyms(id) on delete cascade,
   coach_profile_id uuid not null references public.profiles(id) on delete cascade,
-  status text not null default 'assigned',
   license_seat_name text,
+  status text not null default 'active',
   created_at timestamptz not null default timezone('utc'::text, now()),
   updated_at timestamptz not null default timezone('utc'::text, now()),
   unique (gym_id, coach_profile_id),
-  constraint gym_coach_licenses_status_check check (status in ('invited', 'assigned', 'revoked'))
+  constraint gym_coach_licenses_status_check check (status in ('active', 'inactive', 'pending'))
 );
 
 create table if not exists public.teams (
@@ -49,17 +48,17 @@ create table if not exists public.teams (
   metadata jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default timezone('utc'::text, now()),
   updated_at timestamptz not null default timezone('utc'::text, now()),
-  constraint teams_visibility_scope_check check (visibility_scope in ('private', 'gym'))
+  constraint teams_visibility_scope_check check (visibility_scope in ('private', 'gym', 'organization'))
 );
 
 create table if not exists public.team_coaches (
   id uuid primary key default gen_random_uuid(),
   team_id uuid not null references public.teams(id) on delete cascade,
   coach_profile_id uuid not null references public.profiles(id) on delete cascade,
-  role text not null default 'head_coach',
+  role text not null default 'assistant',
   created_at timestamptz not null default timezone('utc'::text, now()),
   unique (team_id, coach_profile_id),
-  constraint team_coaches_role_check check (role in ('head_coach', 'assistant_coach', 'viewer'))
+  constraint team_coaches_role_check check (role in ('assistant', 'head', 'consulting'))
 );
 
 create table if not exists public.athletes (
@@ -83,8 +82,8 @@ create table if not exists public.athlete_team_assignments (
 
 create table if not exists public.scoring_systems (
   id uuid primary key default gen_random_uuid(),
-  slug text not null unique,
   name text not null,
+  slug text not null unique,
   status text not null default 'draft',
   created_at timestamptz not null default timezone('utc'::text, now()),
   updated_at timestamptz not null default timezone('utc'::text, now()),
@@ -101,79 +100,56 @@ create table if not exists public.scoring_system_versions (
   comments text,
   created_at timestamptz not null default timezone('utc'::text, now()),
   updated_at timestamptz not null default timezone('utc'::text, now()),
-  unique (scoring_system_id, label),
   constraint scoring_system_versions_status_check check (status in ('draft', 'active', 'archived'))
 );
-
-create unique index if not exists idx_scoring_system_versions_one_active
-  on public.scoring_system_versions (scoring_system_id)
-  where is_active = true;
 
 create table if not exists public.scoring_sections (
   id uuid primary key default gen_random_uuid(),
   scoring_system_version_id uuid not null references public.scoring_system_versions(id) on delete cascade,
   section_key text not null,
   section_name text not null,
-  max_points numeric(8,3) not null default 0,
-  sort_order integer not null default 100,
+  max_points numeric(10,2) not null default 0,
   guidance text,
+  sort_order integer not null default 0,
   created_at timestamptz not null default timezone('utc'::text, now()),
-  updated_at timestamptz not null default timezone('utc'::text, now()),
-  unique (scoring_system_version_id, section_key)
+  updated_at timestamptz not null default timezone('utc'::text, now())
 );
 
-create index if not exists idx_gym_coach_licenses_gym_status
-  on public.gym_coach_licenses (gym_id, status);
+create index if not exists idx_gyms_owner_profile_id
+  on public.gyms (owner_profile_id);
 
-create index if not exists idx_teams_gym_coach
-  on public.teams (gym_id, primary_coach_profile_id);
+create index if not exists idx_gym_coach_licenses_gym_id
+  on public.gym_coach_licenses (gym_id);
 
-create index if not exists idx_team_coaches_coach
+create index if not exists idx_gym_coach_licenses_coach_profile_id
+  on public.gym_coach_licenses (coach_profile_id);
+
+create index if not exists idx_teams_gym_id
+  on public.teams (gym_id);
+
+create index if not exists idx_teams_primary_coach_profile_id
+  on public.teams (primary_coach_profile_id);
+
+create index if not exists idx_team_coaches_team_id
+  on public.team_coaches (team_id);
+
+create index if not exists idx_team_coaches_coach_profile_id
   on public.team_coaches (coach_profile_id);
 
-create index if not exists idx_athlete_team_assignments_team
+create index if not exists idx_athletes_gym_id
+  on public.athletes (gym_id);
+
+create index if not exists idx_athlete_team_assignments_team_id
   on public.athlete_team_assignments (team_id);
 
-create index if not exists idx_scoring_systems_status
-  on public.scoring_systems (status, name);
+create index if not exists idx_athlete_team_assignments_athlete_id
+  on public.athlete_team_assignments (athlete_id);
 
-create index if not exists idx_scoring_sections_version_sort
-  on public.scoring_sections (scoring_system_version_id, sort_order);
+create index if not exists idx_scoring_system_versions_scoring_system_id
+  on public.scoring_system_versions (scoring_system_id);
 
-drop trigger if exists set_gyms_updated_at on public.gyms;
-create trigger set_gyms_updated_at
-  before update on public.gyms
-  for each row execute procedure public.set_current_timestamp_updated_at();
-
-drop trigger if exists set_gym_coach_licenses_updated_at on public.gym_coach_licenses;
-create trigger set_gym_coach_licenses_updated_at
-  before update on public.gym_coach_licenses
-  for each row execute procedure public.set_current_timestamp_updated_at();
-
-drop trigger if exists set_teams_updated_at on public.teams;
-create trigger set_teams_updated_at
-  before update on public.teams
-  for each row execute procedure public.set_current_timestamp_updated_at();
-
-drop trigger if exists set_athletes_updated_at on public.athletes;
-create trigger set_athletes_updated_at
-  before update on public.athletes
-  for each row execute procedure public.set_current_timestamp_updated_at();
-
-drop trigger if exists set_scoring_systems_updated_at on public.scoring_systems;
-create trigger set_scoring_systems_updated_at
-  before update on public.scoring_systems
-  for each row execute procedure public.set_current_timestamp_updated_at();
-
-drop trigger if exists set_scoring_system_versions_updated_at on public.scoring_system_versions;
-create trigger set_scoring_system_versions_updated_at
-  before update on public.scoring_system_versions
-  for each row execute procedure public.set_current_timestamp_updated_at();
-
-drop trigger if exists set_scoring_sections_updated_at on public.scoring_sections;
-create trigger set_scoring_sections_updated_at
-  before update on public.scoring_sections
-  for each row execute procedure public.set_current_timestamp_updated_at();
+create index if not exists idx_scoring_sections_version_id
+  on public.scoring_sections (scoring_system_version_id);
 
 alter table public.gyms enable row level security;
 alter table public.gym_coach_licenses enable row level security;
@@ -198,7 +174,7 @@ create policy "gym_coach_licenses_select_related"
     or exists (
       select 1
       from public.gyms g
-      where g.id = gym_id
+      where g.id = public.gym_coach_licenses.gym_id
         and g.owner_profile_id = auth.uid()
     )
   );
@@ -210,12 +186,12 @@ create policy "teams_select_related"
     primary_coach_profile_id = auth.uid()
     or exists (
       select 1 from public.team_coaches tc
-      where tc.team_id = id
+      where tc.team_id = public.teams.id
         and tc.coach_profile_id = auth.uid()
     )
     or exists (
       select 1 from public.gyms g
-      where g.id = gym_id
+      where g.id = public.teams.gym_id
         and g.owner_profile_id = auth.uid()
     )
   );
@@ -229,7 +205,7 @@ create policy "team_coaches_select_related"
       select 1
       from public.teams t
       join public.gyms g on g.id = t.gym_id
-      where t.id = team_id
+      where t.id = public.team_coaches.team_id
         and g.owner_profile_id = auth.uid()
     )
   );
@@ -241,14 +217,14 @@ create policy "athletes_select_related"
     exists (
       select 1
       from public.gyms g
-      where g.id = gym_id
+      where g.id = public.athletes.gym_id
         and g.owner_profile_id = auth.uid()
     )
     or exists (
       select 1
       from public.athlete_team_assignments ata
       join public.teams t on t.id = ata.team_id
-      where ata.athlete_id = id
+      where ata.athlete_id = public.athletes.id
         and (
           t.primary_coach_profile_id = auth.uid()
           or exists (
@@ -268,7 +244,7 @@ create policy "athlete_team_assignments_select_related"
       select 1
       from public.teams t
       left join public.gyms g on g.id = t.gym_id
-      where t.id = team_id
+      where t.id = public.athlete_team_assignments.team_id
         and (
           t.primary_coach_profile_id = auth.uid()
           or g.owner_profile_id = auth.uid()

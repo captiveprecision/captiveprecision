@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import {
   Badge,
@@ -13,7 +13,7 @@ import {
   PageSideColumn,
   StatGrid
 } from "@/components/ui";
-import type { AuthSession } from "@/lib/auth/mock-auth";
+import type { AuthSession } from "@/lib/auth/session";
 
 type WorkspaceSelectionShellProps = {
   session: AuthSession;
@@ -103,3 +103,4 @@ export function WorkspaceSelectionShell({ session }: WorkspaceSelectionShellProp
     </main>
   );
 }
+
