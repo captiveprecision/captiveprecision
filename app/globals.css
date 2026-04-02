@@ -86,9 +86,7 @@ input {
 .app-frame {
   min-height: 100vh;
   display: flex;
-  background:
-    radial-gradient(circle at top left, rgba(255, 200, 0, 0.1), transparent 24%),
-    linear-gradient(180deg, #fafafa 0%, #f3f3f1 100%);
+  background: #f7f7f5;
 }
 
 .app-main {
@@ -1200,9 +1198,7 @@ input {
 
 .profile-cover {
   height: 168px;
-  background:
-    linear-gradient(135deg, rgba(255, 200, 0, 0.42), rgba(15, 15, 15, 0.08)),
-    linear-gradient(180deg, #f7f0d6 0%, #ece7de 100%);
+  background: #efe8d4;
   border-bottom: 1px solid var(--cp-border);
 }
 
@@ -2051,10 +2047,7 @@ input {
 .landing-shell {
   min-height: 100vh;
   padding: 32px 24px 56px;
-  background:
-    radial-gradient(circle at top left, rgba(255, 200, 0, 0.14), transparent 20%),
-    radial-gradient(circle at top right, rgba(15, 15, 15, 0.06), transparent 26%),
-    linear-gradient(180deg, #fbfbf8 0%, #f2f1eb 100%);
+  background: #f7f7f5;
 }
 
 .landing-stack,
@@ -2082,14 +2075,7 @@ input {
 }
 
 .landing-hero-card::after {
-  content: "";
-  position: absolute;
-  inset: auto -80px -120px auto;
-  width: 260px;
-  height: 260px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(255, 200, 0, 0.26) 0%, rgba(255, 200, 0, 0) 70%);
-  pointer-events: none;
+  content: none;
 }
 
 .landing-hero-content {
@@ -2175,7 +2161,7 @@ input {
 
 .landing-tool-card--live {
   border-color: color-mix(in srgb, var(--cp-accent) 22%, var(--cp-border));
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(255, 200, 0, 0.06) 100%);
+  background: #fff;
 }
 
 .landing-tool-card--upcoming {
@@ -3215,6 +3201,8 @@ input {
   letter-spacing: normal;
   font-weight: var(--cp-font-weight-semibold);
 }
+
+
 
 
 

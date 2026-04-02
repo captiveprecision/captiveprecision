@@ -97,6 +97,14 @@ export function WorkspaceSidebar({
   }, [toolsActive]);
 
   const handleNavigate = () => setMobileOpen(false);
+  const handleLogout = async () => {
+    try {
+      await fetch(logoutHref, { method: "POST" });
+    } finally {
+      window.location.assign("/");
+    }
+  };
+
   const handleWorkspaceChange = (event: ChangeEvent<HTMLSelectElement>) => {
     const nextWorkspace = event.target.value as AppRole;
     if (!nextWorkspace || nextWorkspace === currentWorkspace) {
@@ -284,13 +292,18 @@ export function WorkspaceSidebar({
                 {secondaryActionLabel}
               </a>
             ) : null}
-            <a href={logoutHref} className={cn("ui-button", "ui-button--ghost", "ui-button--sm", "sidebar-logout")}>
+            <button
+              type="button"
+              className={cn("ui-button", "ui-button--ghost", "ui-button--sm", "sidebar-logout")}
+              onClick={handleLogout}
+            >
               Log out
-            </a>
+            </button>
           </div>
         </div>
       </aside>
     </>
   );
 }
+
 
