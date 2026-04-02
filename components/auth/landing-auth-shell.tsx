@@ -194,26 +194,17 @@ export function LandingAuthShell() {
         </section>
 
         <section id="landing-access" className="landing-section landing-access-section">
-          <div className="landing-section-copy landing-section-copy--compact">
-            <div className="landing-access-mark">
-              <Image
-                src="/brand/logo-mark.png"
-                alt="Captive Precision mark"
-                width={40}
-                height={40}
-                className="landing-access-mark__image"
-              />
-            </div>
-            <h2>{betaExpanded ? "Request access to beta" : "Sign in to your workspace"}</h2>
-            <p>
-              {betaExpanded
-                ? "Submit your request here. Access is reviewed by an admin before your account is enabled."
-                : "Authentication stays available here. New access now starts through a beta request and requires admin approval before sign-in is enabled."}
-            </p>
-          </div>
-
           <div className="landing-auth-grid">
             <FormShell className="landing-auth-card" contentClassName="landing-auth-card__content">
+              <div className="landing-auth-card__brand">
+                <Image
+                  src="/brand/logo-mark.png"
+                  alt="Captive Precision mark"
+                  width={40}
+                  height={40}
+                  className="landing-access-mark__image"
+                />
+              </div>
               {betaExpanded ? (
                 <>
                   <div className="landing-auth-card__intro">
@@ -238,16 +229,16 @@ export function LandingAuthShell() {
                       onChange={(event) => setBetaEmail(event.target.value)}
                       required
                     />
-                    <Input
-                      id="beta-password"
-                      type={showBetaPassword ? "text" : "password"}
-                      label="Password"
-                      value={betaPassword}
-                      onChange={(event) => setBetaPassword(event.target.value)}
-                      required
-                    />
-                    <div className="landing-password-row">
-                      <Button type="button" variant="ghost" size="sm" onClick={() => setShowBetaPassword((current) => !current)}>
+                    <div className="landing-password-field">
+                      <Input
+                        id="beta-password"
+                        type={showBetaPassword ? "text" : "password"}
+                        label="Password"
+                        value={betaPassword}
+                        onChange={(event) => setBetaPassword(event.target.value)}
+                        required
+                      />
+                      <Button type="button" variant="ghost" size="sm" className="landing-password-toggle" onClick={() => setShowBetaPassword((current) => !current)}>
                         {showBetaPassword ? "Hide password" : "Show password"}
                       </Button>
                     </div>
@@ -278,9 +269,8 @@ export function LandingAuthShell() {
               ) : (
                 <>
                   <div className="landing-auth-card__intro">
-                    <span className="metric-label">Sign in</span>
-                    <h2 className="ui-card__title">Access your workspace</h2>
-                    <p className="muted-copy">Use your approved account to continue into coach, gym, or admin.</p>
+                    <h2 className="ui-card__title">Sign in to your workspace</h2>
+                    <p className="muted-copy">Access is restricted to approved accounts.</p>
                   </div>
                   <form className="landing-auth-form" onSubmit={handleLogin}>
                     <Input
@@ -291,16 +281,16 @@ export function LandingAuthShell() {
                       onChange={(event) => setLoginEmail(event.target.value)}
                       required
                     />
-                    <Input
-                      id="login-password"
-                      type={showLoginPassword ? "text" : "password"}
-                      label="Password"
-                      value={loginPassword}
-                      onChange={(event) => setLoginPassword(event.target.value)}
-                      required
-                    />
-                    <div className="landing-password-row">
-                      <Button type="button" variant="ghost" size="sm" onClick={() => setShowLoginPassword((current) => !current)}>
+                    <div className="landing-password-field">
+                      <Input
+                        id="login-password"
+                        type={showLoginPassword ? "text" : "password"}
+                        label="Password"
+                        value={loginPassword}
+                        onChange={(event) => setLoginPassword(event.target.value)}
+                        required
+                      />
+                      <Button type="button" variant="ghost" size="sm" className="landing-password-toggle" onClick={() => setShowLoginPassword((current) => !current)}>
                         {showLoginPassword ? "Hide password" : "Show password"}
                       </Button>
                     </div>
@@ -318,3 +308,4 @@ export function LandingAuthShell() {
     </main>
   );
 }
+

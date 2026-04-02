@@ -2274,6 +2274,12 @@ input {
   gap: 16px;
 }
 
+.landing-auth-card__brand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .landing-auth-card__intro {
   gap: 10px;
 }
@@ -2292,9 +2298,22 @@ input {
   grid-template-columns: 1fr;
 }
 
-.landing-password-row {
-  display: flex;
-  justify-content: flex-start;
+.landing-password-field {
+  display: grid;
+  gap: 6px;
+}
+
+.landing-password-toggle {
+  justify-self: end;
+  margin-top: -4px;
+  padding: 0;
+  color: var(--cp-color-gray-500);
+}
+
+.landing-password-toggle:hover {
+  background: transparent;
+  border-color: transparent;
+  color: var(--cp-text-body);
 }
 
 .landing-beta-panel {
@@ -2408,9 +2427,32 @@ input {
     row-gap: 14px;
   }
 
+  .landing-hero-copy {
+    justify-items: center;
+    text-align: center;
+  }
+
+  .landing-hero-title,
+  .landing-hero-subtitle {
+    max-width: 100%;
+  }
+
   .landing-brand-lockup {
-    grid-row: auto;
-    justify-content: flex-start;
+    justify-content: center;
+  }
+
+  .landing-brand-lockup__image {
+    width: min(100%, 220px);
+  }
+
+  .landing-hero-footer {
+    width: 100%;
+  }
+
+  .landing-hero-cta,
+  .landing-hero-cta:hover {
+    width: 100%;
+    min-width: 0;
   }
 
   .landing-auth-actions,
@@ -3352,6 +3394,9 @@ input {
   letter-spacing: normal;
   font-weight: var(--cp-font-weight-semibold);
 }
+
+
+
 
 
 

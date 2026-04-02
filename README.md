@@ -30,6 +30,8 @@ npm install
 copy .env.example .env.local
 ```
 
+   Ajusta `NEXT_PUBLIC_APP_URL` al dominio activo del entorno. En produccion debe ser `https://app.captiveprecision.com`.
+
 3. Crea el proyecto en Supabase y ejecuta las migraciones en orden:
 - `supabase/migrations/001_initial_schema.sql`
 - `supabase/migrations/002_roles_gym_scoring.sql`
@@ -66,3 +68,4 @@ npm run dev
 - persistir scoring systems desde Supabase en vez de localStorage
 - verificar webhooks de Whop y sincronizar membresias
 - construir permisos reales por rol y por licencia
+
