@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { getEffectiveRoles, getNextPathForSession, type AppRole } from "@/lib/auth/session";
+import type { AppRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/types/database";
@@ -29,6 +29,7 @@ export async function POST(request: NextRequest) {
     const email = normalizeEmail(payload.email);
     const password = String(payload.password);
     const displayName = String(payload.displayName).trim();
+    const requestedAt = new Date().toISOString();
 
     const { data, error } = await supabase.auth.signUp({
       email,
@@ -56,7 +57,11 @@ export async function POST(request: NextRequest) {
       email,
       display_name: displayName,
       role: payload.role,
-      primary_gym_id: null
+      primary_gym_id: null,
+      beta_access_status: "pending",
+      beta_requested_at: requestedAt,
+      beta_reviewed_at: null,
+      beta_reviewed_by: null
     };
 
     const { error: profileError } = await admin
@@ -67,11 +72,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Account created, but the profile could not be initialized." }, { status: 500 });
     }
 
-    if (!data.session) {
-      return NextResponse.json({ error: "Account created, but email confirmation is required before signing in." }, { status: 409 });
+    if (data.session) {
+      await supabase.auth.signOut();
     }
 
-    return NextResponse.json({ nextPath: getNextPathForSession({ roles: getEffectiveRoles(payload.role) }) });
+    return NextResponse.json({
+      message: "Beta request received. An admin must approve your account before you can sign in."
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unexpected registration failure.";
     return NextResponse.json({ error: message }, { status: 500 });

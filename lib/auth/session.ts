@@ -21,6 +21,10 @@ function parseAppRole(value: unknown): AppRole | null {
   return value === "admin" || value === "coach" || value === "gym" ? value : null;
 }
 
+function isApprovedBetaAccessStatus(value: unknown): value is "approved" {
+  return value === "approved";
+}
+
 export function getEffectiveRoles(role: AppRole): AppRole[] {
   switch (role) {
     case "admin":
@@ -55,7 +59,7 @@ export async function getAuthSession(): Promise<AuthSession | null> {
   const admin = createAdminClient();
   const { data, error: profileError } = await admin
     .from("profiles" as never)
-    .select("display_name, email, role, primary_gym_id" as never)
+    .select("display_name, email, role, primary_gym_id, beta_access_status" as never)
     .eq("id", user.id as never)
     .maybeSingle();
 
@@ -67,7 +71,7 @@ export async function getAuthSession(): Promise<AuthSession | null> {
 
   const role = parseAppRole(profile.role);
 
-  if (!role) {
+  if (!role || !isApprovedBetaAccessStatus(profile.beta_access_status)) {
     return null;
   }
 

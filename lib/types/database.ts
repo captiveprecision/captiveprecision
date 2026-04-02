@@ -125,6 +125,10 @@ export type Database = {
       profiles: {
         Row: {
           avatar_url: string | null;
+          beta_access_status: string;
+          beta_requested_at: string | null;
+          beta_reviewed_at: string | null;
+          beta_reviewed_by: string | null;
           created_at: string;
           display_name: string | null;
           email: string | null;
@@ -137,6 +141,10 @@ export type Database = {
         };
         Insert: {
           avatar_url?: string | null;
+          beta_access_status?: string;
+          beta_requested_at?: string | null;
+          beta_reviewed_at?: string | null;
+          beta_reviewed_by?: string | null;
           created_at?: string;
           display_name?: string | null;
           email?: string | null;
@@ -399,3 +407,4 @@ export type Database = {
     };
   };
 };
+

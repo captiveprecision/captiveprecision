@@ -1,33 +1,31 @@
 "use client";
 
+import Image from "next/image";
 import { useState } from "react";
 
 import {
-  Badge,
   Button,
   Card,
   CardContent,
   FormShell,
   Input,
-  PageHero,
   Select
 } from "@/components/ui";
 import type { AppRole } from "@/lib/auth/session";
 
 type RequestState = {
-  mode: "idle" | "loading" | "error";
+  mode: "idle" | "loading" | "error" | "success";
   message?: string;
 };
 
 type LandingTool = {
   title: string;
   body: string;
-  tag: string;
-  accent: string;
 };
 
 type AuthResponsePayload = {
   error?: string;
+  message?: string;
   nextPath?: string;
 };
 
@@ -39,50 +37,17 @@ const roleOptions: Array<{ value: Extract<AppRole, "coach" | "gym">; label: stri
 const activeTools: LandingTool[] = [
   {
     title: "Cheer Score",
-    body: "Calculate routine scoring outcomes fast with clean section-based inputs and competition-ready score math.",
-    tag: "Live",
-    accent: "Precision scoring"
+    body: "Calculate scoring outcomes using clean, section-based inputs aligned with competition standards."
   },
   {
     title: "Execution Evaluator",
-    body: "Track deductions, control execution totals, and review routine impact with a live evaluator workflow.",
-    tag: "Live",
-    accent: "Routine review"
+    body: "Track deductions, measure execution totals, and review performance impact through a live evaluation workflow."
   },
   {
     title: "Cheer Planner",
-    body: "Manage tryout records and build team structure from live athlete data inside one connected planning workflow.",
-    tag: "Live",
-    accent: "Planning system"
+    body: "Build team structure from real athlete data, manage tryouts, and create planning decisions with full visibility."
   }
 ];
-
-const comingSoonItems: LandingTool[] = [
-  {
-    title: "Dance Tryouts",
-    body: "Upcoming planner track for dance-focused athlete evaluation and assignment readiness.",
-    tag: "Coming Soon",
-    accent: "Planner expansion"
-  },
-  {
-    title: "Jumps Tryouts",
-    body: "Upcoming jump-specific evaluation lane designed to complement the active tumbling workflow.",
-    tag: "Coming Soon",
-    accent: "Planner expansion"
-  },
-  {
-    title: "Stunts Tryouts",
-    body: "Upcoming stunt assessment workflow for deeper athlete profiling across team-building decisions.",
-    tag: "Coming Soon",
-    accent: "Planner expansion"
-  }
-];
-
-const landingStats = [
-  { label: "Active tools", value: "3" },
-  { label: "Upcoming lanes", value: "3" },
-  { label: "Workspaces", value: "Coach, Gym" }
-] as const;
 
 async function readAuthResponse(response: Response): Promise<AuthResponsePayload> {
   const contentType = response.headers.get("content-type") ?? "";
@@ -99,18 +64,30 @@ async function readAuthResponse(response: Response): Promise<AuthResponsePayload
 
 export function LandingAuthShell() {
   const [loginState, setLoginState] = useState<RequestState>({ mode: "idle" });
-  const [registerState, setRegisterState] = useState<RequestState>({ mode: "idle" });
+  const [betaState, setBetaState] = useState<RequestState>({ mode: "idle" });
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [showLoginPassword, setShowLoginPassword] = useState(false);
-  const [registerName, setRegisterName] = useState("");
-  const [registerEmail, setRegisterEmail] = useState("");
-  const [registerPassword, setRegisterPassword] = useState("");
-  const [showRegisterPassword, setShowRegisterPassword] = useState(false);
-  const [registerRole, setRegisterRole] = useState<"coach" | "gym">("coach");
+  const [betaExpanded, setBetaExpanded] = useState(false);
+  const [betaName, setBetaName] = useState("");
+  const [betaEmail, setBetaEmail] = useState("");
+  const [betaPassword, setBetaPassword] = useState("");
+  const [showBetaPassword, setShowBetaPassword] = useState(false);
+  const [betaRole, setBetaRole] = useState<"coach" | "gym">("coach");
 
   function scrollToAccess() {
     document.getElementById("landing-access")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function openBetaAccess() {
+    setBetaExpanded(true);
+    setBetaState({ mode: "idle" });
+    scrollToAccess();
+  }
+
+  function backToSignIn() {
+    setBetaExpanded(false);
+    setBetaState({ mode: "idle" });
   }
 
   async function handleLogin(event: React.FormEvent<HTMLFormElement>) {
@@ -133,205 +110,207 @@ export function LandingAuthShell() {
     window.location.assign(payload.nextPath ?? "/select-workspace");
   }
 
-  async function handleRegister(event: React.FormEvent<HTMLFormElement>) {
+  async function handleBetaRequest(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setRegisterState({ mode: "loading" });
+    setBetaState({ mode: "loading" });
 
     const response = await fetch("/api/auth/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        displayName: registerName,
-        email: registerEmail,
-        password: registerPassword,
-        role: registerRole
+        displayName: betaName,
+        email: betaEmail,
+        password: betaPassword,
+        role: betaRole
       })
     });
 
     const payload = await readAuthResponse(response);
 
     if (!response.ok) {
-      setRegisterState({ mode: "error", message: payload.error ?? "Unable to create account." });
+      setBetaState({ mode: "error", message: payload.error ?? "Unable to submit beta request." });
       return;
     }
 
-    window.location.assign(payload.nextPath ?? `/${registerRole}`);
+    setBetaState({
+      mode: "success",
+      message: payload.message ?? "Beta request received. An admin must approve your account before you can sign in."
+    });
+    setBetaName("");
+    setBetaEmail("");
+    setBetaPassword("");
+    setBetaRole("coach");
   }
 
   return (
     <main className="landing-shell page-stack">
       <section className="landing-stack">
-        <PageHero
-          className="landing-hero-card"
-          contentClassName="landing-hero-content"
-          eyebrow={<Badge variant="accent">Captive Precision</Badge>}
-          title="Professional cheer software built around the tools you actually use."
-          description="Discover the live scoring and planning tools available now, see what is coming next, and access your workspace when you are ready."
-          actions={
-            <div className="landing-hero-actions">
-              <Button size="lg" onClick={scrollToAccess}>Access Platform</Button>
-              <Badge variant="subtle">English-first product experience</Badge>
-            </div>
-          }
-        >
-          <div className="landing-stats-grid">
-            {landingStats.map((item) => (
-              <div key={item.label} className="landing-stat-card">
-                <span className="metric-label">{item.label}</span>
-                <strong>{item.value}</strong>
+        <Card className="landing-hero-card" radius="panel">
+          <CardContent className="landing-hero-content">
+            <div className="landing-hero-grid">
+              <div className="landing-brand-lockup">
+                <Image
+                  src="/brand/logo-primary.png"
+                  alt="Captive Precision"
+                  width={300}
+                  height={68}
+                  className="landing-brand-lockup__image"
+                  priority
+                />
               </div>
-            ))}
-          </div>
-        </PageHero>
+              <div className="landing-hero-copy">
+                <h1 className="landing-hero-title">Professional Cheer Software for your teams</h1>
+                <p className="landing-hero-subtitle">built around the tools you actually use to max score your routines</p>
+              </div>
+            </div>
+            <div className="landing-hero-footer">
+              <Button size="lg" variant="secondary" className="landing-hero-cta" onClick={scrollToAccess}>Access Platform</Button>
+            </div>
+          </CardContent>
+        </Card>
 
         <section className="landing-section landing-section--active">
-          <div className="landing-section-copy">
-            <Badge variant="accent">Active Tools</Badge>
-            <h2>Workflows ready right now</h2>
-            <p>Open the platform to score routines, evaluate execution, and build athlete-driven planning workflows.</p>
-          </div>
-
-          <div className="landing-tool-grid">
-            {activeTools.map((tool, index) => (
-              <Card key={tool.title} className="landing-tool-card landing-tool-card--live" style={{ animationDelay: `${index * 80}ms` }}>
-                <CardContent className="landing-tool-card__content">
-                  <div className="landing-tool-card__topline">
-                    <Badge variant="accent">{tool.tag}</Badge>
-                    <span className="metric-label">{tool.accent}</span>
+          <Card className="landing-tools-card">
+            <CardContent className="landing-tools-card__content">
+              <div className="landing-tools-card__header">
+                <h2>A structured system for building competitive routines</h2>
+                <p>Use one connected platform to evaluate execution, calculate scoring, and plan athlete-driven team structures.</p>
+              </div>
+              <div className="landing-tool-divider" aria-hidden="true" />
+              {activeTools.map((tool, index) => (
+                <div key={tool.title} className="landing-tools-card__item">
+                  <div className="landing-tool-row">
+                    <div className="landing-tool-card__copy">
+                      <h3>{tool.title}</h3>
+                      <p>{tool.body}</p>
+                    </div>
                   </div>
-                  <div className="landing-tool-card__copy">
-                    <h3>{tool.title}</h3>
-                    <p>{tool.body}</p>
-                  </div>
-                  <Button variant="secondary" onClick={scrollToAccess}>Access Tool</Button>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </section>
-
-        <section className="landing-section landing-section--upcoming">
-          <div className="landing-section-copy">
-            <Badge variant="subtle">Coming Soon</Badge>
-            <h2>Next planner expansions</h2>
-            <p>Upcoming evaluation lanes will extend the active planner with more complete athlete profiling.</p>
-          </div>
-
-          <div className="landing-tool-grid landing-tool-grid--upcoming">
-            {comingSoonItems.map((tool, index) => (
-              <Card key={tool.title} className="landing-tool-card landing-tool-card--upcoming" style={{ animationDelay: `${120 + index * 80}ms` }}>
-                <CardContent className="landing-tool-card__content">
-                  <div className="landing-tool-card__topline">
-                    <Badge variant="subtle">{tool.tag}</Badge>
-                    <span className="metric-label">{tool.accent}</span>
-                  </div>
-                  <div className="landing-tool-card__copy">
-                    <h3>{tool.title}</h3>
-                    <p>{tool.body}</p>
-                  </div>
-                  <span className="landing-tool-card__status">Planned for a future release</span>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+                  {index < activeTools.length - 1 ? <div className="landing-tool-divider" aria-hidden="true" /> : null}
+                </div>
+              ))}
+              <Button type="button" size="lg" className="landing-tools-card__cta" onClick={openBetaAccess}>Request Access</Button>
+            </CardContent>
+          </Card>
         </section>
 
         <section id="landing-access" className="landing-section landing-access-section">
           <div className="landing-section-copy landing-section-copy--compact">
-            <Badge variant="accent">Access Platform</Badge>
-            <h2>Sign in or create your workspace</h2>
-            <p>Authentication stays fully available here, but now follows the product story instead of leading it.</p>
+            <div className="landing-access-mark">
+              <Image
+                src="/brand/logo-mark.png"
+                alt="Captive Precision mark"
+                width={40}
+                height={40}
+                className="landing-access-mark__image"
+              />
+            </div>
+            <h2>{betaExpanded ? "Request access to beta" : "Sign in to your workspace"}</h2>
+            <p>
+              {betaExpanded
+                ? "Submit your request here. Access is reviewed by an admin before your account is enabled."
+                : "Authentication stays available here. New access now starts through a beta request and requires admin approval before sign-in is enabled."}
+            </p>
           </div>
 
           <div className="landing-auth-grid">
             <FormShell className="landing-auth-card" contentClassName="landing-auth-card__content">
-              <div className="landing-auth-card__intro">
-                <span className="metric-label">Sign in</span>
-                <h2 className="ui-card__title">Access your workspace</h2>
-                <p className="muted-copy">Use your existing account to continue into coach, gym, or admin.</p>
-              </div>
-              <form className="landing-auth-form" onSubmit={handleLogin}>
-                <Input
-                  id="login-email"
-                  type="email"
-                  label="Email"
-                  value={loginEmail}
-                  onChange={(event) => setLoginEmail(event.target.value)}
-                  required
-                />
-                <Input
-                  id="login-password"
-                  type={showLoginPassword ? "text" : "password"}
-                  label="Password"
-                  value={loginPassword}
-                  onChange={(event) => setLoginPassword(event.target.value)}
-                  required
-                />
-                <div className="landing-password-row">
-                  <Button type="button" variant="ghost" size="sm" onClick={() => setShowLoginPassword((current) => !current)}>
-                    {showLoginPassword ? "Hide password" : "Show password"}
-                  </Button>
-                </div>
-                <Button type="submit" variant="primary" size="lg">
-                  {loginState.mode === "loading" ? "Signing in..." : "Sign in"}
-                </Button>
-                {loginState.mode === "error" ? <p className="landing-auth-error">{loginState.message}</p> : null}
-              </form>
-            </FormShell>
-
-            <FormShell className="landing-auth-card" contentClassName="landing-auth-card__content">
-              <div className="landing-auth-card__intro">
-                <span className="metric-label">Register</span>
-                <h2 className="ui-card__title">Create a new account</h2>
-                <p className="muted-copy">New accounts can start as a coach or a gym. Admin access remains restricted.</p>
-              </div>
-              <form className="landing-auth-form" onSubmit={handleRegister}>
-                <Input
-                  id="register-name"
-                  type="text"
-                  label="Name"
-                  value={registerName}
-                  onChange={(event) => setRegisterName(event.target.value)}
-                  required
-                />
-                <Input
-                  id="register-email"
-                  type="email"
-                  label="Email"
-                  value={registerEmail}
-                  onChange={(event) => setRegisterEmail(event.target.value)}
-                  required
-                />
-                <Input
-                  id="register-password"
-                  type={showRegisterPassword ? "text" : "password"}
-                  label="Password"
-                  value={registerPassword}
-                  onChange={(event) => setRegisterPassword(event.target.value)}
-                  required
-                />
-                <div className="landing-password-row">
-                  <Button type="button" variant="ghost" size="sm" onClick={() => setShowRegisterPassword((current) => !current)}>
-                    {showRegisterPassword ? "Hide password" : "Show password"}
-                  </Button>
-                </div>
-                <Select
-                  id="register-role"
-                  label="Workspace type"
-                  value={registerRole}
-                  onChange={(event) => setRegisterRole(event.target.value as "coach" | "gym")}
-                >
-                  {roleOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </Select>
-                <Button type="submit" variant="primary" size="lg">
-                  {registerState.mode === "loading" ? "Creating account..." : "Create account"}
-                </Button>
-                {registerState.mode === "error" ? <p className="landing-auth-error">{registerState.message}</p> : null}
-              </form>
+              {betaExpanded ? (
+                <>
+                  <div className="landing-auth-card__intro">
+                    <span className="metric-label">Beta access</span>
+                    <h2 className="ui-card__title">Request Access to Beta</h2>
+                    <p className="muted-copy">Submit your team details here. Access is enabled only after an admin reviews and approves the request.</p>
+                  </div>
+                  <form className="landing-auth-form" onSubmit={handleBetaRequest}>
+                    <Input
+                      id="beta-name"
+                      type="text"
+                      label="Name"
+                      value={betaName}
+                      onChange={(event) => setBetaName(event.target.value)}
+                      required
+                    />
+                    <Input
+                      id="beta-email"
+                      type="email"
+                      label="Email"
+                      value={betaEmail}
+                      onChange={(event) => setBetaEmail(event.target.value)}
+                      required
+                    />
+                    <Input
+                      id="beta-password"
+                      type={showBetaPassword ? "text" : "password"}
+                      label="Password"
+                      value={betaPassword}
+                      onChange={(event) => setBetaPassword(event.target.value)}
+                      required
+                    />
+                    <div className="landing-password-row">
+                      <Button type="button" variant="ghost" size="sm" onClick={() => setShowBetaPassword((current) => !current)}>
+                        {showBetaPassword ? "Hide password" : "Show password"}
+                      </Button>
+                    </div>
+                    <Select
+                      id="beta-role"
+                      label="Workspace type"
+                      value={betaRole}
+                      onChange={(event) => setBetaRole(event.target.value as "coach" | "gym")}
+                    >
+                      {roleOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </Select>
+                    <div className="landing-auth-actions landing-auth-actions--stacked">
+                      <Button type="submit" variant="primary" size="lg">
+                        {betaState.mode === "loading" ? "Submitting request..." : "Request Access to Beta"}
+                      </Button>
+                      <Button type="button" variant="secondary" size="lg" onClick={backToSignIn}>
+                        Back to Sign In
+                      </Button>
+                    </div>
+                    {betaState.mode === "error" ? <p className="landing-auth-error">{betaState.message}</p> : null}
+                    {betaState.mode === "success" ? <p className="landing-auth-success">{betaState.message}</p> : null}
+                  </form>
+                </>
+              ) : (
+                <>
+                  <div className="landing-auth-card__intro">
+                    <span className="metric-label">Sign in</span>
+                    <h2 className="ui-card__title">Access your workspace</h2>
+                    <p className="muted-copy">Use your approved account to continue into coach, gym, or admin.</p>
+                  </div>
+                  <form className="landing-auth-form" onSubmit={handleLogin}>
+                    <Input
+                      id="login-email"
+                      type="email"
+                      label="Email"
+                      value={loginEmail}
+                      onChange={(event) => setLoginEmail(event.target.value)}
+                      required
+                    />
+                    <Input
+                      id="login-password"
+                      type={showLoginPassword ? "text" : "password"}
+                      label="Password"
+                      value={loginPassword}
+                      onChange={(event) => setLoginPassword(event.target.value)}
+                      required
+                    />
+                    <div className="landing-password-row">
+                      <Button type="button" variant="ghost" size="sm" onClick={() => setShowLoginPassword((current) => !current)}>
+                        {showLoginPassword ? "Hide password" : "Show password"}
+                      </Button>
+                    </div>
+                    <Button type="submit" variant="primary" size="lg">
+                      {loginState.mode === "loading" ? "Signing in..." : "Sign in"}
+                    </Button>
+                    {loginState.mode === "error" ? <p className="landing-auth-error">{loginState.message}</p> : null}
+                  </form>
+                </>
+              )}
             </FormShell>
           </div>
         </section>
