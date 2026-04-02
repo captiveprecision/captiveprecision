@@ -18,6 +18,29 @@ const gymToolItems = [
   { href: "/gym/tools/cheer-planner" as Route, title: "Cheer Planner", shortLabel: "P" }
 ];
 
+function getGymReleaseLabel() {
+  const rawValue =
+    process.env.APP_DEPLOYED_AT ??
+    process.env.NEXT_PUBLIC_APP_DEPLOYED_AT ??
+    process.env.VERCEL_GIT_COMMIT_DATE ??
+    process.env.COMMIT_DATE;
+
+  if (!rawValue) {
+    return "Last update: Recent release";
+  }
+
+  const parsed = new Date(rawValue);
+
+  if (Number.isNaN(parsed.getTime())) {
+    return "Last update: Recent release";
+  }
+
+  return `Last update: ${new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric"
+  }).format(parsed)}`;
+}
+
 export function GymSidebar({ availableWorkspaces }: { availableWorkspaces: AppRole[] }) {
   return (
     <WorkspaceSidebar
@@ -26,8 +49,9 @@ export function GymSidebar({ availableWorkspaces }: { availableWorkspaces: AppRo
       brandSubtitle="Gym workspace"
       navItems={gymNavItems}
       toolItems={gymToolItems}
-      footerTitle="Gym release"
-      footerCopy="The gym workspace manages coach licenses, shared teams, athletes, and organization-wide visibility across tools."
+      footerTitle="Early Access"
+      footerCopy="Features are still being tested, refined, and improved across releases."
+      footerMeta={getGymReleaseLabel()}
       logoutHref="/api/auth/logout"
     />
   );

@@ -129,13 +129,20 @@ export type Database = {
           beta_requested_at: string | null;
           beta_reviewed_at: string | null;
           beta_reviewed_by: string | null;
+          bio: string | null;
+          city: string | null;
           created_at: string;
           display_name: string | null;
           email: string | null;
+          gym_name: string | null;
+          headline: string | null;
           id: string;
           membership_type: string;
           primary_gym_id: string | null;
           role: string;
+          role_label: string | null;
+          state: string | null;
+          teams_summary: string | null;
           updated_at: string;
           username: string | null;
         };
@@ -145,13 +152,20 @@ export type Database = {
           beta_requested_at?: string | null;
           beta_reviewed_at?: string | null;
           beta_reviewed_by?: string | null;
+          bio?: string | null;
+          city?: string | null;
           created_at?: string;
           display_name?: string | null;
           email?: string | null;
+          gym_name?: string | null;
+          headline?: string | null;
           id: string;
           membership_type?: string;
           primary_gym_id?: string | null;
           role?: string;
+          role_label?: string | null;
+          state?: string | null;
+          teams_summary?: string | null;
           updated_at?: string;
           username?: string | null;
         };
@@ -407,4 +421,6 @@ export type Database = {
     };
   };
 };
+
+
 

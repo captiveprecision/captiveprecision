@@ -10,7 +10,7 @@ export default async function CoachLayout({
 
   return (
     <div className="app-frame">
-      <CoachSidebar availableWorkspaces={session.roles} />
+      <CoachSidebar availableWorkspaces={session.roles} session={session} />
       <div className="app-main">{children}</div>
     </div>
   );

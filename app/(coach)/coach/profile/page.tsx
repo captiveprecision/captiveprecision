@@ -1,35 +1,51 @@
 import { Badge, ButtonLink, Card, DetailGrid, PageColumns, PageMainColumn, PageSideColumn, PageHero, StatGrid } from "@/components/ui";
+import { requireAuthSession } from "@/lib/auth/session";
 
-const teams = ["Senior Elite", "Junior Level 2", "Open Coed Prep"];
-const achievements = [
+const fallbackAchievements = [
   "8 years coaching all-star and school cheer teams.",
   "Focus on routine structure, score optimization, and athlete progression.",
   "Works across elite and prep divisions with performance tracking workflows."
 ];
 
-export default function CoachProfilePage() {
+function getInitials(name: string) {
+  return name
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("") || "CP";
+}
+
+export default async function CoachProfilePage() {
+  const session = await requireAuthSession("coach");
+  const gymName = session.primaryGymName ?? "Independent";
+  const location = [session.city, session.state].filter(Boolean).join(", ") || "Not set yet";
+  const role = session.roleLabel ?? (session.primaryGymName ? "Gym Coach" : "Independent Coach");
+  const headline = session.headline ?? gymName;
+  const about = session.bio ?? "Update this profile from Edit to add your professional summary.";
+  const teams = (session.teamsSummary ?? "").split(",").map((team) => team.trim()).filter(Boolean);
+
   return (
     <main className="workspace-shell page-stack">
       <Card radius="panel" className="profile-hero">
         <div className="profile-cover" />
         <div className="ui-card__content profile-hero-body">
           <div className="profile-avatar" aria-hidden="true">
-            EM
+            {getInitials(session.displayName)}
           </div>
 
           <div className="profile-hero-main">
             <div className="profile-hero-copy">
-              <div className="metric-label">Profile</div>
-              <h1 className="profile-name">Edith Morales</h1>
-              <p className="profile-headline">Coach, choreographer, and owner at Captive Precision</p>
-              <p className="profile-meta">Miami, Florida, 12 years in cheer development</p>
+              <h1 className="profile-name">{session.displayName}</h1>
+              <p className="profile-headline">{headline}</p>
+              <p className="profile-meta">{location}</p>
               <div className="profile-chip-row">
-                <Badge variant="subtle">Independent Coach</Badge>
-                <Badge variant="accent">Eligible for gym assignment</Badge>
+                <Badge variant="subtle">{role}</Badge>
+                <Badge variant="accent">{gymName}</Badge>
               </div>
             </div>
 
-            <ButtonLink variant="secondary" href="/coach/profile/edit">Edit profile</ButtonLink>
+            <ButtonLink variant="secondary" href="/coach/profile/edit" className="profile-edit-button">Edit</ButtonLink>
           </div>
         </div>
       </Card>
@@ -39,21 +55,19 @@ export default function CoachProfilePage() {
           <PageHero
             className="profile-section"
             contentClassName="profile-section"
-            eyebrow="About"
             title="Professional summary"
-            description="Captive Precision is building a premium toolkit for cheer coaches and program owners. This profile acts as the public-facing identity inside the platform and will later connect to saved tools, memberships, and history."
+            description={about}
           />
 
           <Card radius="panel" className="profile-section">
             <div className="ui-card__content profile-section">
               <div className="ui-section-header">
                 <div className="ui-section-header__copy">
-                  <span className="ui-section-header__eyebrow">Teams</span>
                   <h2 className="ui-section-header__title">Current teams</h2>
                 </div>
               </div>
               <div className="profile-chip-row">
-                {teams.map((team) => (
+                {(teams.length ? teams : ["No teams added yet"]).map((team) => (
                   <Badge variant="neutral" key={team}>{team}</Badge>
                 ))}
               </div>
@@ -64,12 +78,11 @@ export default function CoachProfilePage() {
             <div className="ui-card__content profile-section">
               <div className="ui-section-header">
                 <div className="ui-section-header__copy">
-                  <span className="ui-section-header__eyebrow">Highlights</span>
                   <h2 className="ui-section-header__title">What this coach focuses on</h2>
                 </div>
               </div>
               <ul className="profile-list">
-                {achievements.map((achievement) => (
+                {fallbackAchievements.map((achievement) => (
                   <li key={achievement}>{achievement}</li>
                 ))}
               </ul>
@@ -82,30 +95,25 @@ export default function CoachProfilePage() {
             <div className="ui-card__content profile-section">
               <div className="ui-section-header">
                 <div className="ui-section-header__copy">
-                  <span className="ui-section-header__eyebrow">Details</span>
-                  <h2 className="ui-section-header__title">Profile details</h2>
+                  <h2 className="ui-section-header__title">Contact details</h2>
                 </div>
               </div>
               <DetailGrid className="profile-detail-grid">
                 <div>
                   <span className="profile-detail-label">Full name</span>
-                  <p className="profile-detail-value">Edith Morales</p>
+                  <p className="profile-detail-value">{session.displayName}</p>
                 </div>
                 <div>
                   <span className="profile-detail-label">Gym</span>
-                  <p className="profile-detail-value">Captive Precision Athletics</p>
+                  <p className="profile-detail-value">{gymName}</p>
                 </div>
                 <div>
-                  <span className="profile-detail-label">Primary role</span>
-                  <p className="profile-detail-value">Owner / Head Coach</p>
+                  <span className="profile-detail-label">City / State</span>
+                  <p className="profile-detail-value">{location}</p>
                 </div>
                 <div>
-                  <span className="profile-detail-label">Teams</span>
-                  <p className="profile-detail-value">3 active teams</p>
-                </div>
-                <div>
-                  <span className="profile-detail-label">Coach type</span>
-                  <p className="profile-detail-value">Independent coach</p>
+                  <span className="profile-detail-label">Role</span>
+                  <p className="profile-detail-value">{role}</p>
                 </div>
               </DetailGrid>
             </div>
@@ -115,7 +123,6 @@ export default function CoachProfilePage() {
             <div className="ui-card__content profile-section">
               <div className="ui-section-header">
                 <div className="ui-section-header__copy">
-                  <span className="ui-section-header__eyebrow">Quick stats</span>
                   <h2 className="ui-section-header__title">Platform summary</h2>
                 </div>
               </div>
@@ -142,3 +149,4 @@ export default function CoachProfilePage() {
     </main>
   );
 }
+

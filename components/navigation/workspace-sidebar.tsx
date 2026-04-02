@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import type { Route } from "next";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -18,11 +19,16 @@ type NavItem = {
 type SidebarProps = {
   currentWorkspace: AppRole;
   availableWorkspaces: AppRole[];
+  brandTitle?: string;
   brandSubtitle: string;
+  brandLogoSrc?: string;
+  brandLogoAlt?: string;
   navItems: NavItem[];
   toolItems?: NavItem[];
   footerTitle: string;
   footerCopy: string;
+  footerMeta?: string;
+  footerLinkLabel?: string;
   secondaryActionHref?: string;
   secondaryActionLabel?: string;
   logoutHref: string;
@@ -73,11 +79,16 @@ function SidebarLink({
 export function WorkspaceSidebar({
   currentWorkspace,
   availableWorkspaces,
+  brandTitle = "Captive Precision",
   brandSubtitle,
+  brandLogoSrc,
+  brandLogoAlt = "Captive Precision mark",
   navItems,
   toolItems,
   footerTitle,
   footerCopy,
+  footerMeta,
+  footerLinkLabel,
   secondaryActionHref,
   secondaryActionLabel,
   logoutHref
@@ -143,10 +154,22 @@ export function WorkspaceSidebar({
         <div className="sidebar-panel">
           <div className="sidebar-top">
             <div className="sidebar-brand">
-              <span className="brand-mark">CP</span>
+              <span className="brand-mark">
+                {brandLogoSrc ? (
+                  <Image
+                    src={brandLogoSrc}
+                    alt={brandLogoAlt}
+                    width={28}
+                    height={28}
+                    className="brand-mark__image"
+                  />
+                ) : (
+                  "CP"
+                )}
+              </span>
               <div className="brand-copy">
-                <p className="brand-title">Captive Precision</p>
-                <Badge variant="subtle" className="brand-subtitle">
+                <p className="brand-title">{brandTitle}</p>
+                <Badge variant="accent" className="brand-subtitle">
                   {brandSubtitle}
                 </Badge>
               </div>
@@ -283,6 +306,8 @@ export function WorkspaceSidebar({
             <div className="sidebar-footer-card">
               <p className="sidebar-footer-title">{footerTitle}</p>
               <p className="sidebar-footer-copy">{footerCopy}</p>
+              {footerMeta ? <p className="sidebar-footer-copy">{footerMeta}</p> : null}
+              {footerLinkLabel ? <span className="sidebar-feedback-link">{footerLinkLabel}</span> : null}
             </div>
             {secondaryActionHref && secondaryActionLabel ? (
               <a

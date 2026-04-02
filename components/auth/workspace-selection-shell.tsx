@@ -38,44 +38,30 @@ export function WorkspaceSelectionShell({ session }: WorkspaceSelectionShellProp
   }
 
   return (
-    <main className="landing-shell page-stack">
+    <main className="landing-shell page-stack workspace-selection-shell">
       <PageColumns className="landing-top-grid">
         <PageMainColumn className="landing-main-column">
           <PageHero
-            className="landing-hero-card"
-            contentClassName="landing-hero-content"
-            eyebrow={<Badge variant="accent">Captive Precision</Badge>}
-            title="Choose your workspace."
-            description="This account can move across multiple workspace types. Select the environment you want to open for this session."
+            className="landing-hero-card workspace-selection-hero"
+            contentClassName="landing-hero-content workspace-selection-hero__content"
+            title={`Welcome back ${session.displayName}`}
+            description="Choose the workspace you want to start with."
           >
-            <DetailGrid className="landing-session-grid">
-              <div className="landing-session-block">
-                <span className="metric-label">Signed in as</span>
-                <p className="landing-session-value">{session.displayName}</p>
-                <p className="landing-session-meta">{session.email}</p>
-              </div>
-              <div className="landing-session-block">
-                <span className="metric-label">Workspace access</span>
-                <div className="landing-session-badges">
-                  {session.roles.map((role) => (
-                    <Badge key={role} variant="subtle">
-                      {roleLabel[role]}
-                    </Badge>
-                  ))}
-                </div>
+            <DetailGrid className="landing-session-grid workspace-selection-session-grid">
+              <div className="landing-session-block workspace-selection-session-block">
+                <Badge variant="accent">{session.email}</Badge>
               </div>
             </DetailGrid>
 
-            <StatGrid className="landing-role-grid">
+            <StatGrid className="landing-role-grid workspace-selection-role-grid">
               {session.roles.map((role) => (
-                <Card key={role} className="landing-role-card">
-                  <CardContent className="landing-role-card__content">
-                    <div className="landing-role-card__copy">
-                      <span className="metric-label">Workspace</span>
+                <Card key={role} className="landing-role-card workspace-selection-role-card">
+                  <CardContent className="landing-role-card__content workspace-selection-role-card__content">
+                    <div className="landing-role-card__copy workspace-selection-role-card__copy">
                       <h3 className="ui-card__title">{roleLabel[role]}</h3>
                       <p className="muted-copy">{roleCopy[role]}</p>
                     </div>
-                    <ButtonLink href={`/${role}`} variant="secondary" size="lg">
+                    <ButtonLink href={`/${role}`} variant="secondary" size="md">
                       Open {roleLabel[role]}
                     </ButtonLink>
                   </CardContent>
@@ -83,13 +69,18 @@ export function WorkspaceSelectionShell({ session }: WorkspaceSelectionShellProp
               ))}
             </StatGrid>
           </PageHero>
+
+          <div className="workspace-selection-footer">
+            <Button type="button" variant="ghost" size="md" className="workspace-selection-logout" onClick={handleLogout}>
+              Log out
+            </Button>
+          </div>
         </PageMainColumn>
 
-        <PageSideColumn className="landing-side-column">
-          <Card radius="panel" className="landing-auth-card">
+        <PageSideColumn className="landing-side-column workspace-selection-side-column">
+          <Card radius="panel" className="landing-auth-card workspace-selection-side-card">
             <CardContent className="landing-auth-card__content">
               <div className="landing-auth-card__intro">
-                <span className="metric-label">Session</span>
                 <h2 className="ui-card__title">Account controls</h2>
                 <p className="muted-copy">Leave this session and return to the landing screen to sign in with another account.</p>
               </div>
@@ -103,4 +94,5 @@ export function WorkspaceSelectionShell({ session }: WorkspaceSelectionShellProp
     </main>
   );
 }
+
 

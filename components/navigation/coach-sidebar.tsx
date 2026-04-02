@@ -1,7 +1,7 @@
 import type { Route } from "next";
 
 import { WorkspaceSidebar } from "@/components/navigation/workspace-sidebar";
-import type { AppRole } from "@/lib/auth/session";
+import type { AppRole, AuthSession } from "@/lib/auth/session";
 
 const coachNavItems = [
   { href: "/coach" as Route, title: "Dashboard", shortLabel: "D" },
@@ -18,17 +18,53 @@ const coachToolItems = [
   { href: "/coach/tools/cheer-planner" as Route, title: "Cheer Planner", shortLabel: "P" }
 ];
 
-export function CoachSidebar({ availableWorkspaces }: { availableWorkspaces: AppRole[] }) {
+function getCoachReleaseLabel() {
+  const rawValue =
+    process.env.APP_DEPLOYED_AT ??
+    process.env.NEXT_PUBLIC_APP_DEPLOYED_AT ??
+    process.env.VERCEL_GIT_COMMIT_DATE ??
+    process.env.COMMIT_DATE;
+
+  if (!rawValue) {
+    return "Last update: Recent release";
+  }
+
+  const parsed = new Date(rawValue);
+
+  if (Number.isNaN(parsed.getTime())) {
+    return "Last update: Recent release";
+  }
+
+  return `Last update: ${new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric"
+  }).format(parsed)}`;
+}
+
+export function CoachSidebar({
+  availableWorkspaces,
+  session
+}: {
+  availableWorkspaces: AppRole[];
+  session: AuthSession;
+}) {
   return (
     <WorkspaceSidebar
       currentWorkspace="coach"
       availableWorkspaces={availableWorkspaces}
-      brandSubtitle="Coach workspace"
+      brandTitle={session.displayName}
+      brandSubtitle={session.primaryGymName ?? "Independent"}
+      brandLogoSrc="/brand/logo-mark.png"
+      brandLogoAlt="Captive Precision mark"
       navItems={coachNavItems}
       toolItems={coachToolItems}
-      footerTitle="Coach release"
-      footerCopy="The coach workspace now contains the live dashboard, profile flow, settings shell, and the first premium tool set."
+      footerTitle="Early Access"
+      footerCopy="Features are still being tested, refined, and improved across releases."
+      footerMeta={getCoachReleaseLabel()}
       logoutHref="/api/auth/logout"
     />
   );
 }
+
+
+
