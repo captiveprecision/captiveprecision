@@ -3,7 +3,7 @@
 import Image from "next/image";
 import { useState } from "react";
 
-import { PwaInstallPrompt } from "@/components/pwa/pwa-provider";
+import { PwaInstallPrompt, usePwa } from "@/components/pwa/pwa-provider";
 import {
   Button,
   Card,
@@ -88,6 +88,7 @@ async function readAuthResponse(response: Response): Promise<AuthResponsePayload
 }
 
 export function LandingAuthShell() {
+  const { canInstall } = usePwa();
   const [loginState, setLoginState] = useState<RequestState>({ mode: "idle" });
   const [betaState, setBetaState] = useState<RequestState>({ mode: "idle" });
   const [loginEmail, setLoginEmail] = useState("");
@@ -95,6 +96,7 @@ export function LandingAuthShell() {
   const [showLoginPassword, setShowLoginPassword] = useState(false);
   const [accessExpanded, setAccessExpanded] = useState(false);
   const [betaExpanded, setBetaExpanded] = useState(false);
+  const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(0);
   const [betaName, setBetaName] = useState("");
   const [betaEmail, setBetaEmail] = useState("");
   const [betaPassword, setBetaPassword] = useState("");
@@ -206,17 +208,19 @@ export function LandingAuthShell() {
           </CardContent>
         </Card>
 
-        <section className="landing-section landing-install-section">
-          <Card className="landing-install-card" radius="panel">
-            <CardContent className="landing-install-card__content">
-              <div className="landing-install-card__copy">
-                <h2>Install Captive Precision</h2>
-                <p>Add the platform to your phone or desktop for faster access and a cleaner app experience.</p>
-              </div>
-              <PwaInstallPrompt className="landing-install-prompt" buttonClassName="landing-install-button" context="landing" />
-            </CardContent>
-          </Card>
-        </section>
+        {canInstall ? (
+          <section className="landing-section landing-install-section">
+            <Card className="landing-install-card" radius="panel">
+              <CardContent className="landing-install-card__content">
+                <div className="landing-install-card__copy">
+                  <h2>Install Captive Precision</h2>
+                  <p>Add the platform to your phone or desktop for faster access and a cleaner app experience.</p>
+                </div>
+                <PwaInstallPrompt className="landing-install-prompt" buttonClassName="landing-install-button" context="landing" />
+              </CardContent>
+            </Card>
+          </section>
+        ) : null}
 
         <section className="landing-section landing-section--active">
           <Card className="landing-tools-card">
@@ -263,41 +267,15 @@ export function LandingAuthShell() {
                       <p className="muted-copy">Submit your team details here. Access is enabled only after an admin reviews and approves the request.</p>
                     </div>
                     <form className="landing-auth-form" onSubmit={handleBetaRequest}>
-                      <Input
-                        id="beta-name"
-                        type="text"
-                        label="Name"
-                        value={betaName}
-                        onChange={(event) => setBetaName(event.target.value)}
-                        required
-                      />
-                      <Input
-                        id="beta-email"
-                        type="email"
-                        label="Email"
-                        value={betaEmail}
-                        onChange={(event) => setBetaEmail(event.target.value)}
-                        required
-                      />
+                      <Input id="beta-name" type="text" label="Name" value={betaName} onChange={(event) => setBetaName(event.target.value)} required />
+                      <Input id="beta-email" type="email" label="Email" value={betaEmail} onChange={(event) => setBetaEmail(event.target.value)} required />
                       <div className="landing-password-field">
-                        <Input
-                          id="beta-password"
-                          type={showBetaPassword ? "text" : "password"}
-                          label="Password"
-                          value={betaPassword}
-                          onChange={(event) => setBetaPassword(event.target.value)}
-                          required
-                        />
+                        <Input id="beta-password" type={showBetaPassword ? "text" : "password"} label="Password" value={betaPassword} onChange={(event) => setBetaPassword(event.target.value)} required />
                         <Button type="button" variant="ghost" size="sm" className="landing-password-toggle" onClick={() => setShowBetaPassword((current) => !current)}>
                           {showBetaPassword ? "Hide password" : "Show password"}
                         </Button>
                       </div>
-                      <Select
-                        id="beta-role"
-                        label="Workspace type"
-                        value={betaRole}
-                        onChange={(event) => setBetaRole(event.target.value as "coach" | "gym")}
-                      >
+                      <Select id="beta-role" label="Workspace type" value={betaRole} onChange={(event) => setBetaRole(event.target.value as "coach" | "gym")}>
                         {roleOptions.map((option) => (
                           <option key={option.value} value={option.value}>
                             {option.label}
@@ -323,23 +301,9 @@ export function LandingAuthShell() {
                       <p className="muted-copy">Access is restricted to approved accounts.</p>
                     </div>
                     <form className="landing-auth-form" onSubmit={handleLogin}>
-                      <Input
-                        id="login-email"
-                        type="email"
-                        label="Email"
-                        value={loginEmail}
-                        onChange={(event) => setLoginEmail(event.target.value)}
-                        required
-                      />
+                      <Input id="login-email" type="email" label="Email" value={loginEmail} onChange={(event) => setLoginEmail(event.target.value)} required />
                       <div className="landing-password-field">
-                        <Input
-                          id="login-password"
-                          type={showLoginPassword ? "text" : "password"}
-                          label="Password"
-                          value={loginPassword}
-                          onChange={(event) => setLoginPassword(event.target.value)}
-                          required
-                        />
+                        <Input id="login-password" type={showLoginPassword ? "text" : "password"} label="Password" value={loginPassword} onChange={(event) => setLoginPassword(event.target.value)} required />
                         <Button type="button" variant="ghost" size="sm" className="landing-password-toggle" onClick={() => setShowLoginPassword((current) => !current)}>
                           {showLoginPassword ? "Hide password" : "Show password"}
                         </Button>
@@ -364,13 +328,25 @@ export function LandingAuthShell() {
                 <p>Quick answers for access, installation, and how the current platform works.</p>
               </div>
               <div className="landing-tool-divider" aria-hidden="true" />
-              {landingFaqs.map((faq, index) => (
-                <div key={faq.question} className="landing-faq-item">
-                  <h3>{faq.question}</h3>
-                  <p>{faq.answer}</p>
-                  {index < landingFaqs.length - 1 ? <div className="landing-tool-divider" aria-hidden="true" /> : null}
-                </div>
-              ))}
+              {landingFaqs.map((faq, index) => {
+                const isOpen = openFaqIndex === index;
+
+                return (
+                  <div key={faq.question} className="landing-faq-item" data-open={isOpen}>
+                    <button
+                      type="button"
+                      className="landing-faq-trigger"
+                      onClick={() => setOpenFaqIndex((current) => (current === index ? null : index))}
+                      aria-expanded={isOpen}
+                    >
+                      <span>{faq.question}</span>
+                      <span className="landing-faq-icon" aria-hidden="true">{isOpen ? "-" : "+"}</span>
+                    </button>
+                    {isOpen ? <p>{faq.answer}</p> : null}
+                    {index < landingFaqs.length - 1 ? <div className="landing-tool-divider" aria-hidden="true" /> : null}
+                  </div>
+                );
+              })}
             </CardContent>
           </Card>
         </section>

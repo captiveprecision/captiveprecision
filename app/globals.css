@@ -3682,3 +3682,37 @@ input {
     gap: 16px;
   }
 }
+
+.landing-faq-item {
+  display: grid;
+  gap: 12px;
+}
+
+.landing-faq-trigger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--cp-text-strong);
+  text-align: left;
+  cursor: pointer;
+}
+
+.landing-faq-trigger span:first-child {
+  font-size: 18px;
+  font-weight: var(--cp-font-weight-semibold);
+  line-height: 1.4;
+}
+
+.landing-faq-icon {
+  flex: 0 0 auto;
+  width: 24px;
+  text-align: center;
+  font-size: 20px;
+  font-weight: var(--cp-font-weight-semibold);
+  color: var(--cp-muted);
+}
