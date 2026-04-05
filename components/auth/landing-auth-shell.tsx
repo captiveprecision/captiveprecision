@@ -24,6 +24,11 @@ type LandingTool = {
   body: string;
 };
 
+type LandingFaq = {
+  question: string;
+  answer: string;
+};
+
 type AuthResponsePayload = {
   error?: string;
   message?: string;
@@ -50,6 +55,25 @@ const activeTools: LandingTool[] = [
   }
 ];
 
+const landingFaqs: LandingFaq[] = [
+  {
+    question: "How do I get access?",
+    answer: "Request beta access from the platform and an admin will review your account before sign-in is enabled."
+  },
+  {
+    question: "Can I install the app on my phone?",
+    answer: "Yes. Captive Precision can be installed on supported iPhone, Android, and desktop browsers for faster access."
+  },
+  {
+    question: "What works offline?",
+    answer: "Installed pages and locally saved tool data remain available offline, while sign-in and synced updates still require a connection."
+  },
+  {
+    question: "Which workspaces are available today?",
+    answer: "Approved accounts can access coach, gym, or admin depending on the permissions assigned to the profile."
+  }
+];
+
 async function readAuthResponse(response: Response): Promise<AuthResponsePayload> {
   const contentType = response.headers.get("content-type") ?? "";
 
@@ -69,6 +93,7 @@ export function LandingAuthShell() {
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [showLoginPassword, setShowLoginPassword] = useState(false);
+  const [accessExpanded, setAccessExpanded] = useState(false);
   const [betaExpanded, setBetaExpanded] = useState(false);
   const [betaName, setBetaName] = useState("");
   const [betaEmail, setBetaEmail] = useState("");
@@ -77,18 +102,29 @@ export function LandingAuthShell() {
   const [betaRole, setBetaRole] = useState<"coach" | "gym">("coach");
 
   function scrollToAccess() {
-    document.getElementById("landing-access")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    window.setTimeout(() => {
+      document.getElementById("landing-access")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 32);
+  }
+
+  function openAccessPlatform() {
+    setAccessExpanded(true);
+    setBetaExpanded(false);
+    scrollToAccess();
   }
 
   function openBetaAccess() {
+    setAccessExpanded(true);
     setBetaExpanded(true);
     setBetaState({ mode: "idle" });
     scrollToAccess();
   }
 
   function backToSignIn() {
+    setAccessExpanded(true);
     setBetaExpanded(false);
     setBetaState({ mode: "idle" });
+    scrollToAccess();
   }
 
   async function handleLogin(event: React.FormEvent<HTMLFormElement>) {
@@ -165,11 +201,22 @@ export function LandingAuthShell() {
               </div>
             </div>
             <div className="landing-hero-footer">
-              <Button size="lg" variant="secondary" className="landing-hero-cta" onClick={scrollToAccess}>Access Platform</Button>
-              <PwaInstallPrompt className="landing-install-prompt" buttonClassName="landing-install-button" context="landing" />
+              <Button size="lg" variant="secondary" className="landing-hero-cta" onClick={openAccessPlatform}>Access Platform</Button>
             </div>
           </CardContent>
         </Card>
+
+        <section className="landing-section landing-install-section">
+          <Card className="landing-install-card" radius="panel">
+            <CardContent className="landing-install-card__content">
+              <div className="landing-install-card__copy">
+                <h2>Install Captive Precision</h2>
+                <p>Add the platform to your phone or desktop for faster access and a cleaner app experience.</p>
+              </div>
+              <PwaInstallPrompt className="landing-install-prompt" buttonClassName="landing-install-button" context="landing" />
+            </CardContent>
+          </Card>
+        </section>
 
         <section className="landing-section landing-section--active">
           <Card className="landing-tools-card">
@@ -195,116 +242,137 @@ export function LandingAuthShell() {
           </Card>
         </section>
 
-        <section id="landing-access" className="landing-section landing-access-section">
-          <div className="landing-auth-grid">
-            <FormShell className="landing-auth-card" contentClassName="landing-auth-card__content">
-              <div className="landing-auth-card__brand">
-                <Image
-                  src="/brand/logo-mark.png"
-                  alt="Captive Precision mark"
-                  width={40}
-                  height={40}
-                  className="landing-access-mark__image"
-                />
-              </div>
-              {betaExpanded ? (
-                <>
-                  <div className="landing-auth-card__intro">
-                    <span className="metric-label">Beta access</span>
-                    <h2 className="ui-card__title">Request Access to Beta</h2>
-                    <p className="muted-copy">Submit your team details here. Access is enabled only after an admin reviews and approves the request.</p>
-                  </div>
-                  <form className="landing-auth-form" onSubmit={handleBetaRequest}>
-                    <Input
-                      id="beta-name"
-                      type="text"
-                      label="Name"
-                      value={betaName}
-                      onChange={(event) => setBetaName(event.target.value)}
-                      required
-                    />
-                    <Input
-                      id="beta-email"
-                      type="email"
-                      label="Email"
-                      value={betaEmail}
-                      onChange={(event) => setBetaEmail(event.target.value)}
-                      required
-                    />
-                    <div className="landing-password-field">
+        {accessExpanded ? (
+          <section id="landing-access" className="landing-section landing-access-section">
+            <div className="landing-auth-grid">
+              <FormShell className="landing-auth-card" contentClassName="landing-auth-card__content">
+                <div className="landing-auth-card__brand">
+                  <Image
+                    src="/brand/logo-mark.png"
+                    alt="Captive Precision mark"
+                    width={40}
+                    height={40}
+                    className="landing-access-mark__image"
+                  />
+                </div>
+                {betaExpanded ? (
+                  <>
+                    <div className="landing-auth-card__intro">
+                      <span className="metric-label">Beta access</span>
+                      <h2 className="ui-card__title">Request Access to Beta</h2>
+                      <p className="muted-copy">Submit your team details here. Access is enabled only after an admin reviews and approves the request.</p>
+                    </div>
+                    <form className="landing-auth-form" onSubmit={handleBetaRequest}>
                       <Input
-                        id="beta-password"
-                        type={showBetaPassword ? "text" : "password"}
-                        label="Password"
-                        value={betaPassword}
-                        onChange={(event) => setBetaPassword(event.target.value)}
+                        id="beta-name"
+                        type="text"
+                        label="Name"
+                        value={betaName}
+                        onChange={(event) => setBetaName(event.target.value)}
                         required
                       />
-                      <Button type="button" variant="ghost" size="sm" className="landing-password-toggle" onClick={() => setShowBetaPassword((current) => !current)}>
-                        {showBetaPassword ? "Hide password" : "Show password"}
-                      </Button>
+                      <Input
+                        id="beta-email"
+                        type="email"
+                        label="Email"
+                        value={betaEmail}
+                        onChange={(event) => setBetaEmail(event.target.value)}
+                        required
+                      />
+                      <div className="landing-password-field">
+                        <Input
+                          id="beta-password"
+                          type={showBetaPassword ? "text" : "password"}
+                          label="Password"
+                          value={betaPassword}
+                          onChange={(event) => setBetaPassword(event.target.value)}
+                          required
+                        />
+                        <Button type="button" variant="ghost" size="sm" className="landing-password-toggle" onClick={() => setShowBetaPassword((current) => !current)}>
+                          {showBetaPassword ? "Hide password" : "Show password"}
+                        </Button>
+                      </div>
+                      <Select
+                        id="beta-role"
+                        label="Workspace type"
+                        value={betaRole}
+                        onChange={(event) => setBetaRole(event.target.value as "coach" | "gym")}
+                      >
+                        {roleOptions.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </Select>
+                      <div className="landing-auth-actions landing-auth-actions--stacked">
+                        <Button type="submit" variant="primary" size="lg">
+                          {betaState.mode === "loading" ? "Submitting request..." : "Request Access to Beta"}
+                        </Button>
+                        <Button type="button" variant="secondary" size="lg" onClick={backToSignIn}>
+                          Back to Sign In
+                        </Button>
+                      </div>
+                      {betaState.mode === "error" ? <p className="landing-auth-error">{betaState.message}</p> : null}
+                      {betaState.mode === "success" ? <p className="landing-auth-success">{betaState.message}</p> : null}
+                    </form>
+                  </>
+                ) : (
+                  <>
+                    <div className="landing-auth-card__intro">
+                      <h2 className="ui-card__title">Sign in to your workspace</h2>
+                      <p className="muted-copy">Access is restricted to approved accounts.</p>
                     </div>
-                    <Select
-                      id="beta-role"
-                      label="Workspace type"
-                      value={betaRole}
-                      onChange={(event) => setBetaRole(event.target.value as "coach" | "gym")}
-                    >
-                      {roleOptions.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </Select>
-                    <div className="landing-auth-actions landing-auth-actions--stacked">
+                    <form className="landing-auth-form" onSubmit={handleLogin}>
+                      <Input
+                        id="login-email"
+                        type="email"
+                        label="Email"
+                        value={loginEmail}
+                        onChange={(event) => setLoginEmail(event.target.value)}
+                        required
+                      />
+                      <div className="landing-password-field">
+                        <Input
+                          id="login-password"
+                          type={showLoginPassword ? "text" : "password"}
+                          label="Password"
+                          value={loginPassword}
+                          onChange={(event) => setLoginPassword(event.target.value)}
+                          required
+                        />
+                        <Button type="button" variant="ghost" size="sm" className="landing-password-toggle" onClick={() => setShowLoginPassword((current) => !current)}>
+                          {showLoginPassword ? "Hide password" : "Show password"}
+                        </Button>
+                      </div>
                       <Button type="submit" variant="primary" size="lg">
-                        {betaState.mode === "loading" ? "Submitting request..." : "Request Access to Beta"}
+                        {loginState.mode === "loading" ? "Signing in..." : "Sign in"}
                       </Button>
-                      <Button type="button" variant="secondary" size="lg" onClick={backToSignIn}>
-                        Back to Sign In
-                      </Button>
-                    </div>
-                    {betaState.mode === "error" ? <p className="landing-auth-error">{betaState.message}</p> : null}
-                    {betaState.mode === "success" ? <p className="landing-auth-success">{betaState.message}</p> : null}
-                  </form>
-                </>
-              ) : (
-                <>
-                  <div className="landing-auth-card__intro">
-                    <h2 className="ui-card__title">Sign in to your workspace</h2>
-                    <p className="muted-copy">Access is restricted to approved accounts.</p>
-                  </div>
-                  <form className="landing-auth-form" onSubmit={handleLogin}>
-                    <Input
-                      id="login-email"
-                      type="email"
-                      label="Email"
-                      value={loginEmail}
-                      onChange={(event) => setLoginEmail(event.target.value)}
-                      required
-                    />
-                    <div className="landing-password-field">
-                      <Input
-                        id="login-password"
-                        type={showLoginPassword ? "text" : "password"}
-                        label="Password"
-                        value={loginPassword}
-                        onChange={(event) => setLoginPassword(event.target.value)}
-                        required
-                      />
-                      <Button type="button" variant="ghost" size="sm" className="landing-password-toggle" onClick={() => setShowLoginPassword((current) => !current)}>
-                        {showLoginPassword ? "Hide password" : "Show password"}
-                      </Button>
-                    </div>
-                    <Button type="submit" variant="primary" size="lg">
-                      {loginState.mode === "loading" ? "Signing in..." : "Sign in"}
-                    </Button>
-                    {loginState.mode === "error" ? <p className="landing-auth-error">{loginState.message}</p> : null}
-                  </form>
-                </>
-              )}
-            </FormShell>
-          </div>
+                      {loginState.mode === "error" ? <p className="landing-auth-error">{loginState.message}</p> : null}
+                    </form>
+                  </>
+                )}
+              </FormShell>
+            </div>
+          </section>
+        ) : null}
+
+        <section className="landing-section landing-faq-section">
+          <Card className="landing-faq-card" radius="panel">
+            <CardContent className="landing-faq-card__content">
+              <div className="landing-faq-card__header">
+                <h2>Frequently asked questions</h2>
+                <p>Quick answers for access, installation, and how the current platform works.</p>
+              </div>
+              <div className="landing-tool-divider" aria-hidden="true" />
+              {landingFaqs.map((faq, index) => (
+                <div key={faq.question} className="landing-faq-item">
+                  <h3>{faq.question}</h3>
+                  <p>{faq.answer}</p>
+                  {index < landingFaqs.length - 1 ? <div className="landing-tool-divider" aria-hidden="true" /> : null}
+                </div>
+              ))}
+            </CardContent>
+          </Card>
         </section>
       </section>
     </main>

@@ -3620,3 +3620,65 @@ input {
     width: auto;
   }
 }
+
+.landing-install-section {
+  gap: 16px;
+}
+
+.landing-install-card {
+  animation: landingFadeUp 600ms ease both;
+}
+
+.landing-install-card__content {
+  display: grid;
+  gap: 18px;
+  justify-items: center;
+  text-align: center;
+}
+
+.landing-install-card__copy {
+  display: grid;
+  gap: 8px;
+  max-width: 640px;
+}
+
+.landing-install-card__copy h2,
+.landing-faq-card__header h2,
+.landing-faq-item h3 {
+  margin: 0;
+  color: var(--cp-text-strong);
+}
+
+.landing-install-card__copy p,
+.landing-faq-card__header p,
+.landing-faq-item p {
+  margin: 0;
+  color: var(--cp-muted);
+  line-height: 1.7;
+}
+
+.landing-faq-card {
+  animation: landingFadeUp 740ms ease both;
+}
+
+.landing-faq-card__content {
+  display: grid;
+  gap: 20px;
+}
+
+.landing-faq-card__header {
+  display: grid;
+  gap: 10px;
+}
+
+.landing-faq-item {
+  display: grid;
+  gap: 12px;
+}
+
+@media (max-width: 720px) {
+  .landing-install-card__content,
+  .landing-faq-card__content {
+    gap: 16px;
+  }
+}
