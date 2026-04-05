@@ -6,6 +6,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type ChangeEvent } from "react";
 
+import { PwaInstallPrompt } from "@/components/pwa/pwa-provider";
 import { Badge, Button } from "@/components/ui";
 import type { AppRole } from "@/lib/auth/session";
 import { cn } from "@/lib/utils/cn";
@@ -308,6 +309,7 @@ export function WorkspaceSidebar({
               <p className="sidebar-footer-copy">{footerCopy}</p>
               {footerMeta ? <p className="sidebar-footer-copy">{footerMeta}</p> : null}
               {footerLinkLabel ? <span className="sidebar-feedback-link">{footerLinkLabel}</span> : null}
+              <PwaInstallPrompt context="sidebar" className="sidebar-install-prompt" buttonClassName="sidebar-install-button" />
             </div>
             {secondaryActionHref && secondaryActionLabel ? (
               <a
@@ -330,5 +332,3 @@ export function WorkspaceSidebar({
     </>
   );
 }
-
-

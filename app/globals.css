@@ -3506,3 +3506,117 @@ input {
 
 
 
+
+.pwa-offline-notice {
+  position: sticky;
+  top: 0;
+  z-index: 80;
+  padding: 10px 24px;
+  background: var(--cp-dark);
+  color: var(--cp-color-white);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.pwa-offline-notice p {
+  margin: 0;
+  text-align: center;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.pwa-install-prompt {
+  display: grid;
+  gap: 8px;
+}
+
+.pwa-install-prompt[data-context="landing"] {
+  justify-items: center;
+  text-align: center;
+}
+
+.pwa-install-prompt[data-context="workspace"] {
+  justify-items: flex-start;
+}
+
+.pwa-install-prompt[data-context="sidebar"] {
+  margin-top: 14px;
+}
+
+.pwa-install-button,
+.landing-install-button,
+.workspace-install-button,
+.sidebar-install-button {
+  border-color: rgba(255, 200, 0, 0.32);
+  background: var(--cp-accent);
+  color: var(--cp-text-strong);
+}
+
+.pwa-install-button:hover,
+.landing-install-button:hover,
+.workspace-install-button:hover,
+.sidebar-install-button:hover {
+  background: #f2be00;
+}
+
+.pwa-install-copy {
+  margin: 0;
+  color: var(--cp-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.pwa-install-prompt[data-context="sidebar"] .pwa-install-copy {
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.landing-install-prompt {
+  max-width: 320px;
+}
+
+.workspace-selection-install-row {
+  display: flex;
+  justify-content: flex-start;
+  margin-top: 12px;
+}
+
+.workspace-install-prompt {
+  max-width: 300px;
+}
+
+.sidebar-install-prompt .pwa-install-button {
+  width: 100%;
+}
+
+.pwa-offline-page {
+  min-height: calc(100vh - 48px);
+  display: grid;
+  place-items: center;
+}
+
+.pwa-offline-card {
+  max-width: 680px;
+  width: 100%;
+}
+
+.pwa-offline-card__content {
+  display: grid;
+  gap: 12px;
+  padding: 28px;
+}
+
+@media (max-width: 720px) {
+  .pwa-offline-notice {
+    padding: 10px 16px;
+  }
+
+  .workspace-selection-install-row,
+  .pwa-install-prompt[data-context="workspace"] {
+    justify-items: center;
+    justify-content: center;
+    text-align: center;
+  }
+
+  .sidebar-install-prompt .pwa-install-button {
+    width: auto;
+  }
+}

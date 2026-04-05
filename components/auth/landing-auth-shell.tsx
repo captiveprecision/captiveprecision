@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { useState } from "react";
 
+import { PwaInstallPrompt } from "@/components/pwa/pwa-provider";
 import {
   Button,
   Card,
@@ -165,6 +166,7 @@ export function LandingAuthShell() {
             </div>
             <div className="landing-hero-footer">
               <Button size="lg" variant="secondary" className="landing-hero-cta" onClick={scrollToAccess}>Access Platform</Button>
+              <PwaInstallPrompt className="landing-install-prompt" buttonClassName="landing-install-button" context="landing" />
             </div>
           </CardContent>
         </Card>
@@ -308,4 +310,3 @@ export function LandingAuthShell() {
     </main>
   );
 }
-
