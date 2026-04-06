@@ -2,7 +2,7 @@ import { LEVEL_KEYS, LEVEL_LABELS, type PlannerLevelKey, type PlannerLevelLabel,
 import type { AthleteParentContact, AthleteRecord, AthleteSnapshot, AthleteStatus } from "@/lib/domain/athlete";
 import type { EvaluationRecord, EvaluationRecordStatus, PlannerLevelEvaluation, PlannerSkillEvaluation, PlannerTopLevel, PlannerTryoutOption, PlannerTryoutSummary, PlannerTryoutTemplate } from "@/lib/domain/evaluation-record";
 import type { PlannerProject, PlannerProjectStatus, PlannerQualificationRules } from "@/lib/domain/planner-project";
-import type { TeamRoutineItem, TeamRoutineItemStatus, TeamRoutinePlan, TeamRoutinePlanStatus } from "@/lib/domain/routine-plan";
+import type { RoutineDocument, TeamRoutineItem, TeamRoutineItemStatus, TeamRoutinePlacement, TeamRoutinePlacementKind, TeamRoutinePlan, TeamRoutinePlanStatus } from "@/lib/domain/routine-plan";
 import type { TeamSeasonCheckpoint, TeamSeasonCheckpointStatus, TeamSeasonPlan, TeamSeasonPlanStatus } from "@/lib/domain/season-plan";
 import type { TeamSkillPlan, TeamSkillPlanStatus, TeamSkillSelection, TeamSkillSelectionStatus } from "@/lib/domain/skill-plan";
 import type { ScoringSystem, ScoringSystemSection, ScoringSystemStatus, ScoringSystemVersion, ScoringSystemVersionStatus } from "@/lib/domain/scoring-system";
@@ -62,6 +62,10 @@ export function isTeamRoutinePlanStatus(value: unknown): value is TeamRoutinePla
 
 export function isTeamRoutineItemStatus(value: unknown): value is TeamRoutineItemStatus {
   return value === "planned" || value === "approved";
+}
+
+export function isTeamRoutinePlacementKind(value: unknown): value is TeamRoutinePlacementKind {
+  return value === "skill" || value === "transition" || value === "recovered";
 }
 
 export function isTeamSeasonPlanStatus(value: unknown): value is TeamSeasonPlanStatus {
@@ -311,13 +315,52 @@ export function isTeamRoutineItem(value: unknown): value is TeamRoutineItem {
 
   const record = value as Record<string, unknown>;
   return isNonEmptyString(record.id)
-    && isNonEmptyString(record.skillSelectionId)
+    && (record.skillSelectionId === null || isNonEmptyString(record.skillSelectionId))
     && (record.athleteId === null || isNonEmptyString(record.athleteId))
     && typeof record.sortOrder === "number"
     && isTeamRoutineItemStatus(record.status)
     && typeof record.notes === "string";
 }
 
+export function isTeamRoutinePlacement(value: unknown): value is TeamRoutinePlacement {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const record = value as Record<string, unknown>;
+  return isNonEmptyString(record.id)
+    && (record.skillSelectionId === null || isNonEmptyString(record.skillSelectionId))
+    && (record.athleteId === null || isNonEmptyString(record.athleteId))
+    && isTeamRoutinePlacementKind(record.kind)
+    && typeof record.title === "string"
+    && typeof record.category === "string"
+    && typeof record.color === "string"
+    && typeof record.startRow === "number"
+    && typeof record.startCol === "number"
+    && typeof record.duration === "number"
+    && typeof record.sortOrder === "number"
+    && isTeamRoutineItemStatus(record.status)
+    && typeof record.notes === "string";
+}
+
+function isRoutineDocument(value: unknown): value is RoutineDocument {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const record = value as Record<string, unknown>;
+  return !!record.config
+    && typeof record.config === "object"
+    && typeof (record.config as Record<string, unknown>).name === "string"
+    && typeof (record.config as Record<string, unknown>).rowCount === "number"
+    && (record.config as Record<string, unknown>).columnCount === 8
+    && Array.isArray(record.placements)
+    && record.placements.every(isTeamRoutinePlacement)
+    && !!record.cueNotes
+    && typeof record.cueNotes === "object"
+    && !Array.isArray(record.cueNotes)
+    && Object.values(record.cueNotes as Record<string, unknown>).every((note) => typeof note === "string");
+}
 export function isTeamRoutinePlan(value: unknown): value is TeamRoutinePlan {
   if (!value || typeof value !== "object") {
     return false;
@@ -458,6 +501,9 @@ export function isScoringSystem(value: unknown): value is ScoringSystem {
     && (record.createdAt === undefined || isIsoDateString(record.createdAt))
     && (record.updatedAt === undefined || isIsoDateString(record.updatedAt));
 }
+
+
+
 
 
 

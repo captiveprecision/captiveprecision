@@ -2,7 +2,10 @@ import type { AthleteParentContact, AthleteRecord } from "@/lib/domain/athlete";
 import type { AppRole, AuthSession } from "@/lib/auth/session";
 import type { PlannerLevelLabel } from "@/lib/domain/planner-levels";
 import type { PlannerProject } from "@/lib/domain/planner-project";
+import type { TeamRoutinePlan } from "@/lib/domain/routine-plan";
 import type { TeamRecord } from "@/lib/domain/team";
+import { normalizeTeamRoutinePlan } from "@/lib/services/planner-domain-mappers";
+import { deriveRoutineItemsFromDocument, normalizeRoutineDocument } from "@/lib/services/planner-routine-builder";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Database, Json } from "@/lib/types/database";
 
@@ -11,6 +14,7 @@ type TeamCoachRow = Database["public"]["Tables"]["team_coaches"]["Row"];
 type AthleteRow = Database["public"]["Tables"]["athletes"]["Row"];
 type AthleteAssignmentRow = Database["public"]["Tables"]["athlete_team_assignments"]["Row"];
 type ProfileRow = Database["public"]["Tables"]["profiles"]["Row"];
+type TeamRoutinePlanRow = Database["public"]["Tables"]["team_routine_plans"]["Row"];
 
 type TeamMetadata = {
   teamLevel?: string;
@@ -31,6 +35,7 @@ type AthleteMetadata = {
 export type PlannerRemoteFoundationSnapshot = {
   athletes: AthleteRecord[];
   teams: TeamRecord[];
+  routinePlans: TeamRoutinePlan[];
 };
 
 const DEFAULT_WORKSPACE_ID = "local-workspace";
@@ -143,6 +148,23 @@ function buildTeamRecord(
   };
 }
 
+function buildRoutinePlanRecord(row: TeamRoutinePlanRow): TeamRoutinePlan {
+  const document = normalizeRoutineDocument(asObject(row.document) as TeamRoutinePlan["document"], "Untitled routine");
+
+  return normalizeTeamRoutinePlan({
+    id: row.id,
+    workspaceId: DEFAULT_WORKSPACE_ID,
+    plannerProjectId: row.planner_project_id,
+    teamId: row.team_id,
+    status: row.status as TeamRoutinePlan["status"],
+    notes: row.notes,
+    document,
+    items: deriveRoutineItemsFromDocument(document),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  });
+}
+
 function findExistingTeam(project: PlannerProject, remoteTeam: TeamRecord) {
   return project.teams.find((team) => (
     team.remoteTeamId === remoteTeam.remoteTeamId
@@ -184,14 +206,37 @@ function mergeRemoteAthletes(project: PlannerProject, remoteAthletes: AthleteRec
   return [...remoteAthletes, ...localOnlyAthletes];
 }
 
+function mergeRemoteRoutinePlans(project: PlannerProject, mergedTeams: TeamRecord[], remoteRoutinePlans: TeamRoutinePlan[]) {
+  const teamIdMap = new Map<string, string>();
+
+  mergedTeams.forEach((team) => {
+    teamIdMap.set(team.id, team.id);
+    if (team.remoteTeamId) {
+      teamIdMap.set(team.remoteTeamId, team.id);
+    }
+  });
+
+  const mappedRemoteRoutinePlans = remoteRoutinePlans.map((plan) => ({
+    ...plan,
+    teamId: teamIdMap.get(plan.teamId) ?? plan.teamId
+  }));
+  const remoteTeamIds = new Set(mappedRemoteRoutinePlans.map((plan) => plan.teamId));
+  const localOnlyRoutinePlans = project.routinePlans.filter((plan) => !remoteTeamIds.has(plan.teamId));
+
+  return [...mappedRemoteRoutinePlans, ...localOnlyRoutinePlans];
+}
+
 export function mergeRemoteFoundationIntoProject(
   project: PlannerProject,
   snapshot: PlannerRemoteFoundationSnapshot
 ): PlannerProject {
+  const teams = mergeRemoteTeams(project, snapshot.teams);
+
   return {
     ...project,
     athletes: mergeRemoteAthletes(project, snapshot.athletes),
-    teams: mergeRemoteTeams(project, snapshot.teams)
+    teams,
+    routinePlans: mergeRemoteRoutinePlans(project, teams, snapshot.routinePlans)
   };
 }
 
@@ -269,6 +314,29 @@ async function listCoachDisplayNames(teamCoachRows: TeamCoachRow[]) {
   );
 }
 
+async function listRoutinePlanRows(teamIds: string[]) {
+  if (!teamIds.length) {
+    return [] as TeamRoutinePlanRow[];
+  }
+
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("team_routine_plans" as never)
+    .select("*" as never)
+    .in("team_id", teamIds as never)
+    .order("updated_at", { ascending: false });
+
+  if (error) {
+    if (error.code === "42P01") {
+      return [] as TeamRoutinePlanRow[];
+    }
+
+    throw error;
+  }
+
+  return (data ?? []) as TeamRoutinePlanRow[];
+}
+
 export async function listRemotePlannerFoundation(
   session: Pick<AuthSession, "role" | "userId" | "primaryGymId">
 ): Promise<PlannerRemoteFoundationSnapshot> {
@@ -315,6 +383,7 @@ export async function listRemotePlannerFoundation(
     return [athlete.id, athlete] as const;
   }));
   const coachDisplayNameMap = await listCoachDisplayNames(teamCoachRows);
+  const routinePlanRows = await listRoutinePlanRows(teamIds);
 
   const teams = teamRows.map((row) => {
     const team = buildTeamRecord(row, teamCoachRows, assignmentRows, athleteMap);
@@ -331,6 +400,7 @@ export async function listRemotePlannerFoundation(
 
   return {
     athletes: [...athleteMap.values()].sort((left, right) => left.name.localeCompare(right.name)),
-    teams
+    teams,
+    routinePlans: routinePlanRows.map(buildRoutinePlanRecord)
   };
 }

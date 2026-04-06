@@ -2,7 +2,7 @@ import type { AthleteRecord, AthleteSnapshot, AthleteParentContact } from "@/lib
 import type { EvaluationRecord, PlannerTryoutTemplate } from "@/lib/domain/evaluation-record";
 import { LEVEL_KEYS, type PlannerLevelKey, type PlannerLevelLabel, type PlannerQualifiedLevel } from "@/lib/domain/planner-levels";
 import type { PlannerProject, PlannerQualificationRules } from "@/lib/domain/planner-project";
-import type { TeamRoutineItem, TeamRoutinePlan } from "@/lib/domain/routine-plan";
+import { ROUTINE_BUILDER_COLUMN_COUNT, ROUTINE_BUILDER_DEFAULT_ROW_COUNT, type RoutineDocument, type TeamRoutineItem, type TeamRoutinePlacement, type TeamRoutinePlan } from "@/lib/domain/routine-plan";
 import type { TeamSeasonCheckpoint, TeamSeasonPlan } from "@/lib/domain/season-plan";
 import type { TeamSkillPlan, TeamSkillSelection } from "@/lib/domain/skill-plan";
 import type { TeamRecord } from "@/lib/domain/team";
@@ -246,10 +246,47 @@ export function normalizeTeamSkillPlan(raw: Partial<TeamSkillPlan> & { id: strin
 }
 
 function normalizeTeamRoutineItems(items: TeamRoutineItem[] = []): TeamRoutineItem[] {
-  return items.map((item) => ({
+  return items.map((item, index) => ({
     ...item,
+    skillSelectionId: item.skillSelectionId ?? null,
+    athleteId: item.athleteId ?? null,
+    sortOrder: Number.isFinite(item.sortOrder) ? item.sortOrder : index,
     notes: item.notes ?? ""
   }));
+}
+
+function normalizeTeamRoutinePlacements(placements: TeamRoutinePlacement[] = []): TeamRoutinePlacement[] {
+  return placements.map((placement, index) => ({
+    ...placement,
+    skillSelectionId: placement.skillSelectionId ?? null,
+    athleteId: placement.athleteId ?? null,
+    startRow: Number.isFinite(placement.startRow) ? placement.startRow : 0,
+    startCol: Number.isFinite(placement.startCol) ? placement.startCol : 0,
+    duration: Number.isFinite(placement.duration) ? placement.duration : ROUTINE_BUILDER_COLUMN_COUNT,
+    sortOrder: Number.isFinite(placement.sortOrder) ? placement.sortOrder : index,
+    notes: placement.notes ?? ""
+  }));
+}
+
+export function normalizeRoutineDocument(raw: Partial<RoutineDocument> | null | undefined): RoutineDocument | null {
+  if (!raw || typeof raw !== "object") {
+    return null;
+  }
+
+  const config = (raw.config ?? {}) as Partial<RoutineDocument["config"]>;
+  return {
+    config: {
+      name: typeof config.name === "string" ? config.name : "Routine Builder",
+      rowCount: Number.isFinite(config.rowCount) ? Number(config.rowCount) : ROUTINE_BUILDER_DEFAULT_ROW_COUNT,
+      columnCount: ROUTINE_BUILDER_COLUMN_COUNT
+    },
+    placements: normalizeTeamRoutinePlacements(Array.isArray(raw.placements) ? raw.placements : []),
+    cueNotes: raw.cueNotes && typeof raw.cueNotes === "object" && !Array.isArray(raw.cueNotes)
+      ? Object.fromEntries(
+        Object.entries(raw.cueNotes as Record<string, unknown>).map(([key, value]) => [key, typeof value === "string" ? value : ""])
+      )
+      : {}
+  };
 }
 
 export function normalizeTeamRoutinePlan(raw: Partial<TeamRoutinePlan> & { id: string; teamId: string; plannerProjectId: string }): TeamRoutinePlan {
@@ -261,6 +298,7 @@ export function normalizeTeamRoutinePlan(raw: Partial<TeamRoutinePlan> & { id: s
     teamId: raw.teamId,
     status: raw.status ?? "draft",
     notes: raw.notes ?? "",
+    document: normalizeRoutineDocument(raw.document),
     items: normalizeTeamRoutineItems(Array.isArray(raw.items) ? raw.items : []),
     createdAt: raw.createdAt ?? now,
     updatedAt: raw.updatedAt ?? now
@@ -398,4 +436,7 @@ export function canAssignQualifiedLevelToTeam(qualifiedLevel: PlannerQualifiedLe
 
   return getPlannerLevelRank(qualifiedLevel) >= getPlannerLevelRank(teamLevel);
 }
+
+
+
 

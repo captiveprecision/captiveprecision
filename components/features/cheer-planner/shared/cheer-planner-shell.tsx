@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState } from "react";
 
@@ -151,7 +151,7 @@ export function CheerPlannerShell({ integration }: CheerPlannerShellProps) {
           routineBuilderDraft={integration.routineBuilderDraft}
           openRoutineBuilderTeam={integration.openRoutineBuilderTeam}
           cancelRoutineBuilderEdit={integration.cancelRoutineBuilderEdit}
-          toggleRoutineBuilderSkill={integration.toggleRoutineBuilderSkill}
+          updateRoutineBuilderDocument={integration.updateRoutineBuilderDocument}
           saveRoutineBuilderEdit={integration.saveRoutineBuilderEdit}
         />
       ) : null}
@@ -168,3 +168,5 @@ export function CheerPlannerShell({ integration }: CheerPlannerShellProps) {
     </main>
   );
 }
+
+

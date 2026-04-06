@@ -284,6 +284,29 @@ export type Database = {
         };
         Update: Partial<Database["public"]["Tables"]["teams"]["Insert"]>;
       };
+      team_routine_plans: {
+        Row: {
+          created_at: string;
+          document: Json;
+          id: string;
+          notes: string;
+          planner_project_id: string;
+          status: string;
+          team_id: string;
+          updated_at: string;
+        };
+        Insert: {
+          created_at?: string;
+          document?: Json;
+          id?: string;
+          notes?: string;
+          planner_project_id: string;
+          status?: string;
+          team_id: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["team_routine_plans"]["Insert"]>;
+      };
       tool_access_rules: {
         Row: {
           access_tier: string;
@@ -421,6 +444,7 @@ export type Database = {
     };
   };
 };
+
 
 
 

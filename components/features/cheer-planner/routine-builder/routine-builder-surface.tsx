@@ -1,15 +1,20 @@
 "use client";
 
+import { useEffect, useState } from "react";
+
+import { RoutineBuilderEditor } from "@/components/features/cheer-planner/routine-builder/routine-builder-editor";
 import { Badge, Button, Card, CardContent, EmptyState, SectionHeader } from "@/components/ui";
+import type { RoutineDocument } from "@/lib/domain/routine-plan";
+import { buildRoutineBuilderSkillDefinitions, resolveRoutineBuilderDocument } from "@/lib/services/planner-routine-builder";
 import type { CheerPlannerIntegration } from "@/lib/services/planner-integration";
 
 type RoutineBuilderSurfaceProps = {
   teams: CheerPlannerIntegration["routineBuilderTeams"];
   routineBuilderDraft: CheerPlannerIntegration["routineBuilderDraft"];
-  openRoutineBuilderTeam: (teamId: string) => void;
+  openRoutineBuilderTeam: (teamId: string) => void | Promise<void>;
   cancelRoutineBuilderEdit: () => void;
-  toggleRoutineBuilderSkill: (skillSelectionId: string) => void;
-  saveRoutineBuilderEdit: () => void;
+  updateRoutineBuilderDocument: (document: RoutineDocument) => void;
+  saveRoutineBuilderEdit: () => void | Promise<void>;
 };
 
 export function RoutineBuilderSurface(props: RoutineBuilderSurfaceProps) {
@@ -18,11 +23,26 @@ export function RoutineBuilderSurface(props: RoutineBuilderSurfaceProps) {
     routineBuilderDraft,
     openRoutineBuilderTeam,
     cancelRoutineBuilderEdit,
-    toggleRoutineBuilderSkill,
+    updateRoutineBuilderDocument,
     saveRoutineBuilderEdit
   } = props;
+  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
 
-  const selectedSkillSelectionIds = new Set(routineBuilderDraft?.skillSelectionIds ?? []);
+  useEffect(() => {
+    if (!teams.length) {
+      setSelectedTeamId(null);
+      return;
+    }
+
+    if (routineBuilderDraft?.teamId) {
+      setSelectedTeamId(routineBuilderDraft.teamId);
+      return;
+    }
+
+    setSelectedTeamId((current) => (
+      current && teams.some((team) => team.teamId === current) ? current : null
+    ));
+  }, [routineBuilderDraft?.teamId, teams]);
 
   return (
     <div className="planner-team-builder-stack">
@@ -30,15 +50,19 @@ export function RoutineBuilderSurface(props: RoutineBuilderSurfaceProps) {
         <CardContent className="planner-panel-stack">
           <SectionHeader
             eyebrow="Routine Builder"
-            title="Available routine inputs"
-            description="Select the planned team skills to carry into the routine structure for one team at a time."
+            title="Interactive team routine editor"
+            description="Select one team to review or edit its full routine map. Skill Planner remains the source for routine-ready sections."
           />
           <div className="planner-team-card-list">
             {teams.length ? teams.map((team) => {
               const isEditing = routineBuilderDraft?.teamId === team.teamId;
-              const selectedCount = isEditing
-                ? routineBuilderDraft.skillSelectionIds.length
-                : (team.routinePlan?.items.length ?? 0);
+              const isSelected = selectedTeamId === team.teamId;
+              const effectiveDocument = isEditing && routineBuilderDraft
+                ? routineBuilderDraft.document
+                : resolveRoutineBuilderDocument(team);
+              const editorSkills = buildRoutineBuilderSkillDefinitions(team, effectiveDocument);
+              const persistedCount = team.routinePlan?.items.length ?? 0;
+              const currentCount = effectiveDocument.placements.length;
 
               return (
                 <Card key={team.teamId} variant="subtle" className="planner-team-card">
@@ -55,44 +79,51 @@ export function RoutineBuilderSurface(props: RoutineBuilderSurfaceProps) {
                         </div>
                         {isEditing ? (
                           <>
-                            <Button size="sm" onClick={saveRoutineBuilderEdit}>Save</Button>
+                            <Button size="sm" onClick={() => void saveRoutineBuilderEdit()}>Save</Button>
                             <Button variant="secondary" size="sm" onClick={cancelRoutineBuilderEdit}>Cancel</Button>
                           </>
                         ) : (
-                          <Button size="sm" onClick={() => openRoutineBuilderTeam(team.teamId)}>Edit team</Button>
+                          <>
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              onClick={() => setSelectedTeamId((current) => current === team.teamId ? null : team.teamId)}
+                            >
+                              {isSelected ? "Hide details" : "View team"}
+                            </Button>
+                            <Button
+                              size="sm"
+                              onClick={() => {
+                                setSelectedTeamId(team.teamId);
+                                void openRoutineBuilderTeam(team.teamId);
+                              }}
+                            >
+                              Edit team
+                            </Button>
+                          </>
                         )}
                       </div>
                     </div>
                     <div className="planner-team-summary-row">
-                      <span>{team.availableSkills.length} available skills</span>
-                      <span>{team.routinePlan?.items.length ?? 0} persisted / {selectedCount} current</span>
+                      <span>{team.availableSkills.length} routine-ready sections</span>
+                      <span>{persistedCount} persisted / {currentCount} current placements</span>
                     </div>
-                    <div className="planner-team-members-list">
-                      {team.availableSkills.length ? team.availableSkills.map((skill) => (
-                        <label key={skill.skillSelectionId} className="planner-team-member-row">
-                          <div>
-                            <strong>{skill.skillName || "Untitled skill"}</strong>
-                            <p>{[skill.categoryLabel, skill.groupLabel, skill.levelLabel].filter(Boolean).join(" / ")}</p>
-                          </div>
-                          <div className="planner-summary-chip-group">
-                            <Badge variant={skill.selectionStatus === "approved" ? "accent" : "subtle"}>{skill.selectionStatus}</Badge>
-                            <input
-                              type="checkbox"
-                              checked={selectedSkillSelectionIds.has(skill.skillSelectionId)}
-                              disabled={!isEditing}
-                              onChange={() => toggleRoutineBuilderSkill(skill.skillSelectionId)}
-                            />
-                          </div>
-                        </label>
-                      )) : (
-                        <EmptyState title="No routine inputs available." description="Saved team skill rows from Skill Planner will appear here." />
-                      )}
-                    </div>
+                    {isSelected ? (
+                      <div className="planner-routine-team-stack">
+                        <RoutineBuilderEditor
+                          teamName={team.teamName}
+                          initialDocument={effectiveDocument}
+                          skills={editorSkills}
+                          readOnly={!isEditing}
+                          onDocumentChange={updateRoutineBuilderDocument}
+                        />
+                      </div>
+                    ) : null}
                   </CardContent>
                 </Card>
               );
             }) : (
-              <EmptyState title="No teams available yet." description="Routine Builder will populate once teams exist in PlannerProject." />
+              <EmptyState title="No routine inputs available yet." description="Create teams and save team skill rows before building routines." />
             )}
           </div>
         </CardContent>
@@ -100,3 +131,5 @@ export function RoutineBuilderSurface(props: RoutineBuilderSurfaceProps) {
     </div>
   );
 }
+
+

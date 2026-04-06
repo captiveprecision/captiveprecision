@@ -1,17 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
 import type { AthleteParentContact, AthleteRecord } from "@/lib/domain/athlete";
+import type { RoutineDocument, TeamRoutinePlan } from "@/lib/domain/routine-plan";
 import type { TeamSkillCategory, TeamSkillSelection } from "@/lib/domain/skill-plan";
 
 import { getSystemById, getVersionById } from "@/lib/scoring/scoring-systems";
 import { useScoringSystems } from "@/lib/scoring/use-scoring-systems";
 import { buildMyTeamsTeamSummaries } from "@/lib/services/planner-my-teams";
 import { mergeRemoteFoundationIntoProject } from "@/lib/services/planner-supabase-foundation";
-import { buildRoutineBuilderTeamInputs, replaceTeamRoutinePlanItems } from "@/lib/services/planner-routine-builder";
+import { buildRoutineBuilderTeamInputs, buildTeamRoutinePlanDraft, replaceTeamRoutinePlanDocument } from "@/lib/services/planner-routine-builder";
 import { buildSeasonPlannerTeamInputs, replaceTeamSeasonPlanCheckpoints } from "@/lib/services/planner-season-planner";
 import { buildDefaultSkillPlannerSelections, buildSkillPlannerTeamInputs, replaceTeamSkillPlanSelections, type SkillPlannerTeamInput } from "@/lib/services/planner-skill-planner";
 import {
-  buildRoutineBuilderDraftSkillSelectionIds,
-  buildRoutineBuilderPersistedItems,
   buildSeasonPlannerAvailableCheckpoints,
   buildSeasonPlannerDraftCheckpointIds,
   buildSeasonPlannerPersistedCheckpoints,
@@ -113,7 +112,9 @@ type SkillPlannerDraftState = {
 
 type RoutineBuilderDraftState = {
   teamId: string;
-  skillSelectionIds: string[];
+  document: RoutineDocument;
+  status: TeamRoutinePlan["status"];
+  notes: string;
 } | null;
 
 type SeasonPlannerDraftState = {
@@ -261,15 +262,16 @@ async function fetchRemoteFoundation() {
   const response = await fetch("/api/planner/foundation", {
     credentials: "include"
   });
-  const result = await response.json().catch(() => null) as { athletes?: AthleteRecord[]; teams?: PlannerTeamRecord[]; error?: string } | null;
+  const result = await response.json().catch(() => null) as { athletes?: AthleteRecord[]; teams?: PlannerTeamRecord[]; routinePlans?: TeamRoutinePlan[]; error?: string } | null;
 
-  if (!response.ok || !result?.athletes || !result?.teams) {
+  if (!response.ok || !result?.athletes || !result?.teams || !result?.routinePlans) {
     throw new Error(result?.error ?? "Unable to load Supabase planner data.");
   }
 
   return {
     athletes: result.athletes,
-    teams: result.teams
+    teams: result.teams,
+    routinePlans: result.routinePlans
   };
 }
 
@@ -329,6 +331,30 @@ async function deleteRemoteTeamRecord(teamId: string) {
   if (!response.ok) {
     throw new Error(result?.error ?? "Unable to delete Supabase team.");
   }
+}
+
+async function syncRemoteRoutinePlan(plan: TeamRoutinePlan, remoteTeamId: string) {
+  const response = await fetch("/api/planner/routine-plan", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    credentials: "include",
+    body: JSON.stringify({
+      teamId: remoteTeamId,
+      plannerProjectId: plan.plannerProjectId,
+      status: plan.status,
+      notes: plan.notes,
+      document: plan.document
+    })
+  });
+  const result = await response.json().catch(() => null) as { routinePlan?: TeamRoutinePlan; error?: string } | null;
+
+  if (!response.ok || !result?.routinePlan) {
+    throw new Error(result?.error ?? "Unable to save routine plan to Supabase.");
+  }
+
+  return result.routinePlan;
 }
 
 export function useCheerPlannerIntegration() {
@@ -1137,7 +1163,7 @@ export function useCheerPlannerIntegration() {
     setSaveMessage(`Saved Skill Planner selections for ${skillPlannerEditingTeam.teamName}.`);
   };
 
-  const openRoutineBuilderTeam = (teamId: string) => {
+  const openRoutineBuilderTeam = async (teamId: string) => {
     const team = routineBuilderTeams.find((item) => item.teamId === teamId) ?? null;
 
     if (!team) {
@@ -1145,49 +1171,100 @@ export function useCheerPlannerIntegration() {
       return;
     }
 
+    const occurredAt = new Date().toISOString();
+    const nextPlan = buildTeamRoutinePlanDraft(plannerState, team, occurredAt);
+    const needsMigration = !team.routinePlan?.document;
+
     setRoutineBuilderDraft({
       teamId,
-      skillSelectionIds: buildRoutineBuilderDraftSkillSelectionIds(team)
+      document: nextPlan.document ?? { config: { name: `${team.teamName} Routine`, rowCount: 40, columnCount: 8 }, placements: [], cueNotes: {} },
+      status: nextPlan.status,
+      notes: nextPlan.notes
     });
+
+    if (!needsMigration || !nextPlan.document) {
+      return;
+    }
+
+    persistState((current) => replaceTeamRoutinePlanDocument(current, {
+      teamId: team.teamId,
+      document: nextPlan.document!,
+      status: nextPlan.status,
+      notes: nextPlan.notes,
+      occurredAt
+    }));
+
+    const remoteTeamId = team.remoteTeamId || (/^[0-9a-f-]{36}$/i.test(team.teamId) ? team.teamId : null);
+
+    if (!remoteTeamId) {
+      setSaveMessage(`Opened ${team.teamName}. This plan was migrated locally and will sync once the team has a linked Supabase id.`);
+      return;
+    }
+
+    try {
+      await syncRemoteRoutinePlan(nextPlan, remoteTeamId);
+      await refreshRemoteFoundation();
+      setSaveMessage(`Migrated ${team.teamName} routine plan.`);
+    } catch (error) {
+      setSaveMessage(error instanceof Error ? error.message : "Routine plan migrated locally, but Supabase sync failed.");
+    }
   };
 
   const cancelRoutineBuilderEdit = () => {
     setRoutineBuilderDraft(null);
   };
 
-  const toggleRoutineBuilderSkill = (skillSelectionId: string) => {
+  const updateRoutineBuilderDocument = (document: RoutineDocument) => {
     setRoutineBuilderDraft((current) => {
       if (!current) {
         return current;
       }
 
-      const skillSelectionIds = current.skillSelectionIds.includes(skillSelectionId)
-        ? current.skillSelectionIds.filter((currentSkillSelectionId) => currentSkillSelectionId !== skillSelectionId)
-        : [...current.skillSelectionIds, skillSelectionId];
-
       return {
         ...current,
-        skillSelectionIds
+        document
       };
     });
   };
 
-  const saveRoutineBuilderEdit = () => {
+  const saveRoutineBuilderEdit = async () => {
     if (!routineBuilderDraft || !routineBuilderEditingTeam) {
       setSaveMessage("No Routine Builder draft is open.");
       return;
     }
 
     const occurredAt = new Date().toISOString();
-    const items = buildRoutineBuilderPersistedItems(routineBuilderEditingTeam, routineBuilderDraft.skillSelectionIds);
+    const nextPlan = buildTeamRoutinePlanDraft(plannerState, routineBuilderEditingTeam, occurredAt);
+    const draftPlan: TeamRoutinePlan = {
+      ...nextPlan,
+      status: routineBuilderDraft.status,
+      notes: routineBuilderDraft.notes,
+      document: routineBuilderDraft.document,
+      updatedAt: occurredAt
+    };
 
-    persistState((current) => replaceTeamRoutinePlanItems(current, {
+    persistState((current) => replaceTeamRoutinePlanDocument(current, {
       teamId: routineBuilderEditingTeam.teamId,
-      items,
+      document: routineBuilderDraft.document,
+      status: routineBuilderDraft.status,
+      notes: routineBuilderDraft.notes,
       occurredAt
     }));
-    setRoutineBuilderDraft(null);
-    setSaveMessage(`Saved Routine Builder items for ${routineBuilderEditingTeam.teamName}.`);
+
+    const remoteTeamId = routineBuilderEditingTeam.remoteTeamId || (/^[0-9a-f-]{36}$/i.test(routineBuilderEditingTeam.teamId) ? routineBuilderEditingTeam.teamId : null);
+
+    try {
+      if (!remoteTeamId) {
+        throw new Error("This team does not have a linked Supabase id yet, so the routine plan could only be saved locally.");
+      }
+
+      await syncRemoteRoutinePlan(draftPlan, remoteTeamId);
+      await refreshRemoteFoundation();
+      setRoutineBuilderDraft(null);
+      setSaveMessage(`Saved Routine Builder plan for ${routineBuilderEditingTeam.teamName}.`);
+    } catch (error) {
+      setSaveMessage(error instanceof Error ? error.message : "Routine plan saved locally, but Supabase sync failed.");
+    }
   };
 
   const openSeasonPlannerTeam = (teamId: string) => {
@@ -1305,7 +1382,7 @@ export function useCheerPlannerIntegration() {
     routineBuilderEditingTeam,
     openRoutineBuilderTeam,
     cancelRoutineBuilderEdit,
-    toggleRoutineBuilderSkill,
+    updateRoutineBuilderDocument,
     saveRoutineBuilderEdit,
     routineBuilderTeams,
     seasonPlannerDraft,
@@ -1336,6 +1413,16 @@ export function useCheerPlannerIntegration() {
 }
 
 export type CheerPlannerIntegration = ReturnType<typeof useCheerPlannerIntegration>;
+
+
+
+
+
+
+
+
+
+
 
 
 
