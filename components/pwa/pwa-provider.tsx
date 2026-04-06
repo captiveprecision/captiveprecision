@@ -23,6 +23,33 @@ type PwaContextValue = {
 
 const PwaContext = createContext<PwaContextValue | null>(null);
 
+function isLocalDevelopmentHost(hostname: string) {
+  return hostname === "localhost" || hostname === "127.0.0.1";
+}
+
+async function clearRegisteredServiceWorkers() {
+  if (!("serviceWorker" in navigator)) {
+    return;
+  }
+
+  const registrations = await navigator.serviceWorker.getRegistrations();
+  await Promise.all(registrations.map((registration) => registration.unregister()));
+
+  if (typeof window !== "undefined" && "caches" in window) {
+    const cacheKeys = await window.caches.keys();
+    await Promise.all(cacheKeys.map((cacheKey) => window.caches.delete(cacheKey)));
+  }
+}
+
+async function registerProductionServiceWorker() {
+  if (!("serviceWorker" in navigator)) {
+    return;
+  }
+
+  const registration = await navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" });
+  await registration.update().catch(() => undefined);
+}
+
 export function PwaProvider({ children }: { children: ReactNode }) {
   const [online, setOnline] = useState(true);
   const [installEvent, setInstallEvent] = useState<BeforeInstallPromptEvent | null>(null);
@@ -34,8 +61,12 @@ export function PwaProvider({ children }: { children: ReactNode }) {
     setIsInstalled(isStandaloneDisplay());
     setIsIosInstall(isIosInstallCandidate());
 
-    if ("serviceWorker" in navigator) {
-      void navigator.serviceWorker.register("/sw.js").catch(() => undefined);
+    if (typeof window !== "undefined") {
+      const serviceWorkerSetup = isLocalDevelopmentHost(window.location.hostname)
+        ? clearRegisteredServiceWorkers()
+        : registerProductionServiceWorker();
+
+      void serviceWorkerSetup.catch(() => undefined);
     }
 
     const handleOnline = () => setOnline(true);

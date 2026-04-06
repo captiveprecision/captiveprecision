@@ -5,6 +5,7 @@ import type { AppRole } from "@/lib/auth/session";
 
 const gymNavItems = [
   { href: "/gym" as Route, title: "Dashboard", shortLabel: "D" },
+  { href: "/gym/cheer-planner" as Route, title: "Cheer Planner", shortLabel: "C" },
   { href: "/gym/manage-my-gym" as Route, title: "Manage My Gym", shortLabel: "G" },
   { href: "/gym/profile" as Route, title: "Profile", shortLabel: "P" },
   { href: "/gym/messages" as Route, title: "Messages", shortLabel: "M" },
@@ -14,8 +15,7 @@ const gymNavItems = [
 
 const gymToolItems = [
   { href: "/gym/tools/cheer-score-calculator" as Route, title: "Cheer Score", shortLabel: "C" },
-  { href: "/gym/tools/full-out-evaluator" as Route, title: "Execution Evaluator", shortLabel: "F" },
-  { href: "/gym/tools/cheer-planner" as Route, title: "Cheer Planner", shortLabel: "P" }
+  { href: "/gym/tools/full-out-evaluator" as Route, title: "Execution Evaluator", shortLabel: "F" }
 ];
 
 function getGymReleaseLabel() {

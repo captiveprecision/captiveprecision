@@ -1,46 +1,145 @@
 import type { PlannerLevelLabel } from "@/lib/domain/planner-levels";
 import type { PlannerProject } from "@/lib/domain/planner-project";
-import type { TeamSkillPlan, TeamSkillPlanStatus, TeamSkillSelection } from "@/lib/domain/skill-plan";
-import { levelLabels, type PlannerLevelKey } from "@/lib/domain/planner-levels";
-import { buildTeamBuilderCandidates, buildTeamBuilderTeamsWithMembers, type TeamBuilderCandidate } from "@/lib/services/planner-team-builder";
+import type { TeamSkillCategory, TeamSkillPlan, TeamSkillPlanStatus, TeamSkillSelection } from "@/lib/domain/skill-plan";
+import { buildTeamBuilderCandidates, buildTeamBuilderTeamsWithMembers } from "@/lib/services/planner-team-builder";
 
-// Derived read model for candidate skill options sourced from the latest relevant tryout evaluation.
-// This is not persisted planner state.
-export type SkillPlannerAthleteSkillOption = {
-  id: string;
-  athleteId: string;
-  sourceEvaluationId: string | null;
-  sourceOccurredAt: string | null;
-  levelKey: PlannerLevelKey;
-  levelLabel: PlannerLevelLabel;
-  skillName: string;
-  sourceOptionId: string | null;
-  isExtra: boolean;
+export const SKILL_PLANNER_CATEGORY_CONFIG: Array<{
+  key: TeamSkillCategory;
+  label: string;
+  defaultRows: number;
+  groupCount?: number;
+}> = [
+  { key: "stunts", label: "Stunts", defaultRows: 1 },
+  { key: "running-tumbling", label: "Running Tumbling", defaultRows: 1 },
+  { key: "standing-tumbling", label: "Standing Tumbling", defaultRows: 1 },
+  { key: "jumps", label: "Jumps", defaultRows: 1 },
+  { key: "pyramid", label: "Pyramid", defaultRows: 1, groupCount: 2 }
+];
+
+export function getSkillPlannerCategoryLabel(category: TeamSkillCategory) {
+  return SKILL_PLANNER_CATEGORY_CONFIG.find((item) => item.key === category)?.label ?? category;
+}
+
+function cloneSelection(selection: TeamSkillSelection): TeamSkillSelection {
+  return { ...selection };
+}
+
+function buildSelectionId(teamId: string, category: TeamSkillCategory, groupIndex: number | null, slotIndex: number) {
+  return ["team-skill-selection", teamId, category, groupIndex ?? "base", slotIndex].join("-");
+}
+
+function buildBlankSelection(
+  teamId: string,
+  category: TeamSkillCategory,
+  slotIndex: number,
+  groupIndex: number | null = null
+): TeamSkillSelection {
+  return {
+    id: buildSelectionId(teamId, category, groupIndex, slotIndex),
+    athleteId: null,
+    category,
+    groupIndex,
+    sortOrder: slotIndex,
+    sourceEvaluationId: null,
+    levelKey: null,
+    levelLabel: "",
+    skillName: "",
+    sourceOptionId: null,
+    isExtra: false,
+    status: "selected",
+    notes: ""
+  };
+}
+
+function normalizeExistingSelection(selection: TeamSkillSelection, index: number): TeamSkillSelection {
+  return {
+    ...selection,
+    athleteId: selection.athleteId ?? null,
+    category: selection.category ?? "stunts",
+    groupIndex: selection.groupIndex ?? null,
+    sortOrder: typeof selection.sortOrder === "number" ? selection.sortOrder : index,
+    levelKey: selection.levelKey ?? null,
+    levelLabel: selection.levelLabel ?? "",
+    skillName: selection.skillName ?? "",
+    sourceEvaluationId: selection.sourceEvaluationId ?? null,
+    sourceOptionId: selection.sourceOptionId ?? null,
+    isExtra: Boolean(selection.isExtra),
+    status: selection.status ?? "selected",
+    notes: selection.notes ?? ""
+  };
+}
+
+export type SkillPlannerCategorySection = {
+  key: TeamSkillCategory;
+  label: string;
+  groups: Array<{
+    groupIndex: number | null;
+    groupLabel: string | null;
+    selections: TeamSkillSelection[];
+  }>;
 };
 
-// Derived read model for one athlete inside Skill Planner. This is not a persisted core entity.
-export type SkillPlannerAthleteInput = {
-  athleteId: string;
-  athleteName: string;
-  registrationNumber: string;
-  qualifiedLevel: TeamBuilderCandidate["displayLevel"];
-  latestEvaluationId: string | null;
-  latestEvaluationOccurredAt: string | null;
-  availableSkillOptions: SkillPlannerAthleteSkillOption[];
-};
-
-// Derived read model for one team inside Skill Planner. Future Routine Builder should consume canonical team ids plus persisted TeamSkillPlan output, not persist this shape.
 export type SkillPlannerTeamInput = {
   teamId: string;
   teamName: string;
   teamLevel: PlannerLevelLabel;
   teamType: string;
-  members: SkillPlannerAthleteInput[];
   existingPlan: TeamSkillPlan | null;
+  sections: SkillPlannerCategorySection[];
 };
 
-function cloneSelection(selection: TeamSkillSelection): TeamSkillSelection {
-  return { ...selection };
+export function buildDefaultSkillPlannerSelections(teamId: string) {
+  return SKILL_PLANNER_CATEGORY_CONFIG.flatMap((category) => {
+    if (category.groupCount) {
+      return Array.from({ length: category.groupCount }, (_, groupOffset) => (
+        Array.from({ length: category.defaultRows }, (_, rowIndex) => buildBlankSelection(teamId, category.key, rowIndex, groupOffset + 1))
+      )).flat();
+    }
+
+    return Array.from({ length: category.defaultRows }, (_, rowIndex) => buildBlankSelection(teamId, category.key, rowIndex));
+  });
+}
+
+export function buildSkillPlannerDraftSelections(teamId: string, existingSelections: TeamSkillSelection[]) {
+  const normalizedExistingSelections = existingSelections.map(normalizeExistingSelection);
+  const byId = new Map(normalizedExistingSelections.map((selection) => [selection.id, selection] as const));
+  const baseSelections = buildDefaultSkillPlannerSelections(teamId).map((selection) => byId.get(selection.id) ?? selection);
+  const knownIds = new Set(baseSelections.map((selection) => selection.id));
+  const extraSelections = normalizedExistingSelections.filter((selection) => !knownIds.has(selection.id));
+
+  return [...baseSelections, ...extraSelections];
+}
+
+function buildSkillPlannerSections(teamId: string, existingSelections: TeamSkillSelection[]) {
+  const draftSelections = buildSkillPlannerDraftSelections(teamId, existingSelections);
+
+  return SKILL_PLANNER_CATEGORY_CONFIG.map((category) => {
+    const categorySelections = draftSelections.filter((selection) => selection.category === category.key);
+    const groups = category.groupCount
+      ? Array.from({ length: category.groupCount }, (_, groupOffset) => {
+          const groupIndex = groupOffset + 1;
+          return {
+            groupIndex,
+            groupLabel: `Structure ${groupIndex}`,
+            selections: categorySelections
+              .filter((selection) => selection.groupIndex === groupIndex)
+              .sort((left, right) => left.sortOrder - right.sortOrder || left.id.localeCompare(right.id))
+          };
+        })
+      : [{
+          groupIndex: null,
+          groupLabel: null,
+          selections: categorySelections
+            .filter((selection) => selection.groupIndex === null)
+            .sort((left, right) => left.sortOrder - right.sortOrder || left.id.localeCompare(right.id))
+        }];
+
+    return {
+      key: category.key,
+      label: category.label,
+      groups
+    } satisfies SkillPlannerCategorySection;
+  });
 }
 
 export function buildSkillPlannerTeamInputs(
@@ -57,29 +156,7 @@ export function buildSkillPlannerTeamInputs(
     teamLevel: team.teamLevel,
     teamType: team.teamType,
     existingPlan: skillPlanMap.get(team.id) ?? null,
-    members: team.members.map((member) => ({
-      athleteId: member.id,
-      athleteName: member.name,
-      registrationNumber: member.registrationNumber,
-      qualifiedLevel: member.displayLevel,
-      latestEvaluationId: member.latestEvaluation?.id ?? null,
-      latestEvaluationOccurredAt: member.latestEvaluation?.occurredAt ?? member.latestEvaluation?.createdAt ?? null,
-      availableSkillOptions: (member.latestEvaluation?.rawData.levels ?? []).flatMap((level) => (
-        level.skills
-          .filter((skill) => skill.name.trim().length > 0)
-          .map((skill) => ({
-            id: `${member.id}:${level.levelKey}:${skill.id}`,
-            athleteId: member.id,
-            sourceEvaluationId: member.latestEvaluation?.id ?? null,
-            sourceOccurredAt: member.latestEvaluation?.occurredAt ?? member.latestEvaluation?.createdAt ?? null,
-            levelKey: level.levelKey,
-            levelLabel: levelLabels[level.levelKey],
-            skillName: skill.name,
-            sourceOptionId: skill.optionId,
-            isExtra: skill.isExtra
-          }))
-      ))
-    }))
+    sections: buildSkillPlannerSections(team.id, skillPlanMap.get(team.id)?.selections ?? [])
   }));
 }
 
@@ -100,11 +177,11 @@ export function createTeamSkillPlanRecord(project: PlannerProject, teamId: strin
 export function normalizeTeamSkillSelections(selections: TeamSkillSelection[]): TeamSkillSelection[] {
   const byId = new Map<string, TeamSkillSelection>();
 
-  selections.forEach((selection) => {
-    byId.set(selection.id, cloneSelection(selection));
+  selections.forEach((selection, index) => {
+    byId.set(selection.id, normalizeExistingSelection(cloneSelection(selection), index));
   });
 
-  return [...byId.values()];
+  return [...byId.values()].sort((left, right) => left.category.localeCompare(right.category) || (left.groupIndex ?? 0) - (right.groupIndex ?? 0) || left.sortOrder - right.sortOrder || left.id.localeCompare(right.id));
 }
 
 export function upsertTeamSkillPlan(project: PlannerProject, nextPlan: TeamSkillPlan, occurredAt: string): PlannerProject {
@@ -122,8 +199,6 @@ export function upsertTeamSkillPlan(project: PlannerProject, nextPlan: TeamSkill
   };
 }
 
-// Conservative Phase 4 update strategy: replace the full selection set for one team plan.
-// This keeps writes deterministic until later phases need granular edit or approval transitions.
 export function replaceTeamSkillPlanSelections(
   project: PlannerProject,
   input: {

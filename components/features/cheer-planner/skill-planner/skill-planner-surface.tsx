@@ -1,16 +1,58 @@
 "use client";
 
-import { Badge, Button, Card, CardContent, EmptyState, SectionHeader } from "@/components/ui";
+import { useEffect, useState } from "react";
+
+import { Badge, Button, Card, CardContent, EmptyState, Input, SectionHeader } from "@/components/ui";
+import type { TeamSkillCategory, TeamSkillSelection } from "@/lib/domain/skill-plan";
+import { SKILL_PLANNER_CATEGORY_CONFIG } from "@/lib/services/planner-skill-planner";
 import type { CheerPlannerIntegration } from "@/lib/services/planner-integration";
+
+const SKILL_LEVEL_OPTIONS = ["Elite", "Advanced", "Level Appropriate", "Below Level"] as const;
 
 type SkillPlannerSurfaceProps = {
   teams: CheerPlannerIntegration["skillPlannerTeams"];
   skillPlannerDraft: CheerPlannerIntegration["skillPlannerDraft"];
   openSkillPlannerTeam: (teamId: string) => void;
   cancelSkillPlannerEdit: () => void;
-  toggleSkillPlannerOption: (optionId: string) => void;
+  updateSkillPlannerSelection: (selectionId: string, field: "skillName" | "levelLabel", value: string) => void;
+  addSkillPlannerSelection: (category: TeamSkillCategory, groupIndex?: number | null) => void;
+  removeSkillPlannerSelection: (selectionId: string) => void;
   saveSkillPlannerEdit: () => void;
 };
+
+function groupSelectionsByCategory(selections: TeamSkillSelection[]) {
+  return SKILL_PLANNER_CATEGORY_CONFIG.map((category) => {
+    const categorySelections = selections.filter((selection) => selection.category === category.key);
+    const groups = category.groupCount
+      ? Array.from({ length: category.groupCount }, (_, groupOffset) => {
+          const groupIndex = groupOffset + 1;
+          return {
+            groupIndex,
+            groupLabel: `Structure ${groupIndex}`,
+            selections: categorySelections
+              .filter((selection) => selection.groupIndex === groupIndex)
+              .sort((left, right) => left.sortOrder - right.sortOrder || left.id.localeCompare(right.id))
+          };
+        })
+      : [{
+          groupIndex: null,
+          groupLabel: null,
+          selections: categorySelections
+            .filter((selection) => selection.groupIndex === null)
+            .sort((left, right) => left.sortOrder - right.sortOrder || left.id.localeCompare(right.id))
+        }];
+
+    return {
+      key: category.key,
+      label: category.label,
+      groups
+    };
+  });
+}
+
+function countSectionRows(sections: ReturnType<typeof groupSelectionsByCategory>) {
+  return sections.reduce((sum, section) => sum + section.groups.reduce((groupSum, group) => groupSum + group.selections.length, 0), 0);
+}
 
 export function SkillPlannerSurface(props: SkillPlannerSurfaceProps) {
   const {
@@ -18,11 +60,28 @@ export function SkillPlannerSurface(props: SkillPlannerSurfaceProps) {
     skillPlannerDraft,
     openSkillPlannerTeam,
     cancelSkillPlannerEdit,
-    toggleSkillPlannerOption,
+    updateSkillPlannerSelection,
+    addSkillPlannerSelection,
+    removeSkillPlannerSelection,
     saveSkillPlannerEdit
   } = props;
+  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
 
-  const selectedOptionIds = new Set(skillPlannerDraft?.selectionOptionIds ?? []);
+  useEffect(() => {
+    if (!teams.length) {
+      setSelectedTeamId(null);
+      return;
+    }
+
+    if (skillPlannerDraft?.teamId) {
+      setSelectedTeamId(skillPlannerDraft.teamId);
+      return;
+    }
+
+    setSelectedTeamId((current) => (
+      current && teams.some((team) => team.teamId === current) ? current : null
+    ));
+  }, [skillPlannerDraft?.teamId, teams]);
 
   return (
     <div className="planner-team-builder-stack">
@@ -30,15 +89,20 @@ export function SkillPlannerSurface(props: SkillPlannerSurfaceProps) {
         <CardContent className="planner-panel-stack">
           <SectionHeader
             eyebrow="Skill Planner"
-            title="Team skill inputs"
-            description="Select the skills to keep for one team at a time. Saving replaces the full persisted selection set for that team."
+            title="Editable team skill structure"
+            description="Select a team to review its saved skill plan. Use Edit team only when you are ready to change the rows that will flow into Routine Builder."
           />
           <div className="planner-team-card-list">
             {teams.length ? teams.map((team) => {
               const isEditing = skillPlannerDraft?.teamId === team.teamId;
-              const selectedCount = isEditing
-                ? skillPlannerDraft.selectionOptionIds.length
-                : (team.existingPlan?.selections.length ?? 0);
+              const isSelected = selectedTeamId === team.teamId;
+              const draftSelections = isEditing ? skillPlannerDraft.selections : [];
+              const persistedCount = team.existingPlan?.selections.filter((selection) => selection.skillName.trim().length > 0).length ?? 0;
+              const currentCount = isEditing
+                ? draftSelections.filter((selection) => selection.skillName.trim().length > 0).length
+                : persistedCount;
+              const sections = isEditing ? groupSelectionsByCategory(draftSelections) : team.sections;
+              const sectionRowCount = sections.reduce((sum, section) => sum + section.groups.reduce((groupSum, group) => groupSum + group.selections.length, 0), 0);
 
               return (
                 <Card key={team.teamId} variant="subtle" className="planner-team-card">
@@ -58,51 +122,112 @@ export function SkillPlannerSurface(props: SkillPlannerSurfaceProps) {
                             <Button variant="secondary" size="sm" onClick={cancelSkillPlannerEdit}>Cancel</Button>
                           </>
                         ) : (
-                          <Button size="sm" onClick={() => openSkillPlannerTeam(team.teamId)}>Edit team</Button>
+                          <>
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              onClick={() => setSelectedTeamId((current) => current === team.teamId ? null : team.teamId)}
+                            >
+                              {isSelected ? "Hide details" : "View team"}
+                            </Button>
+                            <Button
+                              size="sm"
+                              onClick={() => {
+                                setSelectedTeamId(team.teamId);
+                                openSkillPlannerTeam(team.teamId);
+                              }}
+                            >
+                              Edit team
+                            </Button>
+                          </>
                         )}
                       </div>
                     </div>
                     <div className="planner-team-summary-row">
-                      <span>{team.members.length} athletes</span>
-                      <span>{team.existingPlan?.selections.length ?? 0} persisted / {selectedCount} current</span>
+                      <span>{sectionRowCount} editable rows</span>
+                      <span>{persistedCount} persisted / {currentCount} current</span>
                     </div>
-                    <div className="planner-team-members-list">
-                      {team.members.length ? team.members.map((member) => (
-                        <div key={member.athleteId} className="planner-team-card">
-                          <CardContent className="planner-panel-stack">
-                            <div className="planner-team-card-head">
-                              <div>
-                                <strong>{member.athleteName}</strong>
-                                <p>{member.registrationNumber} / {member.qualifiedLevel}</p>
-                              </div>
-                              <Badge variant="subtle">{member.availableSkillOptions.length} options</Badge>
-                            </div>
-                            {member.availableSkillOptions.length ? (
-                              <div className="planner-team-members-list">
-                                {member.availableSkillOptions.map((option) => (
-                                  <label key={option.id} className="planner-team-member-row">
-                                    <div>
-                                      <strong>{option.skillName}</strong>
-                                      <p>{option.levelLabel} / {option.isExtra ? "Extra" : "Base"}</p>
+                    {isSelected ? (
+                      <div className="planner-skill-section-stack">
+                        {sections.map((section) => (
+                          <Card key={section.key} variant="subtle" className="planner-skill-section-card">
+                            <CardContent className="planner-panel-stack">
+                              <SectionHeader
+                                eyebrow="Category"
+                                title={section.label}
+                              />
+                              {section.groups.map((group) => (
+                                <div key={`${section.key}-${group.groupIndex ?? "base"}`} className="planner-panel-stack planner-skill-group">
+                                  {group.groupLabel ? (
+                                    <div className="planner-inline-actions">
+                                      <strong>{group.groupLabel}</strong>
                                     </div>
-                                    <input
-                                      type="checkbox"
-                                      checked={selectedOptionIds.has(option.id)}
-                                      disabled={!isEditing}
-                                      onChange={() => toggleSkillPlannerOption(option.id)}
-                                    />
-                                  </label>
-                                ))}
-                              </div>
-                            ) : (
-                              <EmptyState title="No skill options from tryouts." description="This athlete needs a saved tryout evaluation before Skill Planner can select skills." />
-                            )}
-                          </CardContent>
-                        </div>
-                      )) : (
-                        <EmptyState title="No athletes in this team yet." description="Team Builder membership will flow into Skill Planner automatically." />
-                      )}
-                    </div>
+                                  ) : null}
+                                  <div className="planner-skill-row-list">
+                                    {group.selections.map((selection) => (
+                                      <div key={selection.id} className="planner-skill-row">
+                                        <Input
+                                          label="Skill"
+                                          value={selection.skillName}
+                                          disabled={!isEditing}
+                                          onChange={(event) => updateSkillPlannerSelection(selection.id, "skillName", event.target.value)}
+                                        />
+                                        <div className="planner-skill-level-field">
+                                          <span className="planner-field-label">Level</span>
+                                          <div className="planner-skill-level-toggle" role="group" aria-label="Skill level">
+                                            {SKILL_LEVEL_OPTIONS.map((option) => {
+                                              const isActive = selection.levelLabel === option;
+
+                                              return (
+                                                <button
+                                                  key={option}
+                                                  type="button"
+                                                  className={isActive ? "planner-skill-level-toggle__button is-active" : "planner-skill-level-toggle__button"}
+                                                  onClick={() => updateSkillPlannerSelection(selection.id, "levelLabel", option)}
+                                                  disabled={!isEditing}
+                                                  aria-pressed={isActive}
+                                                >
+                                                  {option}
+                                                </button>
+                                              );
+                                            })}
+                                          </div>
+                                        </div>
+                                        {isEditing ? (
+                                          <div className="planner-skill-row-action">
+                                            <Button
+                                              type="button"
+                                              variant="ghost"
+                                              size="sm"
+                                              onClick={() => removeSkillPlannerSelection(selection.id)}
+                                              disabled={group.selections.length <= 1}
+                                            >
+                                              Remove
+                                            </Button>
+                                          </div>
+                                        ) : null}
+                                      </div>
+                                    ))}
+                                  </div>
+                                  {isEditing ? (
+                                    <div className="planner-skill-add-action">
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => addSkillPlannerSelection(section.key, group.groupIndex)}
+                                      >
+                                        +
+                                      </Button>
+                                    </div>
+                                  ) : null}
+                                </div>
+                              ))}
+                            </CardContent>
+                          </Card>
+                        ))}
+                      </div>
+                    ) : null}
                   </CardContent>
                 </Card>
               );
@@ -115,3 +240,4 @@ export function SkillPlannerSurface(props: SkillPlannerSurfaceProps) {
     </div>
   );
 }
+

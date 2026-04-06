@@ -6,8 +6,8 @@ export default function GymToolsPage() {
   return (
     <ToolsListingShell
       title="All gym tools"
-      description="Gym memberships have access to all current tools and future shared modules."
-      heroBadges={["Gym workspace", "3 live tools"]}
+      description="Gym memberships have access to the current evaluation tools, while Cheer Planner now lives as a primary module in the main workspace navigation."
+      heroBadges={["Gym workspace", "2 live tools"]}
       tools={[
         {
           id: "cheer-score",
@@ -26,23 +26,14 @@ export default function GymToolsPage() {
           href: "/gym/tools/full-out-evaluator" as Route,
           actionLabel: "Open tool",
           statusVariant: "accent"
-        },
-        {
-          id: "cheer-planner",
-          label: "Live",
-          title: "Cheer Planner",
-          description: "Step 1 of the planner is now live with tryout evaluations, local templates, and athlete records prepared for later planner phases.",
-          href: "/gym/tools/cheer-planner" as Route,
-          actionLabel: "Open tool",
-          statusVariant: "accent"
         }
       ]}
       sideTitle="Gym access"
-      sideDescription="Gym memberships centralize shared tool access for roster, scoring, and planning work across the organization."
+      sideDescription="Gym memberships centralize evaluation tools here, while Cheer Planner now runs as a core module outside the tools group."
       sideItems={[
-        { label: "Current lineup", value: "Score, Execution, Planner" },
+        { label: "Current lineup", value: "Score, Execution" },
         { label: "Audience", value: "Gym-wide shared usage" },
-        { label: "Roadmap", value: "Additional shared modules ahead" }
+        { label: "Core module", value: "Cheer Planner" }
       ]}
     />
   );

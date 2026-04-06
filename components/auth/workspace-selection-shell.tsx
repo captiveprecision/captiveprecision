@@ -13,7 +13,6 @@ import {
   PageSideColumn,
   StatGrid
 } from "@/components/ui";
-import { PwaInstallPrompt } from "@/components/pwa/pwa-provider";
 import type { AuthSession } from "@/lib/auth/session";
 
 type WorkspaceSelectionShellProps = {
@@ -53,10 +52,6 @@ export function WorkspaceSelectionShell({ session }: WorkspaceSelectionShellProp
                 <Badge variant="accent">{session.email}</Badge>
               </div>
             </DetailGrid>
-
-            <div className="workspace-selection-install-row">
-              <PwaInstallPrompt context="workspace" className="workspace-install-prompt" buttonClassName="workspace-install-button" />
-            </div>
 
             <StatGrid className="landing-role-grid workspace-selection-role-grid">
               {session.roles.map((role) => (

@@ -1,6 +1,6 @@
-"use client";
+﻿"use client";
 
-import type { Dispatch, SetStateAction } from "react";
+import { useMemo, useState, type Dispatch, type SetStateAction } from "react";
 
 import { Badge, Button, Card, CardContent, EmptyState, Input, SectionHeader, Select, Tabs, Textarea } from "@/components/ui";
 import type {
@@ -22,14 +22,21 @@ const TRYOUT_SPORT_TABS: { value: PlannerSportTab; label: string }[] = [
   { value: "stunts", label: "Stunts / Coming soon" }
 ];
 
+type AthleteIntakeMode = "registered" | "new";
+
 function isPlannerSportTab(value: string): value is PlannerSportTab {
   return TRYOUT_SPORT_TABS.some((tab) => tab.value === value);
 }
 
 type TryoutsSurfaceProps = {
   athleteDraft: AthleteDraftState;
+  athletePool: CheerPlannerIntegration["athletePool"];
   updateAthleteDraft: (field: keyof AthleteDraftState, value: string) => void;
+  updateParentContact: (contactId: string, field: "name" | "email" | "phone", value: string) => void;
+  addParentContact: () => void;
+  removeParentContact: (contactId: string) => void;
   startNewAthlete: () => void;
+  loadRegisteredAthlete: (athleteId: string) => void;
   activeSport: PlannerSportTab;
   setActiveSport: (value: PlannerSportTab) => void;
   template: PlannerTryoutTemplate;
@@ -60,8 +67,13 @@ type TryoutsSurfaceProps = {
 export function TryoutsSurface(props: TryoutsSurfaceProps) {
   const {
     athleteDraft,
+    athletePool,
     updateAthleteDraft,
+    updateParentContact,
+    addParentContact,
+    removeParentContact,
     startNewAthlete,
+    loadRegisteredAthlete,
     activeSport,
     setActiveSport,
     template,
@@ -88,29 +100,173 @@ export function TryoutsSurface(props: TryoutsSurfaceProps) {
     getEvaluationDate,
     formatScore
   } = props;
+  const [athleteIntakeMode, setAthleteIntakeMode] = useState<AthleteIntakeMode>("registered");
+  const [registeredSearch, setRegisteredSearch] = useState("");
+
+  const matchingRegisteredAthletes = useMemo(() => {
+    const search = registeredSearch.trim().toLowerCase();
+
+    if (!search) {
+      return athletePool.slice(0, 8);
+    }
+
+    return athletePool
+      .filter((athlete) => (
+        athlete.name.toLowerCase().includes(search)
+        || athlete.firstName.toLowerCase().includes(search)
+        || athlete.lastName.toLowerCase().includes(search)
+        || athlete.registrationNumber.toLowerCase().includes(search)
+        || athlete.parentContacts.some((contact) => (
+          contact.name.toLowerCase().includes(search)
+          || contact.email.toLowerCase().includes(search)
+          || contact.phone.toLowerCase().includes(search)
+        ))
+      ))
+      .slice(0, 8);
+  }, [athletePool, registeredSearch]);
+
+  const showAthleteForm = athleteIntakeMode === "new" || Boolean(athleteDraft.athleteId);
+  const canSaveAthleteRecord = athleteIntakeMode === "new" || Boolean(athleteDraft.athleteId);
+
+  const selectNewAthleteMode = () => {
+    setAthleteIntakeMode("new");
+    setRegisteredSearch("");
+    startNewAthlete();
+  };
+
+  const selectRegisteredAthleteMode = () => {
+    setAthleteIntakeMode("registered");
+  };
+
+  const handleRegisteredAthleteSelect = (athleteId: string) => {
+    const selectedAthlete = athletePool.find((athlete) => athlete.id === athleteId) ?? null;
+
+    if (!selectedAthlete) {
+      return;
+    }
+
+    setAthleteIntakeMode("registered");
+    setRegisteredSearch(`${selectedAthlete.name} (${selectedAthlete.registrationNumber})`);
+    loadRegisteredAthlete(athleteId);
+  };
 
   return (
     <div className="planner-layout-grid">
       <div className="planner-main-column">
         <Card radius="panel" className="planner-panel-stack">
           <CardContent className="planner-panel-stack">
-            <SectionHeader
-              eyebrow="Athlete intake"
-              title="Tryout record"
-              actions={<Button variant="ghost" size="sm" onClick={startNewAthlete}>New athlete</Button>}
-            />
-            <div className="planner-athlete-grid">
-              <Input label="Registration #" value={athleteDraft.registrationNumber || "Auto-assigned on save"} readOnly />
-              <Input label="Athlete name" value={athleteDraft.name} onChange={(event) => updateAthleteDraft("name", event.target.value)} />
-              <Input type="date" label="Date of birth" value={athleteDraft.dateOfBirth} onChange={(event) => updateAthleteDraft("dateOfBirth", event.target.value)} />
-              <Input label="Source team" value={athleteDraft.sourceTeamName} onChange={(event) => updateAthleteDraft("sourceTeamName", event.target.value)} />
-              <Textarea
-                label="Notes"
-                rows={3}
-                containerClassName="planner-athlete-grid-wide"
-                value={athleteDraft.athleteNotes}
-                onChange={(event) => updateAthleteDraft("athleteNotes", event.target.value)}
-              />
+            <SectionHeader eyebrow="Athlete intake" title="Tryout record" />
+
+            <div className="planner-athlete-intake-stack">
+              <div className="planner-athlete-intake-toggle">
+                <Button
+                  type="button"
+                  variant={athleteIntakeMode === "registered" ? "secondary" : "ghost"}
+                  size="sm"
+                  onClick={selectRegisteredAthleteMode}
+                >
+                  Registered athlete
+                </Button>
+                <Button
+                  type="button"
+                  variant={athleteIntakeMode === "new" ? "secondary" : "ghost"}
+                  size="sm"
+                  onClick={selectNewAthleteMode}
+                >
+                  New athlete
+                </Button>
+              </div>
+
+              {athleteIntakeMode === "registered" ? (
+                <div className="planner-panel-stack">
+                  <Input
+                    label="Search athletes"
+                    placeholder="Search by name, registration, or parent contact"
+                    value={registeredSearch}
+                    onChange={(event) => setRegisteredSearch(event.target.value)}
+                  />
+                  <div className="planner-athlete-search-results">
+                    {matchingRegisteredAthletes.length ? (
+                      matchingRegisteredAthletes.map((athlete) => (
+                        <Button
+                          key={athlete.id}
+                          type="button"
+                          variant="ghost"
+                          className="planner-athlete-search-result"
+                          onClick={() => handleRegisteredAthleteSelect(athlete.id)}
+                        >
+                          <div className="planner-athlete-search-result__copy">
+                            <strong>{athlete.name}</strong>
+                            <span>
+                              {athlete.registrationNumber} / {athlete.parentContacts[0]?.name || "No parent contact yet"}
+                            </span>
+                          </div>
+                          <Badge variant={athlete.displayLevel === "Unqualified" ? "subtle" : "dark"}>
+                            {athlete.displayLevel}
+                          </Badge>
+                        </Button>
+                      ))
+                    ) : (
+                      <EmptyState
+                        title="No registered athletes found."
+                        description="Search another athlete or switch to New athlete to create one."
+                      />
+                    )}
+                  </div>
+                </div>
+              ) : null}
+
+              {showAthleteForm ? (
+                <div className="planner-panel-stack">
+                  <div className="planner-athlete-grid">
+                    <Input label="Registration #" value={athleteDraft.registrationNumber || "Auto-assigned on save"} readOnly />
+                    <Input label="First name" value={athleteDraft.firstName} onChange={(event) => updateAthleteDraft("firstName", event.target.value)} />
+                    <Input label="Last name" value={athleteDraft.lastName} onChange={(event) => updateAthleteDraft("lastName", event.target.value)} />
+                    <Input type="date" label="Date of birth" value={athleteDraft.dateOfBirth} onChange={(event) => updateAthleteDraft("dateOfBirth", event.target.value)} />
+                    <Textarea
+                      label="Notes"
+                      rows={3}
+                      containerClassName="planner-athlete-grid-wide"
+                      value={athleteDraft.notes}
+                      onChange={(event) => updateAthleteDraft("notes", event.target.value)}
+                    />
+                  </div>
+
+                  <div className="planner-athlete-parent-stack">
+                    <SectionHeader
+                      eyebrow="Parents"
+                      title="Parent or guardian contacts"
+                      actions={
+                        <Button type="button" variant="ghost" size="sm" onClick={addParentContact}>
+                          Add contact
+                        </Button>
+                      }
+                    />
+                    {athleteDraft.parentContacts.map((contact, index) => (
+                      <Card key={contact.id} variant="subtle" className="planner-parent-contact-card">
+                        <CardContent className="planner-panel-stack">
+                          <div className="planner-inline-actions planner-parent-contact-card__head">
+                            <strong>Contact {index + 1}</strong>
+                            <Button type="button" variant="ghost" size="sm" onClick={() => removeParentContact(contact.id)}>
+                              Remove
+                            </Button>
+                          </div>
+                          <div className="planner-athlete-grid">
+                            <Input label="Parent name" value={contact.name} onChange={(event) => updateParentContact(contact.id, "name", event.target.value)} />
+                            <Input label="Parent email" type="email" value={contact.email} onChange={(event) => updateParentContact(contact.id, "email", event.target.value)} />
+                            <Input label="Parent phone" value={contact.phone} onChange={(event) => updateParentContact(contact.id, "phone", event.target.value)} />
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <EmptyState
+                  title="Select a registered athlete to continue."
+                  description="Choosing an athlete will populate the tryout form automatically."
+                />
+              )}
             </div>
           </CardContent>
         </Card>
@@ -299,7 +455,9 @@ export function TryoutsSurface(props: TryoutsSurfaceProps) {
                 </div>
               ))}
             </div>
-            <Button onClick={saveEvaluation} disabled={activeSport !== "tumbling"}>Save athlete record</Button>
+            <Button onClick={saveEvaluation} disabled={activeSport !== "tumbling" || !canSaveAthleteRecord}>
+              Save athlete record
+            </Button>
           </CardContent>
         </Card>
 

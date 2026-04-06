@@ -1,11 +1,10 @@
-import { WorkspacePlaceholderPage } from "@/components/layout/workspace-placeholder-page";
+import { MyTeamsWorkspaceShell } from "@/components/features/my-teams/my-teams-workspace-shell";
+import { requireAuthSession } from "@/lib/auth/session";
+import { listAvailableCoachOptionsForSession } from "@/lib/services/team-coach-directory";
 
-export default function CoachMyTeamsPage() {
-  return (
-    <WorkspacePlaceholderPage
-      eyebrow="My teams"
-      title="My Teams"
-      description="Team roster management will live here once the coach-side team workflow is ready."
-    />
-  );
+export default async function CoachMyTeamsPage() {
+  const session = await requireAuthSession("coach");
+  const coachOptions = await listAvailableCoachOptionsForSession(session);
+
+  return <MyTeamsWorkspaceShell coachOptions={coachOptions} />;
 }

@@ -1,22 +1,20 @@
-import type { PlannerLevelKey, PlannerLevelLabel } from "@/lib/domain/planner-levels";
+import type { PlannerLevelLabel } from "@/lib/domain/planner-levels";
 import type { PlannerProject } from "@/lib/domain/planner-project";
 import type { TeamRoutineItem, TeamRoutinePlan, TeamRoutinePlanStatus } from "@/lib/domain/routine-plan";
 import type { TeamSkillPlan, TeamSkillSelection } from "@/lib/domain/skill-plan";
+import { getSkillPlannerCategoryLabel } from "@/lib/services/planner-skill-planner";
 
-// Derived read model for one selected skill available to the routine builder.
-// This is not persisted planner state.
 export type RoutineBuilderSkillInput = {
   skillSelectionId: string;
-  athleteId: string;
-  athleteName: string;
-  registrationNumber: string;
-  levelKey: PlannerLevelKey;
+  athleteId: string | null;
+  category: TeamSkillSelection["category"];
+  categoryLabel: string;
+  groupLabel: string | null;
+  levelLabel: string;
   skillName: string;
-  isExtra: boolean;
   selectionStatus: TeamSkillSelection["status"];
 };
 
-// Derived read model for one team inside Routine Builder. Future Season Planner should consume canonical team ids plus persisted TeamRoutinePlan output, not persist this shape.
 export type RoutineBuilderTeamInput = {
   teamId: string;
   teamName: string;
@@ -32,7 +30,6 @@ function cloneRoutineItem(item: TeamRoutineItem): TeamRoutineItem {
 }
 
 export function buildRoutineBuilderTeamInputs(project: PlannerProject): RoutineBuilderTeamInput[] {
-  const athleteMap = new Map(project.athletes.map((athlete) => [athlete.id, athlete] as const));
   const skillPlanMap = new Map(project.skillPlans.map((plan) => [plan.teamId, plan] as const));
   const routinePlanMap = new Map(project.routinePlans.map((plan) => [plan.teamId, plan] as const));
 
@@ -47,23 +44,19 @@ export function buildRoutineBuilderTeamInputs(project: PlannerProject): RoutineB
       teamType: team.teamType,
       skillPlan,
       routinePlan,
-      availableSkills: (skillPlan?.selections ?? []).flatMap((selection) => {
-        const athlete = athleteMap.get(selection.athleteId);
-        if (!athlete) {
-          return [];
-        }
-
-        return [{
+      availableSkills: (skillPlan?.selections ?? [])
+        .filter((selection) => selection.skillName.trim().length > 0)
+        .sort((left, right) => left.category.localeCompare(right.category) || (left.groupIndex ?? 0) - (right.groupIndex ?? 0) || left.sortOrder - right.sortOrder || left.id.localeCompare(right.id))
+        .map((selection) => ({
           skillSelectionId: selection.id,
-          athleteId: selection.athleteId,
-          athleteName: athlete.name,
-          registrationNumber: athlete.registrationNumber,
-          levelKey: selection.levelKey,
+          athleteId: selection.athleteId ?? null,
+          category: selection.category,
+          categoryLabel: getSkillPlannerCategoryLabel(selection.category),
+          groupLabel: selection.groupIndex ? `${getSkillPlannerCategoryLabel(selection.category)} ${selection.groupIndex}` : null,
+          levelLabel: selection.levelLabel,
           skillName: selection.skillName,
-          isExtra: selection.isExtra,
           selectionStatus: selection.status
-        }];
-      })
+        }))
     };
   });
 }
@@ -107,8 +100,6 @@ export function upsertTeamRoutinePlan(project: PlannerProject, nextPlan: TeamRou
   };
 }
 
-// Conservative Phase 5 update strategy: replace the full routine item set for one team plan.
-// This keeps routine composition writes deterministic until later phases need granular editing.
 export function replaceTeamRoutinePlanItems(
   project: PlannerProject,
   input: {

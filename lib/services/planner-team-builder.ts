@@ -11,6 +11,13 @@ export type TeamBuilderTeamDraftInput = {
   name: string;
   teamLevel: PlannerLevelLabel;
   teamType: string;
+  teamDivision?: string;
+  trainingDays?: string;
+  trainingHours?: string;
+  trainingSchedule?: string;
+  assignedCoachNames?: string[];
+  linkedCoachIds?: string[];
+  remoteTeamId?: string;
 };
 
 export type TeamBuilderTeamEditInput = {
@@ -18,6 +25,10 @@ export type TeamBuilderTeamEditInput = {
   name: string;
   teamLevel: PlannerLevelLabel;
   teamType: string;
+};
+
+export type MyTeamsTeamProfileUpdateInput = TeamBuilderTeamDraftInput & {
+  teamId: string;
 };
 
 // Derived Team Builder read model. Skill Planner should consume canonical TeamRecord membership, not persist this expanded shape.
@@ -57,12 +68,23 @@ export function createPlannerTeamRecord(
   draft: TeamBuilderTeamDraftInput,
   occurredAt: string
 ): TeamRecord {
+  const trainingDays = draft.trainingDays?.trim() ?? "";
+  const trainingHours = draft.trainingHours?.trim() ?? "";
+  const legacyTrainingSchedule = draft.trainingSchedule?.trim() ?? [trainingDays, trainingHours].filter(Boolean).join(" / ");
+
   return {
     id: `team-${Date.now()}`,
     workspaceId: project.workspaceId,
+    remoteTeamId: draft.remoteTeamId?.trim() ?? "",
     name: draft.name.trim() || `Team ${project.teams.length + 1}`,
     teamLevel: draft.teamLevel,
-    teamType: draft.teamType,
+    teamType: draft.teamType.trim(),
+    teamDivision: draft.teamDivision?.trim() ?? "",
+    trainingDays,
+    trainingHours,
+    trainingSchedule: legacyTrainingSchedule,
+    assignedCoachNames: (draft.assignedCoachNames ?? []).map((name) => name.trim()).filter(Boolean),
+    linkedCoachIds: (draft.linkedCoachIds ?? []).map((id) => id.trim()).filter(Boolean),
     // Canonical roster linkage for future planner phases.
     memberAthleteIds: [],
     // Transitional compatibility for older local planner state only.
@@ -70,6 +92,38 @@ export function createPlannerTeamRecord(
     status: "draft",
     createdAt: occurredAt,
     updatedAt: occurredAt
+  };
+}
+
+export function updateMyTeamsTeamProfile(
+  project: PlannerProject,
+  draft: MyTeamsTeamProfileUpdateInput,
+  occurredAt: string
+): PlannerProject {
+  const trainingDays = draft.trainingDays?.trim() ?? "";
+  const trainingHours = draft.trainingHours?.trim() ?? "";
+  const trainingSchedule = draft.trainingSchedule?.trim() ?? [trainingDays, trainingHours].filter(Boolean).join(" / ");
+
+  return {
+    ...project,
+    teams: project.teams.map((team) => (
+      team.id === draft.teamId
+        ? {
+            ...team,
+            remoteTeamId: draft.remoteTeamId?.trim() ?? team.remoteTeamId ?? "",
+            name: draft.name.trim() || team.name,
+            teamLevel: draft.teamLevel,
+            teamType: draft.teamType.trim(),
+            teamDivision: draft.teamDivision?.trim() ?? "",
+            trainingDays,
+            trainingHours,
+            trainingSchedule,
+            assignedCoachNames: (draft.assignedCoachNames ?? []).map((name) => name.trim()).filter(Boolean),
+            linkedCoachIds: (draft.linkedCoachIds ?? []).map((id) => id.trim()).filter(Boolean),
+            updatedAt: occurredAt
+          }
+        : team
+    ))
   };
 }
 
@@ -153,5 +207,3 @@ export function updatePlannerTeamDefinition(
     ))
   };
 }
-
-

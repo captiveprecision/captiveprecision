@@ -3,15 +3,18 @@ import type { PlannerLevelKey } from "@/lib/domain/planner-levels";
 
 export type TeamSkillPlanStatus = "draft" | "approved" | "archived";
 export type TeamSkillSelectionStatus = "selected" | "approved";
+export type TeamSkillCategory = "stunts" | "running-tumbling" | "standing-tumbling" | "jumps" | "pyramid";
 
 export type TeamSkillSelection = {
   id: string;
-  athleteId: string;
+  athleteId: string | null;
+  category: TeamSkillCategory;
+  groupIndex: number | null;
+  sortOrder: number;
   sourceEvaluationId: string | null;
-  levelKey: PlannerLevelKey;
-  // Selected skill identity for planner phases. This is the persisted planning choice, not just a tryout projection.
+  levelKey: PlannerLevelKey | null;
+  levelLabel: string;
   skillName: string;
-  // Preserves which scored tryout option produced the selected skill as source provenance only.
   sourceOptionId: string | null;
   isExtra: boolean;
   status: TeamSkillSelectionStatus;
@@ -19,7 +22,6 @@ export type TeamSkillSelection = {
 };
 
 export type TeamSkillPlan = TimestampedEntity & {
-  // Planner-scoped skill-planning aggregate for one team. Team and athlete identity stay canonical via ids.
   workspaceId: string;
   plannerProjectId: string;
   teamId: string;

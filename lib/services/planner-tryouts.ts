@@ -1,16 +1,24 @@
-import type { AthleteRecord } from "@/lib/domain/athlete";
+﻿import type { AthleteRecord } from "@/lib/domain/athlete";
 import type { EvaluationRecord, PlannerLevelEvaluation, PlannerSkillEvaluation, PlannerTryoutSummary, PlannerTryoutTemplate } from "@/lib/domain/evaluation-record";
 import type { PlannerLevelKey, PlannerLevelLabel, PlannerQualifiedLevel, PlannerSportKey } from "@/lib/domain/planner-levels";
 import type { PlannerProject } from "@/lib/domain/planner-project";
 import { canAssignQualifiedLevelToTeam, getHighestQualifiedLevelFromEvaluation, getNextRegistrationNumber } from "@/lib/services/planner-domain-mappers";
 
+export type TryoutParentContactDraftInput = {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+};
+
 export type TryoutAthleteDraftInput = {
   athleteId?: string | null;
   registrationNumber: string;
-  name: string;
+  firstName: string;
+  lastName: string;
   dateOfBirth: string;
-  sourceTeamName: string;
-  athleteNotes: string;
+  notes: string;
+  parentContacts: TryoutParentContactDraftInput[];
 };
 
 export type TryoutScoringContext = {
@@ -33,6 +41,10 @@ export type TryoutAthletePoolItem = AthleteRecord & {
 function round(value: number, decimals = 2) {
   const factor = 10 ** decimals;
   return Math.round(value * factor) / factor;
+}
+
+function buildAthleteName(firstName: string, lastName: string) {
+  return [firstName.trim(), lastName.trim()].filter(Boolean).join(" ").trim();
 }
 
 export function buildTryoutSkillRow(name: string, isExtra = false): PlannerSkillEvaluation {
@@ -158,7 +170,6 @@ export function buildPlannerTryoutAthletePool(
     const displayLevel = getHighestQualifiedLevelFromEvaluation(latestEvaluation, project.qualificationRules);
     const displayScore = displayLevel === "Unqualified" ? levelScores.Beginner.baseScore : levelScores[displayLevel].baseScore;
     const extraScore = displayLevel === "Unqualified" ? levelScores.Beginner.extraScore : levelScores[displayLevel].extraScore;
-    // Athlete pool identity is always anchored on athlete.id. Registration-number matching remains transitional team compatibility only.
     const assignedTeam = project.teams.find((team) => team.memberAthleteIds.includes(athlete.id) || (team.memberRegistrationNumbers ?? []).includes(athlete.registrationNumber)) ?? null;
 
     return {
@@ -177,25 +188,35 @@ export function buildPlannerTryoutAthletePool(
   });
 }
 
-// Preserve canonical athlete identity when the draft already knows it; registration-number lookup remains compatibility fallback for older local flows.
 export function buildTryoutAthleteRecord(project: PlannerProject, athleteDraft: TryoutAthleteDraftInput, occurredAt: string) {
   const currentRegistrationNumber = athleteDraft.registrationNumber || getNextRegistrationNumber(project.athletes);
   const existingAthlete = athleteDraft.athleteId
     ? project.athletes.find((item) => item.id === athleteDraft.athleteId) ?? null
     : project.athletes.find((item) => item.registrationNumber === currentRegistrationNumber) ?? null;
+  const firstName = athleteDraft.firstName.trim();
+  const lastName = athleteDraft.lastName.trim();
+  const name = buildAthleteName(firstName, lastName);
 
   return {
     athlete: {
       id: existingAthlete?.id ?? `athlete-${Date.now()}`,
       workspaceId: project.workspaceId,
       registrationNumber: currentRegistrationNumber,
-      name: athleteDraft.name.trim(),
+      firstName,
+      lastName,
+      name,
       dateOfBirth: athleteDraft.dateOfBirth,
-      sourceTeamName: athleteDraft.sourceTeamName.trim(),
-      athleteNotes: athleteDraft.athleteNotes.trim(),
+      notes: athleteDraft.notes.trim(),
+      parentContacts: athleteDraft.parentContacts.map((contact, index) => ({
+        id: contact.id || `parent-contact-${index + 1}`,
+        name: contact.name.trim(),
+        email: contact.email.trim(),
+        phone: contact.phone.trim()
+      })),
       status: "active" as const,
       createdAt: existingAthlete?.createdAt ?? occurredAt,
-      updatedAt: occurredAt
+      updatedAt: occurredAt,
+      athleteNotes: athleteDraft.notes.trim()
     },
     registrationNumber: currentRegistrationNumber
   };
@@ -224,17 +245,18 @@ export function buildTryoutEvaluationRecord(input: {
     athleteSnapshot: {
       athleteId: athlete.id,
       registrationNumber: athlete.registrationNumber,
+      firstName: athlete.firstName,
+      lastName: athlete.lastName,
       name: athlete.name,
       dateOfBirth: athlete.dateOfBirth,
-      sourceTeamName: athlete.sourceTeamName,
-      evaluationTeamName: athlete.sourceTeamName,
-      athleteNotes: athlete.athleteNotes,
-      capturedAt: occurredAt
+      notes: athlete.notes,
+      parentContacts: athlete.parentContacts.map((contact) => ({ ...contact })),
+      capturedAt: occurredAt,
+      athleteNotes: athlete.notes
     },
     scoringSystemId: scoringContext.scoringSystemId,
     scoringSystemVersionId: scoringContext.scoringSystemVersionId,
     occurredAt,
-    // Preserve reproducible tryout input, not transient component state.
     rawData: {
       sport,
       template: {
@@ -247,7 +269,6 @@ export function buildTryoutEvaluationRecord(input: {
         skills: level.skills.map((skill) => ({ ...skill }))
       }))
     },
-    // Preserve stable summary outputs for downstream ranking/qualification consumers.
     resultSummary: {
       ...resultSummary,
       levelScores: resultSummary.levelScores.map((item) => ({ ...item })),
@@ -269,7 +290,6 @@ export function applyTryoutSaveToPlannerProject(project: PlannerProject, athlete
   };
 }
 
-// Compatibility fallback only: this stamps missing provenance from the current active scoring config for legacy local records. It does not reconstruct historical truth.
 export function hydrateTryoutScoringContext(project: PlannerProject, scoringContext: Pick<TryoutScoringContext, "scoringSystemId" | "scoringSystemVersionId">) {
   let changed = false;
 
@@ -290,15 +310,10 @@ export function hydrateTryoutScoringContext(project: PlannerProject, scoringCont
       ...evaluation,
       scoringSystemId: nextScoringSystemId,
       scoringSystemVersionId: nextScoringSystemVersionId,
-      updatedAt: evaluation.updatedAt
+      updatedAt: new Date().toISOString()
     };
   });
 
   return changed ? { ...project, evaluations } : project;
 }
-
-
-
-
-
 

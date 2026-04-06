@@ -52,8 +52,15 @@ export type MyTeamsSeasonPlanSummary = {
 export type MyTeamsTeamSummary = {
   teamId: string;
   teamName: string;
+  remoteTeamId: string;
   teamLevel: PlannerLevelLabel;
   teamType: string;
+  teamDivision: string;
+  trainingDays: string;
+  trainingHours: string;
+  trainingSchedule: string;
+  assignedCoachNames: string[];
+  linkedCoachIds: string[];
   memberCount: number;
   qualifiedMemberCount: number;
   unqualifiedMemberCount: number;
@@ -122,8 +129,15 @@ export function buildMyTeamsTeamSummaries(project: PlannerProject): MyTeamsTeamS
     return {
       teamId: team.id,
       teamName: team.name,
+      remoteTeamId: team.remoteTeamId ?? "",
       teamLevel: team.teamLevel,
       teamType: team.teamType,
+      teamDivision: team.teamDivision ?? "",
+      trainingDays: team.trainingDays ?? "",
+      trainingHours: team.trainingHours ?? "",
+      trainingSchedule: team.trainingSchedule ?? "",
+      assignedCoachNames: team.assignedCoachNames ?? [],
+      linkedCoachIds: team.linkedCoachIds ?? [],
       memberCount: members.length,
       qualifiedMemberCount: members.filter((member) => member.qualifiedLevel !== "Unqualified").length,
       unqualifiedMemberCount: members.filter((member) => member.qualifiedLevel === "Unqualified").length,
@@ -156,3 +170,4 @@ export function buildMyTeamsTeamSummaries(project: PlannerProject): MyTeamsTeamS
 export function getMyTeamsTeamSummary(project: PlannerProject, teamId: string) {
   return buildMyTeamsTeamSummaries(project).find((team) => team.teamId === teamId) ?? null;
 }
+

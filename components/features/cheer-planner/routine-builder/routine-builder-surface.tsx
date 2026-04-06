@@ -31,7 +31,7 @@ export function RoutineBuilderSurface(props: RoutineBuilderSurfaceProps) {
           <SectionHeader
             eyebrow="Routine Builder"
             title="Available routine inputs"
-            description="Select the routine items to keep for one team at a time. Saving replaces the full persisted item set for that team."
+            description="Select the planned team skills to carry into the routine structure for one team at a time."
           />
           <div className="planner-team-card-list">
             {teams.length ? teams.map((team) => {
@@ -71,8 +71,8 @@ export function RoutineBuilderSurface(props: RoutineBuilderSurfaceProps) {
                       {team.availableSkills.length ? team.availableSkills.map((skill) => (
                         <label key={skill.skillSelectionId} className="planner-team-member-row">
                           <div>
-                            <strong>{skill.skillName}</strong>
-                            <p>{skill.athleteName} / {skill.registrationNumber}</p>
+                            <strong>{skill.skillName || "Untitled skill"}</strong>
+                            <p>{[skill.categoryLabel, skill.groupLabel, skill.levelLabel].filter(Boolean).join(" / ")}</p>
                           </div>
                           <div className="planner-summary-chip-group">
                             <Badge variant={skill.selectionStatus === "approved" ? "accent" : "subtle"}>{skill.selectionStatus}</Badge>
@@ -85,7 +85,7 @@ export function RoutineBuilderSurface(props: RoutineBuilderSurfaceProps) {
                           </div>
                         </label>
                       )) : (
-                        <EmptyState title="No routine inputs available." description="Approved or selected skills from Skill Planner will appear here." />
+                        <EmptyState title="No routine inputs available." description="Saved team skill rows from Skill Planner will appear here." />
                       )}
                     </div>
                   </CardContent>

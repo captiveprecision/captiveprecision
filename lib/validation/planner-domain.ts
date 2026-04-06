@@ -1,5 +1,5 @@
 import { LEVEL_KEYS, LEVEL_LABELS, type PlannerLevelKey, type PlannerLevelLabel, type PlannerPipelineStage, type PlannerSportKey } from "@/lib/domain/planner-levels";
-import type { AthleteRecord, AthleteSnapshot, AthleteStatus } from "@/lib/domain/athlete";
+import type { AthleteParentContact, AthleteRecord, AthleteSnapshot, AthleteStatus } from "@/lib/domain/athlete";
 import type { EvaluationRecord, EvaluationRecordStatus, PlannerLevelEvaluation, PlannerSkillEvaluation, PlannerTopLevel, PlannerTryoutOption, PlannerTryoutSummary, PlannerTryoutTemplate } from "@/lib/domain/evaluation-record";
 import type { PlannerProject, PlannerProjectStatus, PlannerQualificationRules } from "@/lib/domain/planner-project";
 import type { TeamRoutineItem, TeamRoutineItemStatus, TeamRoutinePlan, TeamRoutinePlanStatus } from "@/lib/domain/routine-plan";
@@ -148,6 +148,17 @@ export function isPlannerTryoutTemplate(value: unknown): value is PlannerTryoutT
     && isIsoDateString(record.updatedAt);
 }
 
+export function isAthleteParentContact(value: unknown): value is AthleteParentContact {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const record = value as Record<string, unknown>;
+  return isNonEmptyString(record.id)
+    && typeof record.name === "string"
+    && typeof record.email === "string"
+    && typeof record.phone === "string";
+}
 export function isAthleteRecord(value: unknown): value is AthleteRecord {
   if (!value || typeof value !== "object") {
     return false;
@@ -157,10 +168,13 @@ export function isAthleteRecord(value: unknown): value is AthleteRecord {
   return isNonEmptyString(record.id)
     && isNonEmptyString(record.workspaceId)
     && isNonEmptyString(record.registrationNumber)
+    && typeof record.firstName === "string"
+    && typeof record.lastName === "string"
     && typeof record.name === "string"
     && typeof record.dateOfBirth === "string"
-    && typeof record.sourceTeamName === "string"
-    && typeof record.athleteNotes === "string"
+    && typeof record.notes === "string"
+    && Array.isArray(record.parentContacts)
+    && record.parentContacts.every(isAthleteParentContact)
     && isAthleteStatus(record.status)
     && isIsoDateString(record.createdAt)
     && isIsoDateString(record.updatedAt);
@@ -174,11 +188,13 @@ export function isAthleteSnapshot(value: unknown): value is AthleteSnapshot {
   const record = value as Record<string, unknown>;
   return isNonEmptyString(record.athleteId)
     && isNonEmptyString(record.registrationNumber)
+    && typeof record.firstName === "string"
+    && typeof record.lastName === "string"
     && typeof record.name === "string"
     && typeof record.dateOfBirth === "string"
-    && typeof record.sourceTeamName === "string"
-    && typeof record.evaluationTeamName === "string"
-    && typeof record.athleteNotes === "string"
+    && typeof record.notes === "string"
+    && Array.isArray(record.parentContacts)
+    && record.parentContacts.every(isAthleteParentContact)
     && isIsoDateString(record.capturedAt);
 }
 
@@ -190,9 +206,16 @@ export function isTeamRecord(value: unknown): value is TeamRecord {
   const record = value as Record<string, unknown>;
   return isNonEmptyString(record.id)
     && isNonEmptyString(record.workspaceId)
+    && (record.remoteTeamId === undefined || typeof record.remoteTeamId === "string")
     && isNonEmptyString(record.name)
     && isPlannerLevelLabel(record.teamLevel)
     && typeof record.teamType === "string"
+    && (record.teamDivision === undefined || typeof record.teamDivision === "string")
+    && (record.trainingDays === undefined || typeof record.trainingDays === "string")
+    && (record.trainingHours === undefined || typeof record.trainingHours === "string")
+    && (record.trainingSchedule === undefined || typeof record.trainingSchedule === "string")
+    && (record.assignedCoachNames === undefined || (Array.isArray(record.assignedCoachNames) && record.assignedCoachNames.every(isNonEmptyString)))
+    && (record.linkedCoachIds === undefined || (Array.isArray(record.linkedCoachIds) && record.linkedCoachIds.every(isNonEmptyString)))
     && Array.isArray(record.memberAthleteIds)
     && record.memberAthleteIds.every(isNonEmptyString)
     && (record.memberRegistrationNumbers === undefined || (Array.isArray(record.memberRegistrationNumbers) && record.memberRegistrationNumbers.every(isNonEmptyString)))
@@ -227,7 +250,7 @@ export function isEvaluationRecord(value: unknown): value is EvaluationRecord {
     && isNonEmptyString(record.workspaceId)
     && record.recordType === "planner-tryout"
     && isEvaluationRecordStatus(record.status)
-    && isNonEmptyString(record.athleteId)
+    && (record.athleteId === null || isNonEmptyString(record.athleteId))
     && (record.athleteRegistrationNumber === null || typeof record.athleteRegistrationNumber === "string")
     && (record.plannerProjectId === null || typeof record.plannerProjectId === "string")
     && (record.plannerStage === null || isPlannerPipelineStage(record.plannerStage))
@@ -249,9 +272,13 @@ export function isTeamSkillSelection(value: unknown): value is TeamSkillSelectio
 
   const record = value as Record<string, unknown>;
   return isNonEmptyString(record.id)
-    && isNonEmptyString(record.athleteId)
+    && (record.athleteId === null || typeof record.athleteId === "string")
+    && (record.category === "stunts" || record.category === "running-tumbling" || record.category === "standing-tumbling" || record.category === "jumps" || record.category === "pyramid")
+    && (record.groupIndex === null || typeof record.groupIndex === "number")
+    && typeof record.sortOrder === "number"
     && (record.sourceEvaluationId === null || typeof record.sourceEvaluationId === "string")
-    && isPlannerLevelKey(record.levelKey)
+    && (record.levelKey === null || isPlannerLevelKey(record.levelKey))
+    && typeof record.levelLabel === "string"
     && typeof record.skillName === "string"
     && (record.sourceOptionId === null || typeof record.sourceOptionId === "string")
     && typeof record.isExtra === "boolean"
@@ -285,7 +312,7 @@ export function isTeamRoutineItem(value: unknown): value is TeamRoutineItem {
   const record = value as Record<string, unknown>;
   return isNonEmptyString(record.id)
     && isNonEmptyString(record.skillSelectionId)
-    && isNonEmptyString(record.athleteId)
+    && (record.athleteId === null || isNonEmptyString(record.athleteId))
     && typeof record.sortOrder === "number"
     && isTeamRoutineItemStatus(record.status)
     && typeof record.notes === "string";
@@ -359,6 +386,7 @@ export function isPlannerProject(value: unknown): value is PlannerProject {
   const record = value as Record<string, unknown>;
   return isNonEmptyString(record.id)
     && isNonEmptyString(record.workspaceId)
+    && (record.remoteTeamId === undefined || typeof record.remoteTeamId === "string")
     && isNonEmptyString(record.name)
     && isPlannerProjectStatus(record.status)
     && isPlannerPipelineStage(record.pipelineStage)
@@ -430,3 +458,9 @@ export function isScoringSystem(value: unknown): value is ScoringSystem {
     && (record.createdAt === undefined || isIsoDateString(record.createdAt))
     && (record.updatedAt === undefined || isIsoDateString(record.updatedAt));
 }
+
+
+
+
+
+

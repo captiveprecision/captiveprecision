@@ -1,5 +1,5 @@
-import { CheerPlannerTryouts } from "@/components/tools/cheer-planner-tryouts";
+import { redirect } from "next/navigation";
 
-export default function CheerPlannerPage() {
-  return <CheerPlannerTryouts />;
+export default function GymLegacyCheerPlannerPage() {
+  redirect("/gym/cheer-planner");
 }

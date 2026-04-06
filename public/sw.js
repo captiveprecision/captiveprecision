@@ -1,4 +1,4 @@
-const SW_VERSION = "cp-pwa-v1";
+const SW_VERSION = "cp-pwa-v4";
 const STATIC_CACHE = `${SW_VERSION}-static`;
 const PAGE_CACHE = `${SW_VERSION}-pages`;
 const IMAGE_CACHE = `${SW_VERSION}-images`;
@@ -16,7 +16,10 @@ const PRECACHE_URLS = [
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(STATIC_CACHE).then((cache) => cache.addAll(PRECACHE_URLS)).then(() => self.skipWaiting())
+    caches
+      .open(STATIC_CACHE)
+      .then((cache) => cache.addAll(PRECACHE_URLS.map((url) => new Request(url, { cache: "reload" }))))
+      .then(() => self.skipWaiting())
   );
 });
 
@@ -36,10 +39,18 @@ function isSameOrigin(requestUrl) {
   return new URL(requestUrl).origin === self.location.origin;
 }
 
+function canCacheResponse(response) {
+  if (!response || !response.ok) {
+    return false;
+  }
+
+  return response.type === "basic" || response.type === "default";
+}
+
 function networkFirst(request) {
   return fetch(request)
     .then((response) => {
-      if (response && response.ok) {
+      if (canCacheResponse(response)) {
         const cloned = response.clone();
         caches.open(PAGE_CACHE).then((cache) => cache.put(request, cloned));
       }
@@ -64,7 +75,7 @@ function cacheFirst(request) {
     }
 
     return fetch(request).then((response) => {
-      if (response && response.ok) {
+      if (canCacheResponse(response)) {
         const cloned = response.clone();
         caches.open(STATIC_CACHE).then((cache) => cache.put(request, cloned));
       }
@@ -77,7 +88,7 @@ function cacheFirst(request) {
 function staleWhileRevalidate(request) {
   return caches.match(request).then((cached) => {
     const networkResponse = fetch(request).then((response) => {
-      if (response && response.ok) {
+      if (canCacheResponse(response)) {
         const cloned = response.clone();
         caches.open(IMAGE_CACHE).then((cache) => cache.put(request, cloned));
       }
@@ -115,8 +126,10 @@ self.addEventListener("fetch", (event) => {
     url.pathname.startsWith("/_next/static/") ||
     url.pathname === "/sw.js" ||
     url.pathname === "/manifest.webmanifest" ||
-    url.pathname.endsWith(".css") ||
-    url.pathname.endsWith(".js") ||
+    url.pathname === "/icon.png" ||
+    url.pathname === "/apple-icon.png" ||
+    url.pathname.startsWith("/brand/") ||
+    url.pathname.startsWith("/pwa/") ||
     url.pathname.endsWith(".woff2") ||
     url.pathname.endsWith(".woff")
   ) {
@@ -135,3 +148,4 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(staleWhileRevalidate(request));
   }
 });
+

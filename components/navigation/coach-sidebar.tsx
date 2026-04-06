@@ -5,6 +5,7 @@ import type { AppRole, AuthSession } from "@/lib/auth/session";
 
 const coachNavItems = [
   { href: "/coach" as Route, title: "Dashboard", shortLabel: "D" },
+  { href: "/coach/cheer-planner" as Route, title: "Cheer Planner", shortLabel: "C" },
   { href: "/coach/my-teams" as Route, title: "My Teams", shortLabel: "T" },
   { href: "/coach/profile" as Route, title: "Profile", shortLabel: "P" },
   { href: "/coach/messages" as Route, title: "Messages", shortLabel: "M" },
@@ -14,8 +15,7 @@ const coachNavItems = [
 
 const coachToolItems = [
   { href: "/coach/tools/cheer-score-calculator" as Route, title: "Cheer Score", shortLabel: "C" },
-  { href: "/coach/tools/full-out-evaluator" as Route, title: "Execution Evaluator", shortLabel: "F" },
-  { href: "/coach/tools/cheer-planner" as Route, title: "Cheer Planner", shortLabel: "P" }
+  { href: "/coach/tools/full-out-evaluator" as Route, title: "Execution Evaluator", shortLabel: "F" }
 ];
 
 function getCoachReleaseLabel() {
@@ -65,6 +65,3 @@ export function CoachSidebar({
     />
   );
 }
-
-
-

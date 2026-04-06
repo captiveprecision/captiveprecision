@@ -5,7 +5,7 @@ export default function CoachToolsPage() {
     <ToolsListingShell
       title="Tools"
       description="Available tools and upcoming releases for the coach workspace."
-      heroBadges={["Coach workspace", "3 live tools"]}
+      heroBadges={["Coach workspace", "2 live tools"]}
       tools={[
         {
           id: "cheer-score",
@@ -24,23 +24,14 @@ export default function CoachToolsPage() {
           href: "/coach/tools/full-out-evaluator",
           actionLabel: "Open tool",
           statusVariant: "accent"
-        },
-        {
-          id: "cheer-planner",
-          label: "Live",
-          title: "Cheer Planner",
-          description: "Step 1 of the planner is now live with tryout evaluations, local templates, and athlete records prepared for later planner phases.",
-          href: "/coach/tools/cheer-planner",
-          actionLabel: "Open tool",
-          statusVariant: "accent"
         }
       ]}
       sideTitle="Coach access"
-      sideDescription="This workspace focuses on live evaluation and planning tools that support team-level operational work."
+      sideDescription="This workspace focuses on live evaluation tools, while Cheer Planner now lives as a primary module in the main workspace navigation."
       sideItems={[
-        { label: "Current lineup", value: "Score, Execution, Planner" },
-        { label: "Primary use", value: "Evaluation and planning" },
-        { label: "Future modules", value: "Shared through Tools" }
+        { label: "Current lineup", value: "Score, Execution" },
+        { label: "Primary use", value: "Evaluation workflows" },
+        { label: "Core module", value: "Cheer Planner" }
       ]}
     />
   );

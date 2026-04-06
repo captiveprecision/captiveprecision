@@ -1,8 +1,7 @@
-"use client";
+﻿"use client";
 
 import { useState } from "react";
 
-import { MyTeamsSurface } from "@/components/features/cheer-planner/my-teams/my-teams-surface";
 import { RoutineBuilderSurface } from "@/components/features/cheer-planner/routine-builder/routine-builder-surface";
 import { SeasonPlannerSurface } from "@/components/features/cheer-planner/season-planner/season-planner-surface";
 import { TeamBuilderSurface } from "@/components/features/cheer-planner/team-builder/team-builder-surface";
@@ -17,8 +16,7 @@ const PLANNER_WORKSPACE_TABS: { value: PlannerPipelineStage; label: string }[] =
   { value: "team-builder", label: "Team Builder" },
   { value: "skill-planner", label: "Skill Planner" },
   { value: "routine-builder", label: "Routine Builder" },
-  { value: "season-planner", label: "Season Planner" },
-  { value: "my-teams", label: "My Teams" }
+  { value: "season-planner", label: "Season Planner" }
 ];
 
 function isPlannerWorkspaceTab(value: string): value is PlannerPipelineStage {
@@ -37,9 +35,9 @@ export function CheerPlannerShell({ integration }: CheerPlannerShellProps) {
       <Card radius="panel" variant="subtle">
         <CardContent className="planner-hero-card planner-panel-stack">
           <SectionHeader
+            className="planner-hero-header"
             eyebrow="Cheer Planner"
             title="Build and review the full planning pipeline."
-            description="The planner stays anchored on PlannerProject. Each phase surface consumes integration-layer outputs without redefining domain state."
             actions={
               <div className="planner-hero-actions">
                 <Tabs
@@ -63,8 +61,13 @@ export function CheerPlannerShell({ integration }: CheerPlannerShellProps) {
       {workspaceTab === "tryouts" ? (
         <TryoutsSurface
           athleteDraft={integration.athleteDraft}
+          athletePool={integration.athletePool}
           updateAthleteDraft={integration.updateAthleteDraft}
+          updateParentContact={integration.updateParentContact}
+          addParentContact={integration.addParentContact}
+          removeParentContact={integration.removeParentContact}
           startNewAthlete={integration.startNewAthlete}
+          loadRegisteredAthlete={integration.loadRegisteredAthlete}
           activeSport={integration.activeSport}
           setActiveSport={integration.setActiveSport}
           template={integration.plannerState.template}
@@ -136,7 +139,9 @@ export function CheerPlannerShell({ integration }: CheerPlannerShellProps) {
           skillPlannerDraft={integration.skillPlannerDraft}
           openSkillPlannerTeam={integration.openSkillPlannerTeam}
           cancelSkillPlannerEdit={integration.cancelSkillPlannerEdit}
-          toggleSkillPlannerOption={integration.toggleSkillPlannerOption}
+          updateSkillPlannerSelection={integration.updateSkillPlannerSelection}
+          addSkillPlannerSelection={integration.addSkillPlannerSelection}
+          removeSkillPlannerSelection={integration.removeSkillPlannerSelection}
           saveSkillPlannerEdit={integration.saveSkillPlannerEdit}
         />
       ) : null}
@@ -160,8 +165,6 @@ export function CheerPlannerShell({ integration }: CheerPlannerShellProps) {
           saveSeasonPlannerEdit={integration.saveSeasonPlannerEdit}
         />
       ) : null}
-      {workspaceTab === "my-teams" ? <MyTeamsSurface teams={integration.myTeamsSummaries} /> : null}
     </main>
   );
 }
-

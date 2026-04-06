@@ -1,68 +1,38 @@
 import { buildRoutineBuilderTeamInputs } from "@/lib/services/planner-routine-builder";
 import { buildSeasonPlannerTeamInputs } from "@/lib/services/planner-season-planner";
-import { buildSkillPlannerTeamInputs, type SkillPlannerAthleteSkillOption } from "@/lib/services/planner-skill-planner";
+import { buildSkillPlannerDraftSelections, type SkillPlannerTeamInput } from "@/lib/services/planner-skill-planner";
 import type { TeamRoutineItem } from "@/lib/domain/routine-plan";
 import type { TeamSeasonCheckpoint } from "@/lib/domain/season-plan";
 import type { TeamSkillSelection } from "@/lib/domain/skill-plan";
 
-type SkillPlannerTeamInput = ReturnType<typeof buildSkillPlannerTeamInputs>[number];
 type RoutineBuilderTeamInput = ReturnType<typeof buildRoutineBuilderTeamInputs>[number];
 type SeasonPlannerTeamInput = ReturnType<typeof buildSeasonPlannerTeamInputs>[number];
 export type SeasonPlannerTeamWithAvailableCheckpoints = SeasonPlannerTeamInput & {
   availableCheckpoints: ReturnType<typeof buildSeasonPlannerAvailableCheckpoints>;
 };
 
-function buildSkillPlannerOptionKey(option: SkillPlannerAthleteSkillOption) {
-  return [
-    option.athleteId,
-    option.sourceEvaluationId ?? "",
-    option.levelKey,
-    option.skillName,
-    option.sourceOptionId ?? "",
-    option.isExtra ? "extra" : "base"
-  ].join("::");
+export function buildSkillPlannerDraftSelectionRows(team: SkillPlannerTeamInput) {
+  return buildSkillPlannerDraftSelections(team.teamId, team.existingPlan?.selections ?? []).map((selection) => ({ ...selection }));
 }
 
-function buildSkillPlannerSelectionKey(selection: TeamSkillSelection) {
-  return [
-    selection.athleteId,
-    selection.sourceEvaluationId ?? "",
-    selection.levelKey,
-    selection.skillName,
-    selection.sourceOptionId ?? "",
-    selection.isExtra ? "extra" : "base"
-  ].join("::");
-}
+export function buildSkillPlannerPersistedSelections(team: SkillPlannerTeamInput, selections: TeamSkillSelection[]) {
+  const existingSelections = new Map((team.existingPlan?.selections ?? []).map((selection) => [selection.id, selection] as const));
 
-export function buildSkillPlannerDraftSelectionOptionIds(team: SkillPlannerTeamInput) {
-  const persistedSelections = new Map((team.existingPlan?.selections ?? []).map((selection) => [buildSkillPlannerSelectionKey(selection), selection] as const));
-
-  return team.members
-    .flatMap((member) => member.availableSkillOptions)
-    .filter((option) => persistedSelections.has(buildSkillPlannerOptionKey(option)))
-    .map((option) => option.id);
-}
-
-export function buildSkillPlannerPersistedSelections(team: SkillPlannerTeamInput, selectionOptionIds: string[]) {
-  const selectedOptionIds = new Set(selectionOptionIds);
-  const existingSelections = new Map((team.existingPlan?.selections ?? []).map((selection) => [buildSkillPlannerSelectionKey(selection), selection] as const));
-
-  return team.members
-    .flatMap((member) => member.availableSkillOptions)
-    .filter((option) => selectedOptionIds.has(option.id))
-    .map((option) => {
-      const existingSelection = existingSelections.get(buildSkillPlannerOptionKey(option));
+  return selections
+    .filter((selection) => selection.skillName.trim().length > 0 || selection.levelLabel.trim().length > 0)
+    .map((selection, index) => {
+      const existingSelection = existingSelections.get(selection.id);
 
       return {
-        id: existingSelection?.id ?? `team-skill-selection-${option.id}`,
-        athleteId: option.athleteId,
-        sourceEvaluationId: option.sourceEvaluationId,
-        levelKey: option.levelKey,
-        skillName: option.skillName,
-        sourceOptionId: option.sourceOptionId,
-        isExtra: option.isExtra,
-        status: existingSelection?.status ?? "selected",
-        notes: existingSelection?.notes ?? ""
+        ...selection,
+        athleteId: selection.athleteId ?? existingSelection?.athleteId ?? null,
+        sourceEvaluationId: selection.sourceEvaluationId ?? existingSelection?.sourceEvaluationId ?? null,
+        sourceOptionId: selection.sourceOptionId ?? existingSelection?.sourceOptionId ?? null,
+        levelKey: selection.levelKey ?? existingSelection?.levelKey ?? null,
+        isExtra: typeof selection.isExtra === "boolean" ? selection.isExtra : (existingSelection?.isExtra ?? false),
+        sortOrder: typeof selection.sortOrder === "number" ? selection.sortOrder : index,
+        status: existingSelection?.status ?? selection.status ?? "selected",
+        notes: existingSelection?.notes ?? selection.notes ?? ""
       } satisfies TeamSkillSelection;
     });
 }
@@ -87,7 +57,7 @@ export function buildRoutineBuilderPersistedItems(team: RoutineBuilderTeamInput,
       return {
         id: existingItem?.id ?? `team-routine-item-${team.teamId}-${skill.skillSelectionId}`,
         skillSelectionId: skill.skillSelectionId,
-        athleteId: skill.athleteId,
+        athleteId: skill.athleteId ?? existingItem?.athleteId ?? null,
         sortOrder: index,
         status: existingItem?.status ?? "planned",
         notes: existingItem?.notes ?? ""

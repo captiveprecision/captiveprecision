@@ -1,18 +1,20 @@
 import { useEffect, useMemo, useState } from "react";
+import type { AthleteParentContact } from "@/lib/domain/athlete";
+import type { TeamSkillCategory, TeamSkillSelection } from "@/lib/domain/skill-plan";
 
 import { getSystemById, getVersionById } from "@/lib/scoring/scoring-systems";
 import { useScoringSystems } from "@/lib/scoring/use-scoring-systems";
 import { buildMyTeamsTeamSummaries } from "@/lib/services/planner-my-teams";
 import { buildRoutineBuilderTeamInputs, replaceTeamRoutinePlanItems } from "@/lib/services/planner-routine-builder";
 import { buildSeasonPlannerTeamInputs, replaceTeamSeasonPlanCheckpoints } from "@/lib/services/planner-season-planner";
-import { buildSkillPlannerTeamInputs, replaceTeamSkillPlanSelections } from "@/lib/services/planner-skill-planner";
+import { buildDefaultSkillPlannerSelections, buildSkillPlannerTeamInputs, replaceTeamSkillPlanSelections, type SkillPlannerTeamInput } from "@/lib/services/planner-skill-planner";
 import {
   buildRoutineBuilderDraftSkillSelectionIds,
   buildRoutineBuilderPersistedItems,
   buildSeasonPlannerAvailableCheckpoints,
   buildSeasonPlannerDraftCheckpointIds,
   buildSeasonPlannerPersistedCheckpoints,
-  buildSkillPlannerDraftSelectionOptionIds,
+  buildSkillPlannerDraftSelectionRows,
   buildSkillPlannerPersistedSelections
 } from "@/lib/services/planner-integration-adapters";
 import {
@@ -33,7 +35,9 @@ import {
   createPlannerTeamRecord,
   deletePlannerTeamRecord,
   removeAthleteFromPlannerTeam,
-  updatePlannerTeamDefinition
+  updateMyTeamsTeamProfile as updateMyTeamsTeamProfileState,
+  updatePlannerTeamDefinition,
+  type TeamBuilderTeamDraftInput
 } from "@/lib/services/planner-team-builder";
 import {
   LEVEL_KEYS,
@@ -66,16 +70,19 @@ export type PlannerSportTab = "tumbling" | "dance" | "jumps" | "stunts";
 export type AthleteDraftState = {
   athleteId: string | null;
   registrationNumber: string;
-  name: string;
+  firstName: string;
+  lastName: string;
   dateOfBirth: string;
-  sourceTeamName: string;
-  athleteNotes: string;
+  notes: string;
+  parentContacts: AthleteParentContact[];
 };
 
 export type TeamDraftState = {
   name: string;
   teamLevel: PlannerLevelLabel;
   teamType: string;
+  trainingSchedule: string;
+  assignedCoachNames: string[];
 };
 
 export type TeamEditState = {
@@ -100,7 +107,7 @@ export type PlannerStatItem = {
 
 type SkillPlannerDraftState = {
   teamId: string;
-  selectionOptionIds: string[];
+  selections: TeamSkillSelection[];
 } | null;
 
 type RoutineBuilderDraftState = {
@@ -129,14 +136,28 @@ function buildLevelEvaluations(template: PlannerTryoutTemplate): PlannerLevelEva
   return buildTryoutLevelEvaluations(template, LEVEL_KEYS, defaultSkillLibrary);
 }
 
+function buildAthleteName(firstName: string, lastName: string) {
+  return [firstName.trim(), lastName.trim()].filter(Boolean).join(" ").trim();
+}
+
+function buildEmptyParentContact(index = 0): AthleteParentContact {
+  return {
+    id: `parent-contact-${Date.now()}-${index + 1}-${Math.random().toString(36).slice(2, 8)}`,
+    name: "",
+    email: "",
+    phone: ""
+  };
+}
+
 function buildEmptyAthleteDraft(): AthleteDraftState {
   return {
     athleteId: null,
     registrationNumber: "",
-    name: "",
+    firstName: "",
+    lastName: "",
     dateOfBirth: "",
-    sourceTeamName: "",
-    athleteNotes: ""
+    notes: "",
+    parentContacts: [buildEmptyParentContact()]
   };
 }
 
@@ -176,8 +197,14 @@ export function buildFilteredAthletePool(
   if (search) {
     nextItems = nextItems.filter((athlete) => (
       athlete.name.toLowerCase().includes(search)
+      || athlete.firstName.toLowerCase().includes(search)
+      || athlete.lastName.toLowerCase().includes(search)
       || athlete.registrationNumber.toLowerCase().includes(search)
-      || athlete.sourceTeamName.toLowerCase().includes(search)
+      || athlete.parentContacts.some((contact) => (
+        contact.name.toLowerCase().includes(search)
+        || contact.email.toLowerCase().includes(search)
+        || contact.phone.toLowerCase().includes(search)
+      ))
       || athlete.assignedTeamName.toLowerCase().includes(search)
     ));
   }
@@ -247,7 +274,9 @@ export function useCheerPlannerIntegration() {
   const [teamDraft, setTeamDraft] = useState<TeamDraftState>({
     name: "",
     teamLevel: "Beginner",
-    teamType: "Youth"
+    teamType: "Youth",
+    trainingSchedule: "",
+    assignedCoachNames: [""]
   });
   const [teamEdit, setTeamEdit] = useState<TeamEditState>(null);
   const [skillPlannerDraft, setSkillPlannerDraft] = useState<SkillPlannerDraftState>(null);
@@ -366,11 +395,60 @@ export function useCheerPlannerIntegration() {
     setAthleteDraft((current) => ({ ...current, [field]: value }));
   };
 
+  const updateParentContact = (contactId: string, field: keyof Omit<AthleteParentContact, "id">, value: string) => {
+    setAthleteDraft((current) => ({
+      ...current,
+      parentContacts: current.parentContacts.map((contact) => (
+        contact.id === contactId ? { ...contact, [field]: value } : contact
+      ))
+    }));
+  };
+
+  const addParentContact = () => {
+    setAthleteDraft((current) => ({
+      ...current,
+      parentContacts: [...current.parentContacts, buildEmptyParentContact(current.parentContacts.length)]
+    }));
+  };
+
+  const removeParentContact = (contactId: string) => {
+    setAthleteDraft((current) => {
+      const remainingContacts = current.parentContacts.filter((contact) => contact.id !== contactId);
+      return {
+        ...current,
+        parentContacts: remainingContacts.length ? remainingContacts : [buildEmptyParentContact()]
+      };
+    });
+  };
+
   const startNewAthlete = () => {
     setAthleteDraft(buildEmptyAthleteDraft());
     setLevelsDraft(buildLevelEvaluations(plannerState.template));
     setOpenLevels([]);
     setSaveMessage("Ready for a new athlete.");
+  };
+
+  const loadRegisteredAthlete = (athleteId: string) => {
+    const athlete = plannerState.athletes.find((item) => item.id === athleteId) ?? null;
+
+    if (!athlete) {
+      setSaveMessage("Selected athlete could not be loaded.");
+      return;
+    }
+
+    setActiveSport("tumbling");
+    setAthleteDraft({
+      athleteId: athlete.id,
+      registrationNumber: athlete.registrationNumber,
+      firstName: athlete.firstName,
+      lastName: athlete.lastName,
+      dateOfBirth: athlete.dateOfBirth,
+      notes: athlete.notes,
+      parentContacts: athlete.parentContacts.length ? athlete.parentContacts.map((contact) => ({ ...contact })) : [buildEmptyParentContact()]
+    });
+    setLevelsDraft(buildLevelEvaluations(plannerState.template));
+    setOpenLevels([]);
+    setSaveMessage(`Loaded ${athlete.name}.`);
   };
 
   const updateTemplateOption = (index: number, field: "label" | "value", value: string) => {
@@ -482,16 +560,37 @@ export function useCheerPlannerIntegration() {
     )));
   };
 
+  const saveAthleteProfile = () => {
+    const trimmedName = buildAthleteName(athleteDraft.firstName, athleteDraft.lastName);
+
+    if (!trimmedName) {
+      setSaveMessage("Add first and last name before saving.");
+      return;
+    }
+
+    const occurredAt = new Date().toISOString();
+    const { athlete: athleteRecord, registrationNumber } = buildTryoutAthleteRecord(plannerState, athleteDraft, occurredAt);
+
+    persistState((current) => ({
+      ...current,
+      athletes: current.athletes.some((currentAthlete) => currentAthlete.id === athleteRecord.id)
+        ? current.athletes.map((currentAthlete) => currentAthlete.id === athleteRecord.id ? athleteRecord : currentAthlete)
+        : [athleteRecord, ...current.athletes]
+    }));
+    setAthleteDraft((current) => ({ ...current, athleteId: athleteRecord.id, registrationNumber }));
+    setSaveMessage(`Saved athlete ${athleteRecord.name}. Registration ${registrationNumber}.`);
+  };
+
   const saveEvaluation = () => {
     if (activeSport !== "tumbling") {
       setSaveMessage("Tumbling is the only active tryout track right now.");
       return;
     }
 
-    const trimmedName = athleteDraft.name.trim();
+    const trimmedName = buildAthleteName(athleteDraft.firstName, athleteDraft.lastName);
 
     if (!trimmedName) {
-      setSaveMessage("Add athlete name before saving.");
+      setSaveMessage("Add first and last name before saving.");
       return;
     }
 
@@ -521,10 +620,13 @@ export function useCheerPlannerIntegration() {
     setAthleteDraft({
       athleteId: evaluation.athleteId,
       registrationNumber: evaluation.athleteSnapshot?.registrationNumber ?? "",
-      name: evaluation.athleteSnapshot?.name ?? "",
+      firstName: evaluation.athleteSnapshot?.firstName ?? "",
+      lastName: evaluation.athleteSnapshot?.lastName ?? "",
       dateOfBirth: evaluation.athleteSnapshot?.dateOfBirth ?? "",
-      sourceTeamName: evaluation.athleteSnapshot?.sourceTeamName ?? evaluation.athleteSnapshot?.evaluationTeamName ?? "",
-      athleteNotes: evaluation.athleteSnapshot?.athleteNotes ?? ""
+      notes: evaluation.athleteSnapshot?.notes ?? evaluation.athleteSnapshot?.athleteNotes ?? "",
+      parentContacts: evaluation.athleteSnapshot?.parentContacts?.length
+        ? evaluation.athleteSnapshot.parentContacts.map((contact) => ({ ...contact }))
+        : [buildEmptyParentContact()]
     });
     setLevelsDraft(evaluation.rawData.levels.map((level) => ({
       ...level,
@@ -554,8 +656,56 @@ export function useCheerPlannerIntegration() {
       teams: [...current.teams, nextTeam]
     }));
     setCreateTeamOpen(false);
-    setTeamDraft({ name: "", teamLevel: "Beginner", teamType: "Youth" });
+    setTeamDraft({ name: "", teamLevel: "Beginner", teamType: "Youth", trainingSchedule: "", assignedCoachNames: [""] });
     setSaveMessage(`Created ${nextTeam.name}.`);
+  };
+
+  const startNewMyTeamsTeamDraft = () => {
+    setTeamDraft({ name: "", teamLevel: "Beginner", teamType: "Youth", trainingSchedule: "", assignedCoachNames: [""] });
+  };
+
+  const updateAssignedCoachName = (index: number, value: string) => {
+    setTeamDraft((current) => ({
+      ...current,
+      assignedCoachNames: current.assignedCoachNames.map((name, currentIndex) => currentIndex === index ? value : name)
+    }));
+  };
+
+  const addAssignedCoachName = () => {
+    setTeamDraft((current) => ({
+      ...current,
+      assignedCoachNames: [...current.assignedCoachNames, ""]
+    }));
+  };
+
+  const removeAssignedCoachName = (index: number) => {
+    setTeamDraft((current) => {
+      const nextCoachNames = current.assignedCoachNames.filter((_, currentIndex) => currentIndex !== index);
+      return {
+        ...current,
+        assignedCoachNames: nextCoachNames.length ? nextCoachNames : [""]
+      };
+    });
+  };
+
+  const saveMyTeamsTeamProfile = (draft: TeamBuilderTeamDraftInput) => {
+    const occurredAt = new Date().toISOString();
+    const nextTeam = createPlannerTeamRecord(plannerState, draft, occurredAt);
+
+    persistState((current) => ({
+      ...current,
+      teams: [...current.teams, nextTeam]
+    }));
+    setSaveMessage(`Created ${nextTeam.name}.`);
+    return nextTeam.id;
+  };
+
+  const updateMyTeamsTeamProfile = (teamId: string, draft: TeamBuilderTeamDraftInput) => {
+    persistState((current) => updateMyTeamsTeamProfileState(current, {
+      teamId,
+      ...draft
+    }, new Date().toISOString()));
+    setSaveMessage(`Updated ${draft.name.trim() || "team"}.`);
   };
 
   const assignToTeam = (athleteId: string, teamId: string) => {
@@ -637,7 +787,6 @@ export function useCheerPlannerIntegration() {
     setTeamEdit(null);
   };
 
-
   const openSkillPlannerTeam = (teamId: string) => {
     const team = skillPlannerTeams.find((item) => item.teamId === teamId) ?? null;
 
@@ -648,7 +797,7 @@ export function useCheerPlannerIntegration() {
 
     setSkillPlannerDraft({
       teamId,
-      selectionOptionIds: buildSkillPlannerDraftSelectionOptionIds(team)
+      selections: buildSkillPlannerDraftSelectionRows(team)
     });
   };
 
@@ -656,19 +805,79 @@ export function useCheerPlannerIntegration() {
     setSkillPlannerDraft(null);
   };
 
-  const toggleSkillPlannerOption = (optionId: string) => {
+  const updateSkillPlannerSelection = (selectionId: string, field: "skillName" | "levelLabel", value: string) => {
     setSkillPlannerDraft((current) => {
       if (!current) {
         return current;
       }
 
-      const selectionOptionIds = current.selectionOptionIds.includes(optionId)
-        ? current.selectionOptionIds.filter((currentOptionId) => currentOptionId !== optionId)
-        : [...current.selectionOptionIds, optionId];
+      return {
+        ...current,
+        selections: current.selections.map((selection) => (
+          selection.id === selectionId ? { ...selection, [field]: value } : selection
+        ))
+      };
+    });
+  };
+
+  const addSkillPlannerSelection = (category: TeamSkillCategory, groupIndex: number | null = null) => {
+    setSkillPlannerDraft((current) => {
+      if (!current) {
+        return current;
+      }
+
+      const categorySelections = current.selections.filter((selection) => (
+        selection.category === category && selection.groupIndex === groupIndex
+      ));
+      const nextSortOrder = categorySelections.length
+        ? Math.max(...categorySelections.map((selection) => selection.sortOrder)) + 1
+        : 0;
+      const nextSelection: TeamSkillSelection = {
+        id: `team-skill-selection-${current.teamId}-${category}-${groupIndex ?? "base"}-${Date.now()}-${nextSortOrder}`,
+        athleteId: null,
+        category,
+        groupIndex,
+        sortOrder: nextSortOrder,
+        sourceEvaluationId: null,
+        levelKey: null,
+        levelLabel: "",
+        skillName: "",
+        sourceOptionId: null,
+        isExtra: true,
+        status: "selected",
+        notes: ""
+      };
 
       return {
         ...current,
-        selectionOptionIds
+        selections: [...current.selections, nextSelection]
+      };
+    });
+  };
+
+  const removeSkillPlannerSelection = (selectionId: string) => {
+    setSkillPlannerDraft((current) => {
+      if (!current) {
+        return current;
+      }
+
+      const selectionToRemove = current.selections.find((selection) => selection.id === selectionId);
+
+      if (!selectionToRemove) {
+        return current;
+      }
+
+      const groupSelections = current.selections.filter((selection) => (
+        selection.category === selectionToRemove.category && selection.groupIndex === selectionToRemove.groupIndex
+      ));
+
+      if (groupSelections.length <= 1) {
+        return current;
+      }
+
+      return {
+        ...current,
+        selections: current.selections.filter((selection) => selection.id !== selectionId)
       };
     });
   };
@@ -680,7 +889,7 @@ export function useCheerPlannerIntegration() {
     }
 
     const occurredAt = new Date().toISOString();
-    const selections = buildSkillPlannerPersistedSelections(skillPlannerEditingTeam, skillPlannerDraft.selectionOptionIds);
+    const selections = buildSkillPlannerPersistedSelections(skillPlannerEditingTeam, skillPlannerDraft.selections);
 
     persistState((current) => replaceTeamSkillPlanSelections(current, {
       teamId: skillPlannerEditingTeam.teamId,
@@ -799,12 +1008,17 @@ export function useCheerPlannerIntegration() {
 
   return {
     plannerState,
+    athletePool,
     saveMessage,
     activeSport,
     setActiveSport,
     athleteDraft,
     updateAthleteDraft,
+    updateParentContact,
+    addParentContact,
+    removeParentContact,
     startNewAthlete,
+    loadRegisteredAthlete,
     levelsDraft,
     openLevels,
     toggleLevel,
@@ -812,6 +1026,13 @@ export function useCheerPlannerIntegration() {
     setSettingsOpen,
     summary,
     recentEvaluations,
+    saveAthleteProfile,
+    startNewMyTeamsTeamDraft,
+    updateAssignedCoachName,
+    addAssignedCoachName,
+    removeAssignedCoachName,
+    saveMyTeamsTeamProfile,
+    updateMyTeamsTeamProfile,
     saveEvaluation,
     loadEvaluation,
     updateTemplateOption,
@@ -838,7 +1059,9 @@ export function useCheerPlannerIntegration() {
     skillPlannerEditingTeam,
     openSkillPlannerTeam,
     cancelSkillPlannerEdit,
-    toggleSkillPlannerOption,
+    updateSkillPlannerSelection,
+    addSkillPlannerSelection,
+    removeSkillPlannerSelection,
     saveSkillPlannerEdit,
     skillPlannerTeams,
     routineBuilderDraft,
@@ -876,6 +1099,29 @@ export function useCheerPlannerIntegration() {
 }
 
 export type CheerPlannerIntegration = ReturnType<typeof useCheerPlannerIntegration>;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

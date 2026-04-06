@@ -1,4 +1,4 @@
-import type { AthleteRecord, AthleteSnapshot } from "@/lib/domain/athlete";
+import type { AthleteRecord, AthleteSnapshot, AthleteParentContact } from "@/lib/domain/athlete";
 import type { EvaluationRecord, PlannerTryoutTemplate } from "@/lib/domain/evaluation-record";
 import { LEVEL_KEYS, type PlannerLevelKey, type PlannerLevelLabel, type PlannerQualifiedLevel } from "@/lib/domain/planner-levels";
 import type { PlannerProject, PlannerQualificationRules } from "@/lib/domain/planner-project";
@@ -16,6 +16,41 @@ function normalizeSkillCounts(defaultSkillCounts: PlannerTryoutTemplate["default
   return Object.fromEntries(LEVEL_KEYS.map((levelKey) => [levelKey, Number(defaultSkillCounts[levelKey] ?? 0)])) as Record<PlannerLevelKey, number>;
 }
 
+function buildAthleteName(firstName: string, lastName: string) {
+  return [firstName.trim(), lastName.trim()].filter(Boolean).join(" ").trim();
+}
+
+function splitLegacyAthleteName(name: string) {
+  const trimmed = name.trim();
+
+  if (!trimmed) {
+    return { firstName: "", lastName: "" };
+  }
+
+  const [firstName, ...rest] = trimmed.split(/\s+/);
+  return {
+    firstName,
+    lastName: rest.join(" ")
+  };
+}
+
+function normalizeParentContact(raw: Partial<AthleteParentContact>, index: number): AthleteParentContact {
+  return {
+    id: raw.id ?? `parent-contact-${index + 1}`,
+    name: raw.name ?? "",
+    email: raw.email ?? "",
+    phone: raw.phone ?? ""
+  };
+}
+
+function normalizeParentContacts(raw: unknown): AthleteParentContact[] {
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+
+  return raw.map((item, index) => normalizeParentContact((item ?? {}) as Partial<AthleteParentContact>, index));
+}
+
 // Legacy local records sometimes only stored registration numbers. This fallback keeps them readable until real persistence owns ids.
 function buildLegacyAthleteId(registrationNumber: string) {
   return `athlete-${registrationNumber.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "unknown"}`;
@@ -23,45 +58,74 @@ function buildLegacyAthleteId(registrationNumber: string) {
 
 export function normalizePlannerAthlete(raw: Partial<AthleteRecord> & { registrationNumber: string }): AthleteRecord {
   const now = raw.updatedAt ?? raw.createdAt ?? new Date().toISOString();
+  const legacyNames = splitLegacyAthleteName(raw.name ?? "");
+  const firstName = raw.firstName ?? legacyNames.firstName;
+  const lastName = raw.lastName ?? legacyNames.lastName;
+  const name = raw.name ?? buildAthleteName(firstName, lastName);
+  const notes = raw.notes ?? raw.athleteNotes ?? "";
+
   return {
     id: raw.id ?? buildLegacyAthleteId(raw.registrationNumber),
     workspaceId: raw.workspaceId ?? DEFAULT_WORKSPACE_ID,
     registrationNumber: raw.registrationNumber,
-    name: raw.name ?? "",
+    firstName,
+    lastName,
+    name,
     dateOfBirth: raw.dateOfBirth ?? "",
-    sourceTeamName: raw.sourceTeamName ?? "",
-    athleteNotes: raw.athleteNotes ?? "",
+    notes,
+    parentContacts: normalizeParentContacts(raw.parentContacts),
     status: raw.status ?? "active",
     createdAt: raw.createdAt ?? now,
-    updatedAt: raw.updatedAt ?? now
+    updatedAt: raw.updatedAt ?? now,
+    sourceTeamName: raw.sourceTeamName,
+    athleteNotes: raw.athleteNotes ?? notes
   };
 }
 
-export function normalizeAthleteSnapshot(raw: Partial<AthleteSnapshot> & { registrationNumber: string; name: string }): AthleteSnapshot {
+export function normalizeAthleteSnapshot(raw: Partial<AthleteSnapshot> & { registrationNumber: string; name?: string }): AthleteSnapshot {
   const capturedAt = raw.capturedAt ?? new Date().toISOString();
+  const legacyNames = splitLegacyAthleteName(raw.name ?? "");
+  const firstName = raw.firstName ?? legacyNames.firstName;
+  const lastName = raw.lastName ?? legacyNames.lastName;
+  const name = raw.name ?? buildAthleteName(firstName, lastName);
+  const notes = raw.notes ?? raw.athleteNotes ?? "";
+
   return {
     athleteId: raw.athleteId ?? buildLegacyAthleteId(raw.registrationNumber),
     registrationNumber: raw.registrationNumber,
-    name: raw.name,
+    firstName,
+    lastName,
+    name,
     dateOfBirth: raw.dateOfBirth ?? "",
-    sourceTeamName: raw.sourceTeamName ?? raw.evaluationTeamName ?? (raw as AthleteSnapshot & { teamName?: string }).teamName ?? "",
-    evaluationTeamName: raw.evaluationTeamName ?? (raw as AthleteSnapshot & { teamName?: string }).teamName ?? raw.sourceTeamName ?? "",
-    athleteNotes: raw.athleteNotes ?? "",
-    capturedAt
+    notes,
+    parentContacts: normalizeParentContacts(raw.parentContacts),
+    capturedAt,
+    sourceTeamName: raw.sourceTeamName,
+    evaluationTeamName: raw.evaluationTeamName ?? raw.sourceTeamName,
+    athleteNotes: raw.athleteNotes ?? notes
   };
 }
 
 export function normalizePlannerTeam(raw: Partial<TeamRecord> & { id: string; name: string; teamLevel: PlannerLevelLabel; teamType: string }): TeamRecord {
   const now = raw.updatedAt ?? raw.createdAt ?? new Date().toISOString();
+  const trainingDays = raw.trainingDays ?? "";
+  const trainingHours = raw.trainingHours ?? "";
+  const trainingSchedule = raw.trainingSchedule ?? [trainingDays, trainingHours].filter(Boolean).join(" / ");
+
   return {
     id: raw.id,
     workspaceId: raw.workspaceId ?? DEFAULT_WORKSPACE_ID,
+    remoteTeamId: raw.remoteTeamId ?? "",
     name: raw.name,
     teamLevel: raw.teamLevel,
     teamType: raw.teamType,
-    // Canonical roster linkage.
+    teamDivision: raw.teamDivision ?? "",
+    trainingDays,
+    trainingHours,
+    trainingSchedule,
+    assignedCoachNames: Array.isArray(raw.assignedCoachNames) ? raw.assignedCoachNames.filter((value): value is string => typeof value === "string") : [],
+    linkedCoachIds: Array.isArray(raw.linkedCoachIds) ? raw.linkedCoachIds.filter((value): value is string => typeof value === "string") : [],
     memberAthleteIds: Array.isArray(raw.memberAthleteIds) ? [...raw.memberAthleteIds] : [],
-    // Transitional compatibility for older planner-local records only.
     memberRegistrationNumbers: Array.isArray(raw.memberRegistrationNumbers) ? [...raw.memberRegistrationNumbers] : [],
     status: raw.status ?? "draft",
     createdAt: raw.createdAt ?? now,
@@ -73,7 +137,7 @@ export function normalizePlannerEvaluation(
   raw: Omit<Partial<EvaluationRecord>, "athleteSnapshot" | "rawData" | "resultSummary"> & {
     id: string;
     athleteRegistrationNumber: string | null;
-    athleteSnapshot?: (Partial<AthleteSnapshot> & { registrationNumber: string; name: string }) | null;
+    athleteSnapshot?: (Partial<AthleteSnapshot> & { registrationNumber: string; name?: string }) | null;
     rawData?: EvaluationRecord["rawData"];
     resultSummary?: EvaluationRecord["resultSummary"];
     templateId?: string;
@@ -115,7 +179,6 @@ export function normalizePlannerEvaluation(
     status: raw.status ?? "active",
     athleteId,
     athleteRegistrationNumber,
-    // Optional planner context lives here; the record remains a shared evaluation entity.
     plannerProjectId: raw.plannerProjectId ?? PROJECT_ID,
     plannerStage: raw.plannerStage ?? "tryouts",
     athleteSnapshot: raw.athleteSnapshot
@@ -150,10 +213,19 @@ export function normalizePlannerEvaluation(
 }
 
 function normalizeTeamSkillSelections(selections: TeamSkillSelection[] = []): TeamSkillSelection[] {
-  return selections.map((selection) => ({
+  return selections.map((selection, index) => ({
     ...selection,
+    athleteId: selection.athleteId ?? null,
+    category: selection.category ?? "stunts",
+    groupIndex: selection.groupIndex ?? null,
+    sortOrder: typeof selection.sortOrder === "number" ? selection.sortOrder : index,
     sourceEvaluationId: selection.sourceEvaluationId ?? null,
+    levelKey: selection.levelKey ?? null,
+    levelLabel: selection.levelLabel ?? "",
+    skillName: selection.skillName ?? "",
     sourceOptionId: selection.sourceOptionId ?? null,
+    isExtra: Boolean(selection.isExtra),
+    status: selection.status ?? "selected",
     notes: selection.notes ?? ""
   }));
 }
@@ -326,3 +398,4 @@ export function canAssignQualifiedLevelToTeam(qualifiedLevel: PlannerQualifiedLe
 
   return getPlannerLevelRank(qualifiedLevel) >= getPlannerLevelRank(teamLevel);
 }
+
