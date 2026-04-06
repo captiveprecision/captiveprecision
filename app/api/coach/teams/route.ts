@@ -299,3 +299,55 @@ export async function PATCH(request: NextRequest) {
 
 
 
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const { error, user, profile } = await getApprovedProfile();
+
+    if (error || !user || !profile) {
+      return error!;
+    }
+
+    const payload = await request.json().catch(() => null) as ({ teamId?: string } & Record<string, unknown>) | null;
+    const remoteTeamId = normalizeText(payload?.teamId);
+
+    if (!remoteTeamId) {
+      return NextResponse.json({ error: "A linked team id is required to delete this team." }, { status: 400 });
+    }
+
+    const admin = createAdminClient();
+    const { data: currentTeamData, error: currentTeamError } = await admin
+      .from("teams" as never)
+      .select("id, gym_id, primary_coach_profile_id" as never)
+      .eq("id", remoteTeamId as never)
+      .maybeSingle();
+
+    const currentTeam = currentTeamData as { id: string; gym_id: string | null; primary_coach_profile_id: string | null } | null;
+
+    if (currentTeamError || !currentTeam) {
+      return NextResponse.json({ error: "The linked workspace team could not be found." }, { status: 404 });
+    }
+
+    const canDelete = currentTeam.gym_id
+      ? currentTeam.gym_id === (profile.primary_gym_id ?? null)
+      : currentTeam.primary_coach_profile_id === profile.id;
+
+    if (!canDelete) {
+      return NextResponse.json({ error: "You do not have access to delete this team." }, { status: 403 });
+    }
+
+    const { error: deleteError } = await admin
+      .from("teams" as never)
+      .delete()
+      .eq("id", remoteTeamId as never);
+
+    if (deleteError) {
+      return NextResponse.json({ error: deleteError.message }, { status: 500 });
+    }
+
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unexpected team delete failure.";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}

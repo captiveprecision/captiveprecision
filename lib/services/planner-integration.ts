@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import type { AthleteParentContact } from "@/lib/domain/athlete";
+import type { AthleteParentContact, AthleteRecord } from "@/lib/domain/athlete";
 import type { TeamSkillCategory, TeamSkillSelection } from "@/lib/domain/skill-plan";
 
 import { getSystemById, getVersionById } from "@/lib/scoring/scoring-systems";
 import { useScoringSystems } from "@/lib/scoring/use-scoring-systems";
 import { buildMyTeamsTeamSummaries } from "@/lib/services/planner-my-teams";
+import { mergeRemoteFoundationIntoProject } from "@/lib/services/planner-supabase-foundation";
 import { buildRoutineBuilderTeamInputs, replaceTeamRoutinePlanItems } from "@/lib/services/planner-routine-builder";
 import { buildSeasonPlannerTeamInputs, replaceTeamSeasonPlanCheckpoints } from "@/lib/services/planner-season-planner";
 import { buildDefaultSkillPlannerSelections, buildSkillPlannerTeamInputs, replaceTeamSkillPlanSelections, type SkillPlannerTeamInput } from "@/lib/services/planner-skill-planner";
@@ -256,6 +257,80 @@ export function hydratePlannerProjectScoringContext(
   return hydrateTryoutScoringContext(project, scoringContext);
 }
 
+async function fetchRemoteFoundation() {
+  const response = await fetch("/api/planner/foundation", {
+    credentials: "include"
+  });
+  const result = await response.json().catch(() => null) as { athletes?: AthleteRecord[]; teams?: PlannerTeamRecord[]; error?: string } | null;
+
+  if (!response.ok || !result?.athletes || !result?.teams) {
+    throw new Error(result?.error ?? "Unable to load Supabase planner data.");
+  }
+
+  return {
+    athletes: result.athletes,
+    teams: result.teams
+  };
+}
+
+async function syncRemoteAthleteRecord(athlete: AthleteRecord) {
+  const response = await fetch("/api/coach/athletes", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    credentials: "include",
+    body: JSON.stringify({
+      athleteId: athlete.id,
+      firstName: athlete.firstName,
+      lastName: athlete.lastName,
+      dateOfBirth: athlete.dateOfBirth,
+      registrationNumber: athlete.registrationNumber,
+      notes: athlete.notes,
+      parentContacts: athlete.parentContacts
+    })
+  });
+  const result = await response.json().catch(() => null) as { athleteId?: string; error?: string } | null;
+
+  if (!response.ok || !result?.athleteId) {
+    throw new Error(result?.error ?? "Unable to save athlete to Supabase.");
+  }
+
+  return result.athleteId;
+}
+
+async function syncRemoteRoster(action: "assign" | "remove" | "clear", teamId: string, athleteId?: string) {
+  const response = await fetch("/api/coach/teams/roster", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    credentials: "include",
+    body: JSON.stringify({ action, teamId, athleteId })
+  });
+  const result = await response.json().catch(() => null) as { error?: string } | null;
+
+  if (!response.ok) {
+    throw new Error(result?.error ?? "Unable to update Supabase roster.");
+  }
+}
+
+async function deleteRemoteTeamRecord(teamId: string) {
+  const response = await fetch("/api/coach/teams", {
+    method: "DELETE",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    credentials: "include",
+    body: JSON.stringify({ teamId })
+  });
+  const result = await response.json().catch(() => null) as { error?: string } | null;
+
+  if (!response.ok) {
+    throw new Error(result?.error ?? "Unable to delete Supabase team.");
+  }
+}
+
 export function useCheerPlannerIntegration() {
   const [plannerState, setPlannerState] = useState<CheerPlannerState>(cloneCheerPlannerState(defaultCheerPlannerState));
   const [activeSport, setActiveSport] = useState<PlannerSportTab>("tumbling");
@@ -289,6 +364,17 @@ export function useCheerPlannerIntegration() {
     const state = readPlannerProject();
     setPlannerState(state);
     setLevelsDraft(buildLevelEvaluations(state.template));
+
+    void (async () => {
+      try {
+        const snapshot = await fetchRemoteFoundation();
+        const nextState = mergeRemoteFoundationIntoProject(state, snapshot);
+        setPlannerState(nextState);
+        writePlannerProject(nextState);
+      } catch {
+        // Keep local compatibility state when Supabase data is temporarily unavailable.
+      }
+    })();
   }, []);
 
   useEffect(() => {
@@ -386,6 +472,16 @@ export function useCheerPlannerIntegration() {
         ...updater(current),
         updatedAt: new Date().toISOString()
       };
+      writePlannerProject(next);
+      return next;
+    });
+  };
+
+  const refreshRemoteFoundation = async () => {
+    const snapshot = await fetchRemoteFoundation();
+
+    setPlannerState((current) => {
+      const next = mergeRemoteFoundationIntoProject(current, snapshot);
       writePlannerProject(next);
       return next;
     });
@@ -560,12 +656,12 @@ export function useCheerPlannerIntegration() {
     )));
   };
 
-  const saveAthleteProfile = () => {
+  const saveAthleteProfile = async () => {
     const trimmedName = buildAthleteName(athleteDraft.firstName, athleteDraft.lastName);
 
     if (!trimmedName) {
       setSaveMessage("Add first and last name before saving.");
-      return;
+      return false;
     }
 
     const occurredAt = new Date().toISOString();
@@ -577,11 +673,20 @@ export function useCheerPlannerIntegration() {
         ? current.athletes.map((currentAthlete) => currentAthlete.id === athleteRecord.id ? athleteRecord : currentAthlete)
         : [athleteRecord, ...current.athletes]
     }));
-    setAthleteDraft((current) => ({ ...current, athleteId: athleteRecord.id, registrationNumber }));
-    setSaveMessage(`Saved athlete ${athleteRecord.name}. Registration ${registrationNumber}.`);
+
+    try {
+      await syncRemoteAthleteRecord(athleteRecord);
+      await refreshRemoteFoundation();
+      setAthleteDraft((current) => ({ ...current, athleteId: athleteRecord.id, registrationNumber }));
+      setSaveMessage(`Saved athlete ${athleteRecord.name}. Registration ${registrationNumber}.`);
+      return true;
+    } catch (error) {
+      setSaveMessage(error instanceof Error ? error.message : "Athlete saved locally, but Supabase sync failed.");
+      return false;
+    }
   };
 
-  const saveEvaluation = () => {
+  const saveEvaluation = async () => {
     if (activeSport !== "tumbling") {
       setSaveMessage("Tumbling is the only active tryout track right now.");
       return;
@@ -611,8 +716,15 @@ export function useCheerPlannerIntegration() {
     });
 
     persistState((current) => applyTryoutSaveToPlannerProject(current, athleteRecord, nextEvaluation));
-    setAthleteDraft((current) => ({ ...current, athleteId: athleteRecord.id, registrationNumber }));
-    setSaveMessage(`Saved evaluation for ${athleteRecord.name}. Registration ${registrationNumber}.`);
+
+    try {
+      await syncRemoteAthleteRecord(athleteRecord);
+      await refreshRemoteFoundation();
+      setAthleteDraft((current) => ({ ...current, athleteId: athleteRecord.id, registrationNumber }));
+      setSaveMessage(`Saved evaluation for ${athleteRecord.name}. Registration ${registrationNumber}.`);
+    } catch (error) {
+      setSaveMessage(error instanceof Error ? error.message : "Evaluation saved locally, but athlete sync failed.");
+    }
   };
 
   const loadEvaluation = (evaluation: PlannerTryoutEvaluation) => {
@@ -647,17 +759,60 @@ export function useCheerPlannerIntegration() {
     }));
   };
 
-  const createTeam = () => {
-    const now = new Date().toISOString();
-    const nextTeam = createPlannerTeamRecord(plannerState, teamDraft, now);
+  const createTeam = async () => {
+    const normalizedTeamType = teamDraft.teamType.trim();
 
-    persistState((current) => ({
-      ...current,
-      teams: [...current.teams, nextTeam]
-    }));
-    setCreateTeamOpen(false);
-    setTeamDraft({ name: "", teamLevel: "Beginner", teamType: "Youth", trainingSchedule: "", assignedCoachNames: [""] });
-    setSaveMessage(`Created ${nextTeam.name}.`);
+    if (!["Tiny", "Mini", "Youth", "Junior", "Senior", "Open"].includes(normalizedTeamType)) {
+      setSaveMessage("Team Builder creates Supabase teams with a valid age category: Tiny, Mini, Youth, Junior, Senior, or Open.");
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/coach/teams", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          name: teamDraft.name,
+          teamLevel: teamDraft.teamLevel,
+          teamType: normalizedTeamType,
+          teamDivision: "Elite",
+          trainingDays: "",
+          trainingHours: "",
+          coachAssignments: []
+        })
+      });
+      const result = await response.json().catch(() => null) as { teamId?: string; assignedCoachNames?: string[]; linkedCoachIds?: string[]; error?: string } | null;
+
+      if (!response.ok || !result?.teamId) {
+        setSaveMessage(result?.error ?? "Unable to create the team in Supabase.");
+        return;
+      }
+
+      const now = new Date().toISOString();
+      const nextTeam = createPlannerTeamRecord(plannerState, {
+        name: teamDraft.name,
+        teamLevel: teamDraft.teamLevel,
+        teamType: normalizedTeamType,
+        teamDivision: "Elite",
+        assignedCoachNames: result.assignedCoachNames ?? [],
+        linkedCoachIds: result.linkedCoachIds ?? [],
+        remoteTeamId: result.teamId
+      }, now);
+
+      persistState((current) => ({
+        ...current,
+        teams: [...current.teams, nextTeam]
+      }));
+      await refreshRemoteFoundation();
+      setCreateTeamOpen(false);
+      setTeamDraft({ name: "", teamLevel: "Beginner", teamType: "Youth", trainingSchedule: "", assignedCoachNames: [""] });
+      setSaveMessage(`Created ${nextTeam.name}.`);
+    } catch (error) {
+      setSaveMessage(error instanceof Error ? error.message : "Unable to create the team in Supabase.");
+    }
   };
 
   const startNewMyTeamsTeamDraft = () => {
@@ -696,6 +851,7 @@ export function useCheerPlannerIntegration() {
       ...current,
       teams: [...current.teams, nextTeam]
     }));
+    void refreshRemoteFoundation().catch(() => undefined);
     setSaveMessage(`Created ${nextTeam.name}.`);
     return nextTeam.id;
   };
@@ -705,10 +861,11 @@ export function useCheerPlannerIntegration() {
       teamId,
       ...draft
     }, new Date().toISOString()));
+    void refreshRemoteFoundation().catch(() => undefined);
     setSaveMessage(`Updated ${draft.name.trim() || "team"}.`);
   };
 
-  const assignToTeam = (athleteId: string, teamId: string) => {
+  const assignToTeam = async (athleteId: string, teamId: string) => {
     const athlete = athleteMapById.get(athleteId);
     const team = teamMap.get(teamId);
 
@@ -725,26 +882,75 @@ export function useCheerPlannerIntegration() {
     }
 
     persistState((current) => assignAthleteToPlannerTeam(current, athlete, teamId, new Date().toISOString()));
-    setSaveMessage(`Assigned ${athlete.name} to ${team.name}.`);
+
+    try {
+      await syncRemoteAthleteRecord(athlete);
+      await syncRemoteRoster("assign", team.remoteTeamId || team.id, athlete.id);
+      await refreshRemoteFoundation();
+      setSaveMessage(`Assigned ${athlete.name} to ${team.name}.`);
+    } catch (error) {
+      setSaveMessage(error instanceof Error ? error.message : "Roster saved locally, but Supabase sync failed.");
+    }
   };
 
-  const removeFromTeam = (athleteId: string, teamId: string) => {
+  const removeFromTeam = async (athleteId: string, teamId: string) => {
     const athlete = athleteMapById.get(athleteId);
+    const team = teamMap.get(teamId);
 
-    if (!athlete) {
+    if (!athlete || !team) {
       setSaveMessage("Athlete record was not found.");
       return;
     }
 
     persistState((current) => removeAthleteFromPlannerTeam(current, athlete, teamId, new Date().toISOString()));
+
+    try {
+      await syncRemoteRoster("remove", team.remoteTeamId || team.id, athlete.id);
+      await refreshRemoteFoundation();
+      setSaveMessage(`Removed ${athlete.name} from ${team.name}.`);
+    } catch (error) {
+      setSaveMessage(error instanceof Error ? error.message : "Roster updated locally, but Supabase sync failed.");
+    }
   };
 
-  const clearTeam = (teamId: string) => {
+  const clearTeam = async (teamId: string) => {
+    const team = teamMap.get(teamId);
+
+    if (!team) {
+      setSaveMessage("Team record was not found.");
+      return;
+    }
+
     persistState((current) => clearPlannerTeamRoster(current, teamId, new Date().toISOString()));
+
+    try {
+      await syncRemoteRoster("clear", team.remoteTeamId || team.id);
+      await refreshRemoteFoundation();
+      setSaveMessage(`Cleared ${team.name} roster.`);
+    } catch (error) {
+      setSaveMessage(error instanceof Error ? error.message : "Roster cleared locally, but Supabase sync failed.");
+    }
   };
 
-  const deleteTeam = (teamId: string) => {
+  const deleteTeam = async (teamId: string) => {
+    const team = teamMap.get(teamId);
+
+    if (!team) {
+      setSaveMessage("Team record was not found.");
+      return;
+    }
+
     persistState((current) => deletePlannerTeamRecord(current, teamId));
+
+    try {
+      if (team.remoteTeamId || /^[0-9a-f-]{36}$/i.test(team.id)) {
+        await deleteRemoteTeamRecord(team.remoteTeamId || team.id);
+      }
+      await refreshRemoteFoundation();
+      setSaveMessage(`Deleted ${team.name}.`);
+    } catch (error) {
+      setSaveMessage(error instanceof Error ? error.message : "Team deleted locally, but Supabase sync failed.");
+    }
   };
 
   const openTeamEdit = (team: PlannerTeamRecord) => {
@@ -756,7 +962,7 @@ export function useCheerPlannerIntegration() {
     });
   };
 
-  const confirmTeamEdit = () => {
+  const confirmTeamEdit = async () => {
     if (!teamEdit) {
       return;
     }
@@ -783,8 +989,39 @@ export function useCheerPlannerIntegration() {
     }
 
     persistState((current) => updatePlannerTeamDefinition(current, teamEdit, new Date().toISOString()));
-    setSaveMessage(`Updated ${teamEdit.name.trim() || currentTeam.name}.`);
-    setTeamEdit(null);
+
+    try {
+      if (currentTeam.remoteTeamId || /^[0-9a-f-]{36}$/i.test(currentTeam.id)) {
+        const response = await fetch("/api/coach/teams", {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          credentials: "include",
+          body: JSON.stringify({
+            teamId: currentTeam.remoteTeamId || currentTeam.id,
+            name: teamEdit.name,
+            teamLevel: teamEdit.teamLevel,
+            teamType: teamEdit.teamType,
+            teamDivision: currentTeam.teamDivision || "Elite",
+            trainingDays: currentTeam.trainingDays || "",
+            trainingHours: currentTeam.trainingHours || "",
+            coachAssignments: (currentTeam.linkedCoachIds ?? []).map((coachId) => ({ selectedCoachId: coachId }))
+          })
+        });
+        const result = await response.json().catch(() => null) as { error?: string } | null;
+
+        if (!response.ok) {
+          throw new Error(result?.error ?? "Unable to update the team in Supabase.");
+        }
+      }
+
+      await refreshRemoteFoundation();
+      setSaveMessage(`Updated ${teamEdit.name.trim() || currentTeam.name}.`);
+      setTeamEdit(null);
+    } catch (error) {
+      setSaveMessage(error instanceof Error ? error.message : "Team updated locally, but Supabase sync failed.");
+    }
   };
 
   const openSkillPlannerTeam = (teamId: string) => {
@@ -1099,6 +1336,23 @@ export function useCheerPlannerIntegration() {
 }
 
 export type CheerPlannerIntegration = ReturnType<typeof useCheerPlannerIntegration>;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

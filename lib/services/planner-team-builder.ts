@@ -73,7 +73,7 @@ export function createPlannerTeamRecord(
   const legacyTrainingSchedule = draft.trainingSchedule?.trim() ?? [trainingDays, trainingHours].filter(Boolean).join(" / ");
 
   return {
-    id: `team-${Date.now()}`,
+    id: draft.remoteTeamId?.trim() || `team-${Date.now()}`,
     workspaceId: project.workspaceId,
     remoteTeamId: draft.remoteTeamId?.trim() ?? "",
     name: draft.name.trim() || `Team ${project.teams.length + 1}`,
@@ -207,3 +207,4 @@ export function updatePlannerTeamDefinition(
     ))
   };
 }
+

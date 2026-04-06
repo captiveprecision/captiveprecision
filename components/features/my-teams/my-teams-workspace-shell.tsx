@@ -37,8 +37,13 @@ export function MyTeamsWorkspaceShell({ coachOptions }: { coachOptions: LinkedCo
     setEditingAthleteId(null);
   };
 
-  const handleSaveAthlete = () => {
-    integration.saveAthleteProfile();
+  const handleSaveAthlete = async () => {
+    const saved = await integration.saveAthleteProfile();
+
+    if (!saved) {
+      return;
+    }
+
     setCreateAthleteOpen(false);
     setEditingAthleteId(integration.athleteDraft.athleteId);
   };
@@ -172,7 +177,7 @@ export function MyTeamsWorkspaceShell({ coachOptions }: { coachOptions: LinkedCo
                   </div>
 
                   <div className="planner-inline-actions">
-                    <Button type="button" onClick={handleSaveAthlete}>
+                    <Button type="button" onClick={() => void handleSaveAthlete()}>
                       Save athlete
                     </Button>
                     <Button type="button" variant="secondary" onClick={closeAthleteForm}>
@@ -210,4 +215,6 @@ export function MyTeamsWorkspaceShell({ coachOptions }: { coachOptions: LinkedCo
     </main>
   );
 }
+
+
 
