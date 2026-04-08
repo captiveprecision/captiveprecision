@@ -15,7 +15,7 @@ const MY_TEAMS_TABS: Array<{ value: MyTeamsTab; label: string }> = [
 ];
 
 export function MyTeamsWorkspaceShell({ coachOptions }: { coachOptions: LinkedCoachOption[] }) {
-  const integration = useCheerPlannerIntegration();
+  const integration = useCheerPlannerIntegration("coach");
   const [tab, setTab] = useState<MyTeamsTab>("teams");
   const [createAthleteOpen, setCreateAthleteOpen] = useState(false);
   const [editingAthleteId, setEditingAthleteId] = useState<string | null>(null);

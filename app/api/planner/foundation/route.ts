@@ -1,17 +1,18 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
-import { getAuthSession } from "@/lib/auth/session";
 import { listRemotePlannerFoundation } from "@/lib/services/planner-supabase-foundation";
+import { getPlannerScopeContext, requirePlannerSession } from "@/lib/services/planner-api-access";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const session = await getAuthSession();
+    const { session, error } = await requirePlannerSession();
 
-    if (!session || !session.roles.includes("coach")) {
-      return NextResponse.json({ error: "Authentication is required." }, { status: 401 });
+    if (error || !session) {
+      return error!;
     }
 
-    const snapshot = await listRemotePlannerFoundation(session);
+    const scope = getPlannerScopeContext(request, session);
+    const snapshot = await listRemotePlannerFoundation(session, scope.scope);
     return NextResponse.json(snapshot);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to load planner foundation data.";

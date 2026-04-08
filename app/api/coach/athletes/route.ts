@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { getAuthSession } from "@/lib/auth/session";
-import { createAdminClient } from "@/lib/supabase/admin";
 import type { AthleteParentContact } from "@/lib/domain/athlete";
+import { buildPlannerAthleteFromRow } from "@/lib/services/planner-supabase-foundation";
+import { getEditableAthleteRow, getPlannerScopeContext, requirePlannerSession } from "@/lib/services/planner-api-access";
+import { isUuidString, type PlannerWorkspaceScope } from "@/lib/services/planner-workspace";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 type AthletePayload = {
   athleteId?: string;
@@ -12,6 +14,7 @@ type AthletePayload = {
   registrationNumber?: string;
   notes?: string;
   parentContacts?: AthleteParentContact[];
+  scope?: PlannerWorkspaceScope;
 };
 
 function asString(value: unknown) {
@@ -39,15 +42,42 @@ function normalizeParentContacts(value: unknown): AthleteParentContact[] {
   });
 }
 
+async function findExistingAthleteByRegistration(
+  registrationNumber: string,
+  scope: ReturnType<typeof getPlannerScopeContext>,
+  userId: string
+) {
+  if (!registrationNumber) {
+    return null;
+  }
+
+  const admin = createAdminClient();
+  let query = admin
+    .from("athletes" as never)
+    .select("*" as never)
+    .eq("registration_number", registrationNumber as never)
+    .limit(1);
+
+  if (scope.scopeType === "gym") {
+    query = query.eq("gym_id", (scope.gymId ?? null) as never);
+  } else {
+    query = query.eq("created_by_profile_id", userId as never);
+  }
+
+  const { data } = await query.maybeSingle();
+  return data as Awaited<ReturnType<typeof getEditableAthleteRow>>;
+}
+
 async function saveAthlete(request: NextRequest) {
   try {
-    const session = await getAuthSession();
+    const { session, error } = await requirePlannerSession();
 
-    if (!session || !session.roles.includes("coach")) {
-      return NextResponse.json({ error: "Authentication is required." }, { status: 401 });
+    if (error || !session) {
+      return error!;
     }
 
     const payload = await request.json().catch(() => null) as AthletePayload | null;
+    const scope = getPlannerScopeContext(request, session, payload?.scope ?? null);
     const firstName = asString(payload?.firstName);
     const lastName = asString(payload?.lastName);
     const athleteId = asString(payload?.athleteId);
@@ -61,30 +91,57 @@ async function saveAthlete(request: NextRequest) {
     }
 
     const admin = createAdminClient();
-    const nextAthleteId = athleteId || crypto.randomUUID();
-    const metadata = {
-      registrationNumber,
-      notes,
-      parentContacts,
-      createdByProfileId: session.userId
-    };
+    const editableAthlete = isUuidString(athleteId)
+      ? await getEditableAthleteRow(athleteId, session, scope)
+      : null;
 
-    const { error } = await admin
-      .from("athletes" as never)
-      .upsert({
-        id: nextAthleteId,
-        gym_id: session.primaryGymId,
-        first_name: firstName,
-        last_name: lastName,
-        birth_date: dateOfBirth || null,
-        metadata
-      } as never, { onConflict: "id" as never });
-
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+    if (athleteId && isUuidString(athleteId) && !editableAthlete) {
+      return NextResponse.json({ error: "You do not have access to edit this athlete." }, { status: 403 });
     }
 
-    return NextResponse.json({ athleteId: nextAthleteId });
+    const matchedAthlete = editableAthlete ?? await findExistingAthleteByRegistration(registrationNumber, scope, session.userId);
+    const persistencePayload = {
+      gym_id: scope.scopeType === "gym" ? (scope.gymId ?? session.primaryGymId ?? null) : null,
+      created_by_profile_id: session.userId,
+      first_name: firstName,
+      last_name: lastName,
+      birth_date: dateOfBirth || null,
+      registration_number: registrationNumber || null,
+      notes,
+      parent_contacts: parentContacts,
+      metadata: {
+        registrationNumber,
+        notes,
+        parentContacts,
+        createdByProfileId: session.userId
+      }
+    };
+
+    const query = matchedAthlete
+      ? admin
+          .from("athletes" as never)
+          .update(persistencePayload as never)
+          .eq("id", matchedAthlete.id as never)
+          .select("*" as never)
+          .single()
+      : admin
+          .from("athletes" as never)
+          .insert(persistencePayload as never)
+          .select("*" as never)
+          .single();
+
+    const { data, error: writeError } = await query;
+
+    if (writeError || !data) {
+      if (writeError?.code === "42703" || writeError?.code === "42P01") {
+        return NextResponse.json({ error: "Supabase athlete columns are missing. Run migration 006_planner_remote_persistence.sql first." }, { status: 409 });
+      }
+
+      return NextResponse.json({ error: writeError?.message ?? "Unable to save athlete." }, { status: 500 });
+    }
+
+    const athlete = buildPlannerAthleteFromRow(data, scope.workspaceId);
+    return NextResponse.json({ athleteId: athlete.id, athlete });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to save athlete.";
     return NextResponse.json({ error: message }, { status: 500 });

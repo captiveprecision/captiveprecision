@@ -28,24 +28,82 @@ export type Database = {
         Row: {
           birth_date: string | null;
           created_at: string;
+          created_by_profile_id: string | null;
           first_name: string;
           gym_id: string | null;
           id: string;
           last_name: string;
           metadata: Json;
+          notes: string;
+          parent_contacts: Json;
+          registration_number: string | null;
           updated_at: string;
         };
         Insert: {
           birth_date?: string | null;
           created_at?: string;
+          created_by_profile_id?: string | null;
           first_name: string;
           gym_id?: string | null;
           id?: string;
           last_name: string;
           metadata?: Json;
+          notes?: string;
+          parent_contacts?: Json;
+          registration_number?: string | null;
           updated_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["athletes"]["Insert"]>;
+      };
+      planner_evaluations: {
+        Row: {
+          athlete_id: string;
+          created_at: string;
+          id: string;
+          occurred_at: string | null;
+          planner_project_id: string;
+          record: Json;
+          updated_at: string;
+        };
+        Insert: {
+          athlete_id: string;
+          created_at?: string;
+          id: string;
+          occurred_at?: string | null;
+          planner_project_id: string;
+          record?: Json;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["planner_evaluations"]["Insert"]>;
+      };
+      planner_projects: {
+        Row: {
+          created_at: string;
+          gym_id: string | null;
+          id: string;
+          name: string;
+          owner_profile_id: string | null;
+          pipeline_stage: string;
+          qualification_rules: Json;
+          scope_type: string;
+          status: string;
+          template: Json;
+          updated_at: string;
+        };
+        Insert: {
+          created_at?: string;
+          gym_id?: string | null;
+          id: string;
+          name: string;
+          owner_profile_id?: string | null;
+          pipeline_stage?: string;
+          qualification_rules?: Json;
+          scope_type: string;
+          status?: string;
+          template?: Json;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["planner_projects"]["Insert"]>;
       };
       gym_coach_licenses: {
         Row: {
@@ -256,6 +314,52 @@ export type Database = {
           team_id: string;
         };
         Update: Partial<Database["public"]["Tables"]["team_coaches"]["Insert"]>;
+      };
+      team_season_plans: {
+        Row: {
+          checkpoints: Json;
+          created_at: string;
+          id: string;
+          notes: string;
+          planner_project_id: string;
+          status: string;
+          team_id: string;
+          updated_at: string;
+        };
+        Insert: {
+          checkpoints?: Json;
+          created_at?: string;
+          id?: string;
+          notes?: string;
+          planner_project_id: string;
+          status?: string;
+          team_id: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["team_season_plans"]["Insert"]>;
+      };
+      team_skill_plans: {
+        Row: {
+          created_at: string;
+          id: string;
+          notes: string;
+          planner_project_id: string;
+          selections: Json;
+          status: string;
+          team_id: string;
+          updated_at: string;
+        };
+        Insert: {
+          created_at?: string;
+          id?: string;
+          notes?: string;
+          planner_project_id: string;
+          selections?: Json;
+          status?: string;
+          team_id: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["team_skill_plans"]["Insert"]>;
       };
       teams: {
         Row: {

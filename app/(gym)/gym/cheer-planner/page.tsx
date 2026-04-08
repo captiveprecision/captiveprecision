@@ -1,5 +1,5 @@
 import { CheerPlannerTryouts } from "@/components/tools/cheer-planner-tryouts";
 
 export default function GymCheerPlannerPage() {
-  return <CheerPlannerTryouts />;
+  return <CheerPlannerTryouts scope="gym" />;
 }

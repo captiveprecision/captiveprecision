@@ -1,6 +1,6 @@
 create table if not exists public.team_routine_plans (
   id uuid primary key default gen_random_uuid(),
-  team_id uuid not null unique references public.teams(id) on delete cascade,
+  team_id uuid not null references public.teams(id) on delete cascade,
   planner_project_id text not null,
   status text not null default 'draft',
   notes text not null default '',
@@ -9,6 +9,9 @@ create table if not exists public.team_routine_plans (
   updated_at timestamptz not null default timezone('utc'::text, now()),
   constraint team_routine_plans_status_check check (status in ('draft', 'approved', 'archived'))
 );
+
+create unique index if not exists idx_team_routine_plans_project_team
+  on public.team_routine_plans (planner_project_id, team_id);
 
 create index if not exists idx_team_routine_plans_team_id
   on public.team_routine_plans (team_id);

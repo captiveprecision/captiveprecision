@@ -19,6 +19,7 @@ type TeamBuilderSurfaceProps = {
   qualificationRules: CheerPlannerIntegration["plannerState"]["qualificationRules"];
   levelLabelsList: readonly PlannerLevelLabel[];
   updateQualificationRule: (levelLabel: PlannerLevelLabel, value: string) => void;
+  saveQualificationRules: () => void;
   createTeamOpen: boolean;
   setCreateTeamOpen: Dispatch<SetStateAction<boolean>>;
   teamDraft: TeamDraftState;
@@ -52,6 +53,7 @@ export function TeamBuilderSurface(props: TeamBuilderSurfaceProps) {
     qualificationRules,
     levelLabelsList,
     updateQualificationRule,
+    saveQualificationRules,
     createTeamOpen,
     setCreateTeamOpen,
     teamDraft,
@@ -114,7 +116,7 @@ export function TeamBuilderSurface(props: TeamBuilderSurfaceProps) {
                     ))}
                   </div>
                   <div className="planner-inline-actions">
-                    <Button onClick={() => setQualificationOpen(false)}>Save changes</Button>
+                    <Button onClick={saveQualificationRules}>Save changes</Button>
                   </div>
                 </div>
               ) : null}

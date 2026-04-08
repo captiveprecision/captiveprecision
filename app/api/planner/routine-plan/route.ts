@@ -1,16 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { getAuthSession } from "@/lib/auth/session";
+import type { TeamRoutinePlanStatus } from "@/lib/domain/routine-plan";
 import { normalizeTeamRoutinePlan } from "@/lib/services/planner-domain-mappers";
 import { deriveRoutineItemsFromDocument, normalizeRoutineDocument } from "@/lib/services/planner-routine-builder";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getPlannerScopeContext, requirePlannerSession, canEditTeamForSession } from "@/lib/services/planner-api-access";
+import { ensurePlannerProjectRow } from "@/lib/services/planner-supabase-foundation";
 
 type RoutinePlanPayload = {
   teamId?: string;
-  plannerProjectId?: string;
   status?: "draft" | "approved" | "archived";
   notes?: string;
   document?: unknown;
+  scope?: "coach" | "gym";
 };
 
 function asString(value: unknown) {
@@ -21,111 +23,77 @@ function isRoutinePlanStatus(value: unknown): value is "draft" | "approved" | "a
   return value === "draft" || value === "approved" || value === "archived";
 }
 
-async function canEditTeam(teamId: string, session: Awaited<ReturnType<typeof getAuthSession>>) {
-  if (!session) {
-    return false;
-  }
-
-  if (session.role === "admin") {
-    return true;
-  }
-
-  const admin = createAdminClient();
-  const { data: teamData } = await admin
-    .from("teams" as never)
-    .select("id, gym_id, primary_coach_profile_id" as never)
-    .eq("id", teamId as never)
-    .maybeSingle();
-
-  const team = teamData as { id: string; gym_id: string | null; primary_coach_profile_id: string | null } | null;
-
-  if (!team) {
-    return false;
-  }
-
-  if (team.gym_id) {
-    return team.gym_id === (session.primaryGymId ?? null);
-  }
-
-  if (team.primary_coach_profile_id === session.userId) {
-    return true;
-  }
-
-  const { data: linkedCoach } = await admin
-    .from("team_coaches" as never)
-    .select("id" as never)
-    .eq("team_id", teamId as never)
-    .eq("coach_profile_id", session.userId as never)
-    .maybeSingle();
-
-  return Boolean(linkedCoach);
-}
-
 export async function POST(request: NextRequest) {
   try {
-    const session = await getAuthSession();
+    const { session, error } = await requirePlannerSession();
 
-    if (!session || !session.roles.includes("coach")) {
-      return NextResponse.json({ error: "Authentication is required." }, { status: 401 });
+    if (error || !session) {
+      return error!;
     }
 
     const payload = await request.json().catch(() => null) as RoutinePlanPayload | null;
+    const scope = getPlannerScopeContext(request, session, payload?.scope ?? null);
+    const currentProject = await ensurePlannerProjectRow(scope);
+
+    if (!currentProject) {
+      return NextResponse.json({ error: "Supabase planner tables are missing. Run migration 006_planner_remote_persistence.sql first." }, { status: 409 });
+    }
+
     const teamId = asString(payload?.teamId);
-    const plannerProjectId = asString(payload?.plannerProjectId) || "default-cheer-planner-project";
     const notes = asString(payload?.notes);
-    const status = isRoutinePlanStatus(payload?.status) ? payload?.status : "draft";
+    const status = isRoutinePlanStatus(payload?.status) ? payload.status : "draft";
 
     if (!teamId) {
       return NextResponse.json({ error: "A team id is required to save a routine plan." }, { status: 400 });
     }
 
-    if (!(await canEditTeam(teamId, session))) {
+    if (!(await canEditTeamForSession(teamId, session, scope))) {
       return NextResponse.json({ error: "You do not have access to edit this routine plan." }, { status: 403 });
     }
 
     const document = normalizeRoutineDocument(payload?.document as Parameters<typeof normalizeRoutineDocument>[0], "Untitled routine");
     const admin = createAdminClient();
-    const { data, error } = await admin
+    const { data, error: upsertError } = await admin
       .from("team_routine_plans" as never)
       .upsert({
         team_id: teamId,
-        planner_project_id: plannerProjectId,
+        planner_project_id: scope.projectId,
         status,
         notes,
         document
-      } as never, { onConflict: "team_id" })
+      } as never, { onConflict: "planner_project_id,team_id" as never })
       .select("*" as never)
       .single();
 
-    if (error || !data) {
-      if (error?.code === "42P01") {
-        return NextResponse.json({ error: "Supabase routine plans table is missing. Run migration 005_team_routine_plans.sql first." }, { status: 409 });
+    if (upsertError || !data) {
+      if (upsertError?.code === "42P01") {
+        return NextResponse.json({ error: "Supabase routine plans table is missing. Run migrations 005_team_routine_plans.sql and 007_planner_plan_scope_indexes.sql first." }, { status: 409 });
       }
 
-      return NextResponse.json({ error: error?.message ?? "Unable to save the routine plan." }, { status: 500 });
+      return NextResponse.json({ error: upsertError?.message ?? "Unable to save the routine plan." }, { status: 500 });
     }
 
-    const record = data as {
+    const row = data as {
       id: string;
-      team_id: string;
       planner_project_id: string;
-      status: string;
+      team_id: string;
+      status: TeamRoutinePlanStatus;
       notes: string;
-      document: unknown;
       created_at: string;
       updated_at: string;
     };
 
     const normalizedPlan = normalizeTeamRoutinePlan({
-      id: record.id,
-      teamId: record.team_id,
-      plannerProjectId: record.planner_project_id,
-      status: record.status as "draft" | "approved" | "archived",
-      notes: record.notes,
+      id: row.id,
+      workspaceId: scope.workspaceId,
+      plannerProjectId: row.planner_project_id,
+      teamId: row.team_id,
+      status: row.status,
+      notes: row.notes,
       document,
       items: deriveRoutineItemsFromDocument(document),
-      createdAt: record.created_at,
-      updatedAt: record.updated_at
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
     });
 
     return NextResponse.json({ routinePlan: normalizedPlan });

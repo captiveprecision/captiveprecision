@@ -1,7 +1,5 @@
 "use client";
 
-import { useState } from "react";
-
 import { RoutineBuilderSurface } from "@/components/features/cheer-planner/routine-builder/routine-builder-surface";
 import { SeasonPlannerSurface } from "@/components/features/cheer-planner/season-planner/season-planner-surface";
 import { TeamBuilderSurface } from "@/components/features/cheer-planner/team-builder/team-builder-surface";
@@ -28,7 +26,7 @@ type CheerPlannerShellProps = {
 };
 
 export function CheerPlannerShell({ integration }: CheerPlannerShellProps) {
-  const [workspaceTab, setWorkspaceTab] = useState<PlannerPipelineStage>("tryouts");
+  const workspaceTab = integration.plannerState.pipelineStage;
 
   return (
     <main className="workspace-shell page-stack planner-shell">
@@ -46,7 +44,7 @@ export function CheerPlannerShell({ integration }: CheerPlannerShellProps) {
                   value={workspaceTab}
                   onValueChange={(value) => {
                     if (isPlannerWorkspaceTab(value)) {
-                      setWorkspaceTab(value);
+                      void integration.setPipelineStage(value);
                     }
                   }}
                   ariaLabel="Cheer planner workspace"
@@ -90,7 +88,7 @@ export function CheerPlannerShell({ integration }: CheerPlannerShellProps) {
           saveEvaluation={integration.saveEvaluation}
           recentEvaluations={integration.recentEvaluations}
           loadEvaluation={(evaluation) => {
-            setWorkspaceTab("tryouts");
+            void integration.setPipelineStage("tryouts");
             integration.loadEvaluation(evaluation);
           }}
           getRecentAthleteLabel={integration.getRecentAthleteLabel}
@@ -107,11 +105,9 @@ export function CheerPlannerShell({ integration }: CheerPlannerShellProps) {
           qualificationRules={integration.plannerState.qualificationRules}
           levelLabelsList={integration.levelLabelsList}
           updateQualificationRule={integration.updateQualificationRule}
+          saveQualificationRules={integration.saveQualificationRules}
           createTeamOpen={integration.createTeamOpen}
-          setCreateTeamOpen={(value) => {
-            setWorkspaceTab("team-builder");
-            integration.setCreateTeamOpen(value);
-          }}
+          setCreateTeamOpen={integration.setCreateTeamOpen}
           teamDraft={integration.teamDraft}
           setTeamDraft={integration.setTeamDraft}
           createTeam={integration.createTeam}
@@ -168,5 +164,3 @@ export function CheerPlannerShell({ integration }: CheerPlannerShellProps) {
     </main>
   );
 }
-
-

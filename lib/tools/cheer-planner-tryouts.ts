@@ -32,6 +32,15 @@ import {
 } from "@/lib/services/planner-domain-mappers";
 
 export const CHEER_PLANNER_TRYOUTS_STORAGE_KEY = "cp-cheer-planner-tryouts";
+export const CHEER_PLANNER_REMOTE_MIGRATION_VERSION = "v1";
+
+export function buildCheerPlannerStorageKey(scopeKey?: string) {
+  return scopeKey ? `${CHEER_PLANNER_TRYOUTS_STORAGE_KEY}:${scopeKey}` : CHEER_PLANNER_TRYOUTS_STORAGE_KEY;
+}
+
+export function buildCheerPlannerMigrationKey(scopeKey?: string) {
+  return `${buildCheerPlannerStorageKey(scopeKey)}:remote-migration`;
+}
 
 export {
   LEVEL_KEYS,
@@ -155,13 +164,13 @@ export function getPlannerLevelRank(level: PlannerLevelLabel) {
   return LEVEL_RANKS[level];
 }
 
-export function readCheerPlannerState(): CheerPlannerState {
+export function readCheerPlannerStateFromStorage(storageKey: string): CheerPlannerState {
   if (typeof window === "undefined") {
     return cloneCheerPlannerState(defaultCheerPlannerState);
   }
 
   try {
-    const raw = window.localStorage.getItem(CHEER_PLANNER_TRYOUTS_STORAGE_KEY);
+    const raw = window.localStorage.getItem(storageKey);
 
     if (!raw) {
       return cloneCheerPlannerState(defaultCheerPlannerState);
@@ -174,10 +183,19 @@ export function readCheerPlannerState(): CheerPlannerState {
   }
 }
 
-export function writeCheerPlannerState(state: CheerPlannerState) {
+export function writeCheerPlannerStateToStorage(storageKey: string, state: CheerPlannerState) {
   if (typeof window === "undefined") {
     return;
   }
 
-  window.localStorage.setItem(CHEER_PLANNER_TRYOUTS_STORAGE_KEY, JSON.stringify(state));
+  window.localStorage.setItem(storageKey, JSON.stringify(state));
+}
+
+
+export function readCheerPlannerState(): CheerPlannerState {
+  return readCheerPlannerStateFromStorage(buildCheerPlannerStorageKey());
+}
+
+export function writeCheerPlannerState(state: CheerPlannerState) {
+  writeCheerPlannerStateToStorage(buildCheerPlannerStorageKey(), state);
 }
