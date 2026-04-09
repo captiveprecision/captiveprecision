@@ -1,21 +1,32 @@
-import type { Route } from "next";
+﻿import type { Route } from "next";
+import {
+  Building2,
+  Calculator,
+  CalendarDays,
+  ClipboardCheck,
+  ClipboardList,
+  LayoutDashboard,
+  MessageSquare,
+  Settings,
+  UserRound
+} from "lucide-react";
 
 import { WorkspaceSidebar } from "@/components/navigation/workspace-sidebar";
 import type { AppRole } from "@/lib/auth/session";
 
 const gymNavItems = [
-  { href: "/gym" as Route, title: "Dashboard", shortLabel: "D" },
-  { href: "/gym/cheer-planner" as Route, title: "Cheer Planner", shortLabel: "C" },
-  { href: "/gym/manage-my-gym" as Route, title: "Manage My Gym", shortLabel: "G" },
-  { href: "/gym/profile" as Route, title: "Profile", shortLabel: "P" },
-  { href: "/gym/messages" as Route, title: "Messages", shortLabel: "M" },
-  { href: "/gym/events" as Route, title: "Events", shortLabel: "E" },
-  { href: "/gym/settings" as Route, title: "Settings", shortLabel: "S" }
+  { href: "/gym" as Route, title: "Dashboard", icon: LayoutDashboard },
+  { href: "/gym/cheer-planner" as Route, title: "Cheer Planner", icon: ClipboardList },
+  { href: "/gym/manage-my-gym" as Route, title: "Manage My Gym", icon: Building2 },
+  { href: "/gym/profile" as Route, title: "Profile", icon: UserRound },
+  { href: "/gym/messages" as Route, title: "Messages", icon: MessageSquare },
+  { href: "/gym/events" as Route, title: "Events", icon: CalendarDays },
+  { href: "/gym/settings" as Route, title: "Settings", icon: Settings }
 ];
 
 const gymToolItems = [
-  { href: "/gym/tools/cheer-score-calculator" as Route, title: "Cheer Score", shortLabel: "C" },
-  { href: "/gym/tools/full-out-evaluator" as Route, title: "Execution Evaluator", shortLabel: "F" }
+  { href: "/gym/tools/cheer-score-calculator" as Route, title: "Cheer Score", icon: Calculator },
+  { href: "/gym/tools/full-out-evaluator" as Route, title: "Execution Evaluator", icon: ClipboardCheck }
 ];
 
 function getGymReleaseLabel() {

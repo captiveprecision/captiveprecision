@@ -1,5 +1,6 @@
-"use client";
+﻿"use client";
 
+import { Pencil, Trash2 } from "lucide-react";
 import type { Dispatch, SetStateAction } from "react";
 
 import { Badge, Button, Card, CardContent, EmptyState, Input, SectionHeader, Select } from "@/components/ui";
@@ -96,7 +97,7 @@ export function TeamBuilderSurface(props: TeamBuilderSurfaceProps) {
                 eyebrow="Qualification rules"
                 title="Current Thresholds"
                 actions={
-                  <Button variant="ghost" size="sm" onClick={() => setQualificationOpen(true)}>
+                  <Button variant="ghost" size="sm" leadingIcon={<Pencil />} onClick={() => setQualificationOpen(true)}>
                     Edit
                   </Button>
                 }
@@ -322,13 +323,13 @@ export function TeamBuilderSurface(props: TeamBuilderSurfaceProps) {
                           <Badge variant="subtle">{team.members.length} athletes</Badge>
                         </div>
                         <div className="planner-inline-actions">
-                          <Button variant="ghost" size="sm" onClick={() => openTeamEdit(team)}>
+                          <Button variant="ghost" size="sm" leadingIcon={<Pencil />} onClick={() => openTeamEdit(team)}>
                             Edit Team
                           </Button>
                           <Button variant="ghost" size="sm" onClick={() => clearTeam(team.id)}>
                             Clear Roster
                           </Button>
-                          <Button variant="danger" size="sm" onClick={() => deleteTeam(team.id)}>
+                          <Button variant="ghost" size="sm" leadingIcon={<Trash2 />} onClick={() => deleteTeam(team.id)}>
                             Delete Team
                           </Button>
                         </div>
@@ -342,7 +343,7 @@ export function TeamBuilderSurface(props: TeamBuilderSurfaceProps) {
                                     {member.registrationNumber} / {member.displayLevel}
                                   </p>
                                 </div>
-                                <Button variant="ghost" size="sm" onClick={() => removeFromTeam(member.id, team.id)}>
+                                <Button variant="ghost" size="sm" leadingIcon={<Trash2 />} onClick={() => removeFromTeam(member.id, team.id)}>
                                   Remove
                                 </Button>
                               </div>
@@ -371,5 +372,7 @@ export function TeamBuilderSurface(props: TeamBuilderSurfaceProps) {
     </div>
   );
 }
+
+
 
 

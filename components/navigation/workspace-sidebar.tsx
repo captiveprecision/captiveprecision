@@ -1,10 +1,21 @@
-"use client";
+﻿"use client";
 
 import Image from "next/image";
 import type { Route } from "next";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type ChangeEvent } from "react";
+import {
+  ChevronDown,
+  ChevronRight,
+  LogOut,
+  Menu,
+  PanelLeftClose,
+  PanelLeftOpen,
+  type LucideIcon,
+  Wrench,
+  X
+} from "lucide-react";
 
 import { Badge, Button } from "@/components/ui";
 import type { AppRole } from "@/lib/auth/session";
@@ -13,7 +24,7 @@ import { cn } from "@/lib/utils/cn";
 type NavItem = {
   href: Route;
   title: string;
-  shortLabel: string;
+  icon: LucideIcon;
 };
 
 type SidebarProps = {
@@ -59,6 +70,8 @@ function SidebarLink({
   collapsed: boolean;
   onNavigate: () => void;
 }) {
+  const Icon = item.icon;
+
   return (
     <Link
       href={item.href}
@@ -69,7 +82,7 @@ function SidebarLink({
       title={collapsed ? item.title : undefined}
     >
       <span className="nav-bullet" aria-hidden="true">
-        {item.shortLabel}
+        <Icon />
       </span>
       <span className="nav-title">{item.title}</span>
     </Link>
@@ -108,6 +121,7 @@ export function WorkspaceSidebar({
   }, [toolsActive]);
 
   const handleNavigate = () => setMobileOpen(false);
+
   const handleLogout = async () => {
     try {
       await fetch(logoutHref, { method: "POST" });
@@ -125,6 +139,7 @@ export function WorkspaceSidebar({
     setMobileOpen(false);
     router.push(`/${nextWorkspace}` as Route);
   };
+
   const itemsBeforeTools = toolItems ? navItems.slice(0, 3) : navItems;
   const itemsAfterTools = toolItems ? navItems.slice(3) : [];
 
@@ -138,6 +153,7 @@ export function WorkspaceSidebar({
         data-open={mobileOpen}
         aria-label={mobileOpen ? "Close menu" : "Open menu"}
         aria-expanded={mobileOpen}
+        leadingIcon={<Menu />}
         onClick={() => setMobileOpen((value) => !value)}
       >
         Menu
@@ -181,27 +197,23 @@ export function WorkspaceSidebar({
                 type="button"
                 variant="ghost"
                 size="sm"
+                iconOnly
                 className="mobile-header-close"
                 aria-label="Close menu"
+                leadingIcon={<X />}
                 onClick={() => setMobileOpen(false)}
-              >
-                <span className="sidebar-toggle-glyph" aria-hidden="true">
-                  X
-                </span>
-              </Button>
+              />
 
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
+                iconOnly
                 className="sidebar-toggle"
                 onClick={() => setCollapsed((value) => !value)}
                 aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-              >
-                <span className="sidebar-toggle-glyph" aria-hidden="true">
-                  {collapsed ? ">" : "<"}
-                </span>
-              </Button>
+                leadingIcon={collapsed ? <PanelLeftOpen /> : <PanelLeftClose />}
+              />
             </div>
           </div>
 
@@ -209,7 +221,7 @@ export function WorkspaceSidebar({
 
           {showWorkspaceSwitcher ? (
             <div className="sidebar-workspaces" aria-label="Workspace switcher">
-              <span className="metric-label">Workspace access</span>
+              <span className="metric-label">Workspace Access</span>
               <select
                 className="ui-select sidebar-workspace-select"
                 value={currentWorkspace}
@@ -254,15 +266,19 @@ export function WorkspaceSidebar({
                   aria-expanded={toolsOpen}
                   title={collapsed ? "Tools" : undefined}
                 >
+                  <span className="nav-bullet" aria-hidden="true">
+                    <Wrench />
+                  </span>
                   <span className="nav-title">Tools</span>
                   <span className="sidebar-tools-arrow" aria-hidden="true">
-                    {toolsOpen ? "-" : "+"}
+                    {toolsOpen ? <ChevronDown /> : <ChevronRight />}
                   </span>
                 </button>
 
                 <div className="sidebar-submenu">
                   {toolItems.map((item) => {
                     const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+                    const Icon = item.icon;
 
                     return (
                       <Link
@@ -274,7 +290,7 @@ export function WorkspaceSidebar({
                         title={collapsed ? item.title : undefined}
                       >
                         <span className="sidebar-sublink-bullet" aria-hidden="true">
-                          {item.shortLabel}
+                          <Icon />
                         </span>
                         <span>{item.title}</span>
                       </Link>
@@ -311,16 +327,19 @@ export function WorkspaceSidebar({
                 href={secondaryActionHref}
                 className={cn("ui-button", "ui-button--secondary", "ui-button--sm", "sidebar-secondary-action")}
               >
-                {secondaryActionLabel}
+                <span className="ui-button__label">{secondaryActionLabel}</span>
               </a>
             ) : null}
-            <button
+            <Button
               type="button"
-              className={cn("ui-button", "ui-button--ghost", "ui-button--sm", "sidebar-logout")}
+              variant="ghost"
+              size="sm"
+              className="sidebar-logout"
+              leadingIcon={<LogOut />}
               onClick={handleLogout}
             >
-              Log out
-            </button>
+              Log Out
+            </Button>
           </div>
         </div>
       </aside>

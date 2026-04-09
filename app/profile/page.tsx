@@ -1,3 +1,4 @@
+﻿import { Pencil } from "lucide-react";
 import { Badge, ButtonLink, Card, DetailGrid, PageColumns, PageMainColumn, PageSideColumn, PageHero, StatGrid } from "@/components/ui";
 
 const teams = ["Senior Elite", "Junior Level 2", "Open Coed Prep"];
@@ -25,7 +26,7 @@ export default function ProfilePage() {
               <p className="profile-meta">Miami, Florida, 12 years in cheer development</p>
             </div>
 
-            <ButtonLink variant="secondary" href="/profile/edit">Edit profile</ButtonLink>
+            <ButtonLink variant="ghost" href="/profile/edit" leadingIcon={<Pencil />}>Edit Profile</ButtonLink>
           </div>
         </div>
       </Card>
@@ -134,3 +135,4 @@ export default function ProfilePage() {
     </main>
   );
 }
+

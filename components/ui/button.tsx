@@ -1,4 +1,4 @@
-﻿import { forwardRef, type ButtonHTMLAttributes } from "react";
+﻿import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from "react";
 
 import { cn } from "@/lib/utils/cn";
 
@@ -8,10 +8,23 @@ type ButtonSize = "sm" | "md" | "lg";
 export type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: ButtonVariant;
   size?: ButtonSize;
+  leadingIcon?: ReactNode;
+  trailingIcon?: ReactNode;
+  iconOnly?: boolean;
 };
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
-  { className, variant = "primary", size = "md", type = "button", ...props },
+  {
+    children,
+    className,
+    variant = "primary",
+    size = "md",
+    type = "button",
+    leadingIcon,
+    trailingIcon,
+    iconOnly = false,
+    ...props
+  },
   ref
 ) {
   return (
@@ -22,9 +35,22 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
         "ui-button",
         `ui-button--${variant}`,
         size !== "md" && `ui-button--${size}`,
+        iconOnly && "ui-button--icon-only",
         className
       )}
       {...props}
-    />
+    >
+      {leadingIcon ? (
+        <span className="ui-button__icon" aria-hidden="true">
+          {leadingIcon}
+        </span>
+      ) : null}
+      {children ? <span className="ui-button__label">{children}</span> : null}
+      {trailingIcon ? (
+        <span className="ui-button__icon" aria-hidden="true">
+          {trailingIcon}
+        </span>
+      ) : null}
+    </button>
   );
 });

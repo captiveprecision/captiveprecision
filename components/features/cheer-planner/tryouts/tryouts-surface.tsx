@@ -1,5 +1,6 @@
 ﻿"use client";
 
+import { Pencil, Trash2 } from "lucide-react";
 import { useMemo, useState, type Dispatch, type SetStateAction } from "react";
 
 import { Badge, Button, Card, CardContent, EmptyState, Input, SectionHeader, Select, Tabs, Textarea } from "@/components/ui";
@@ -247,7 +248,7 @@ export function TryoutsSurface(props: TryoutsSurfaceProps) {
                         <CardContent className="planner-panel-stack">
                           <div className="planner-inline-actions planner-parent-contact-card__head">
                             <strong>Contact {index + 1}</strong>
-                            <Button type="button" variant="ghost" size="sm" onClick={() => removeParentContact(contact.id)}>
+                            <Button type="button" variant="ghost" size="sm" leadingIcon={<Trash2 />} onClick={() => removeParentContact(contact.id)}>
                               Remove
                             </Button>
                           </div>
@@ -302,7 +303,7 @@ export function TryoutsSurface(props: TryoutsSurfaceProps) {
                   eyebrow="Template"
                   title="Tryout Settings"
                   actions={
-                    <Button variant="ghost" size="sm" onClick={() => setSettingsOpen((current) => !current)}>
+                    <Button variant="ghost" size="sm" leadingIcon={settingsOpen ? undefined : <Pencil />} onClick={() => setSettingsOpen((current) => !current)}>
                       {settingsOpen ? "Hide" : "Edit"}
                     </Button>
                   }
@@ -422,7 +423,7 @@ export function TryoutsSurface(props: TryoutsSurfaceProps) {
                                       </option>
                                     ))}
                                   </Select>
-                                  <Button type="button" variant="ghost" onClick={() => removeSkill(level.levelKey, skill.id)}>
+                                  <Button type="button" variant="ghost" leadingIcon={<Trash2 />} onClick={() => removeSkill(level.levelKey, skill.id)}>
                                     Remove
                                   </Button>
                                 </div>
@@ -492,3 +493,6 @@ export function TryoutsSurface(props: TryoutsSurfaceProps) {
     </div>
   );
 }
+
+
+

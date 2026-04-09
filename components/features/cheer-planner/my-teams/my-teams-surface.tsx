@@ -1,5 +1,6 @@
-"use client";
+﻿"use client";
 
+import { Pencil, Trash2 } from "lucide-react";
 import { useState } from "react";
 
 import { Badge, Button, Card, CardContent, EmptyState, Input, SectionHeader, Select } from "@/components/ui";
@@ -331,7 +332,7 @@ export function MyTeamsSurface({ teams, coachOptions, saveMyTeamsTeamProfile, up
                       <CardContent className="planner-panel-stack">
                         <div className="planner-inline-actions planner-parent-contact-card__head">
                           <strong>Coach {index + 1}</strong>
-                          <Button type="button" variant="ghost" size="sm" onClick={() => removeCoachAssignment(index)}>
+                          <Button type="button" variant="ghost" size="sm" leadingIcon={<Trash2 />} onClick={() => removeCoachAssignment(index)}>
                             Remove
                           </Button>
                         </div>
@@ -418,6 +419,7 @@ export function MyTeamsSurface({ teams, coachOptions, saveMyTeamsTeamProfile, up
                           type="button"
                           variant="ghost"
                           size="sm"
+                          leadingIcon={<Pencil />}
                           onClick={(event) => {
                             event.stopPropagation();
                             openEditTeam(team);
@@ -509,3 +511,5 @@ export function MyTeamsSurface({ teams, coachOptions, saveMyTeamsTeamProfile, up
     </div>
   );
 }
+
+

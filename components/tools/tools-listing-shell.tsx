@@ -1,3 +1,5 @@
+﻿import { ArrowUpRight } from "lucide-react";
+
 import {
   Badge,
   ButtonLink,
@@ -79,7 +81,7 @@ export function ToolsListingShell({
                       </div>
                       {tool.href ? (
                         <div className="tools-card__actions">
-                          <ButtonLink href={tool.href} variant="secondary">
+                          <ButtonLink href={tool.href} variant="secondary" trailingIcon={<ArrowUpRight />}>
                             {tool.actionLabel ?? "Open tool"}
                           </ButtonLink>
                         </div>

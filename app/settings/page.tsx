@@ -1,3 +1,4 @@
+﻿import { Pencil } from "lucide-react";
 import { Badge, Button, ButtonLink, Card, DetailGrid, PageColumns, PageHero, PageMainColumn, PageSideColumn } from "@/components/ui";
 
 const notificationItems = [
@@ -35,7 +36,7 @@ export default function SettingsPage() {
         eyebrow="Settings"
         title="Platform settings"
         description="This is a more realistic product shell for profile controls, membership management, notifications, and future preferences."
-        actions={<ButtonLink variant="secondary" href="/profile/edit">Edit profile</ButtonLink>}
+        actions={<ButtonLink variant="ghost" href="/profile/edit" leadingIcon={<Pencil />}>Edit Profile</ButtonLink>}
       />
 
       <PageColumns className="settings-layout">
@@ -190,3 +191,4 @@ export default function SettingsPage() {
     </main>
   );
 }
+

@@ -1,5 +1,6 @@
-"use client";
+﻿"use client";
 
+import { Info, Pencil, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { Badge, Button, Card, CardContent, EmptyState, Input, SectionHeader } from "@/components/ui";
@@ -134,12 +135,15 @@ export function SkillPlannerSurface(props: SkillPlannerSurfaceProps) {
                             <Button
                               variant="secondary"
                               size="sm"
+                              leadingIcon={<Info />}
                               onClick={() => setSelectedTeamId((current) => current === team.teamId ? null : team.teamId)}
                             >
                               {isSelected ? "Hide Details" : "View Team"}
                             </Button>
                             <Button
+                              variant="ghost"
                               size="sm"
+                              leadingIcon={<Pencil />}
                               onClick={() => {
                                 setSelectedTeamId(team.teamId);
                                 openSkillPlannerTeam(team.teamId);
@@ -207,6 +211,7 @@ export function SkillPlannerSurface(props: SkillPlannerSurfaceProps) {
                                               type="button"
                                               variant="ghost"
                                               size="sm"
+                                              leadingIcon={<Trash2 />}
                                               onClick={() => removeSkillPlannerSelection(selection.id)}
                                               disabled={group.selections.length <= 1}
                                             >
@@ -248,3 +253,6 @@ export function SkillPlannerSurface(props: SkillPlannerSurfaceProps) {
     </div>
   );
 }
+
+
+

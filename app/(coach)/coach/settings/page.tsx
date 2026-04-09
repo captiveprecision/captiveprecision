@@ -1,3 +1,4 @@
+﻿import { Pencil } from "lucide-react";
 import { Badge, Button, ButtonLink, Card, DetailGrid, PageColumns, PageHero, PageMainColumn, PageSideColumn } from "@/components/ui";
 
 const notificationItems = [
@@ -35,7 +36,7 @@ export default function CoachSettingsPage() {
         eyebrow="Settings"
         title="Platform settings"
         description="This is a more realistic product shell for profile controls, membership management, notifications, and future preferences."
-        actions={<ButtonLink variant="secondary" href="/coach/profile/edit">Edit profile</ButtonLink>}
+        actions={<ButtonLink variant="ghost" href="/coach/profile/edit" leadingIcon={<Pencil />}>Edit Profile</ButtonLink>}
       />
 
       <PageColumns className="settings-layout">
@@ -46,7 +47,7 @@ export default function CoachSettingsPage() {
             eyebrow="Profile"
             title="Account identity"
             description="Update the core information shown throughout the platform, including name, gym, role, teams, and profile image."
-            actions={<ButtonLink variant="secondary" href="/coach/profile/edit">Open profile editor</ButtonLink>}
+            actions={<ButtonLink variant="ghost" href="/coach/profile/edit" leadingIcon={<Pencil />}>Open profile editor</ButtonLink>}
           />
 
           <Card radius="panel" className="settings-section">
@@ -59,84 +60,16 @@ export default function CoachSettingsPage() {
               </div>
               <div className="settings-toggle-list">
                 {notificationItems.map((item) => (
-                  <div className="settings-toggle-row" key={item.title}>
+                  <div key={item.title} className="settings-toggle-row">
                     <div>
-                      <p className="settings-row-title">{item.title}</p>
-                      <p className="settings-row-copy">{item.description}</p>
+                      <h3>{item.title}</h3>
+                      <p>{item.description}</p>
                     </div>
-                    <button type="button" className="settings-toggle" data-enabled={item.enabled} aria-pressed={item.enabled}>
-                      <span className="settings-toggle-knob" />
-                    </button>
+                    <Button variant={item.enabled ? "primary" : "secondary"} size="sm">
+                      {item.enabled ? "Enabled" : "Enable"}
+                    </Button>
                   </div>
                 ))}
-              </div>
-            </div>
-          </Card>
-
-          <Card radius="panel" className="settings-section">
-            <div className="ui-card__content settings-section">
-              <div className="ui-section-header">
-                <div className="ui-section-header__copy">
-                  <span className="ui-section-header__eyebrow">Preferences</span>
-                  <h2 className="ui-section-header__title">Workspace defaults</h2>
-                </div>
-              </div>
-              <div className="settings-preference-grid">
-                <Card variant="subtle" className="settings-preference-card">
-                  <div className="settings-preference-card__content">
-                    <span className="settings-row-title">Default view</span>
-                    <p className="settings-row-copy">Dashboard-first workspace with premium tools pinned on top.</p>
-                  </div>
-                </Card>
-                <Card variant="subtle" className="settings-preference-card">
-                  <div className="settings-preference-card__content">
-                    <span className="settings-row-title">Saved results</span>
-                    <p className="settings-row-copy">Keep local placeholders until account persistence is turned back on.</p>
-                  </div>
-                </Card>
-                <Card variant="subtle" className="settings-preference-card">
-                  <div className="settings-preference-card__content">
-                    <span className="settings-row-title">Language</span>
-                    <p className="settings-row-copy">English product shell with Spanish collaboration during setup.</p>
-                  </div>
-                </Card>
-                <Card variant="subtle" className="settings-preference-card">
-                  <div className="settings-preference-card__content">
-                    <span className="settings-row-title">Theme</span>
-                    <p className="settings-row-copy">Premium light interface based on the cheer calculator system.</p>
-                  </div>
-                </Card>
-              </div>
-            </div>
-          </Card>
-
-          <Card radius="panel" className="settings-section">
-            <div className="ui-card__content settings-section">
-              <div className="ui-section-header">
-                <div className="ui-section-header__copy">
-                  <span className="ui-section-header__eyebrow">Coach classification</span>
-                  <h2 className="ui-section-header__title">Membership states</h2>
-                </div>
-              </div>
-              <div className="settings-preference-grid settings-preference-grid--compact">
-                <Card variant="subtle" className="settings-preference-card">
-                  <div className="settings-preference-card__content">
-                    <div className="settings-card-topline">
-                      <span className="settings-row-title">Independent coach</span>
-                      <Badge variant="subtle">Personal</Badge>
-                    </div>
-                    <p className="settings-row-copy">Keeps personal teams, tools, and records under an individual membership.</p>
-                  </div>
-                </Card>
-                <Card variant="subtle" className="settings-preference-card">
-                  <div className="settings-preference-card__content">
-                    <div className="settings-card-topline">
-                      <span className="settings-row-title">Gym-assigned coach</span>
-                      <Badge variant="accent">Linked</Badge>
-                    </div>
-                    <p className="settings-row-copy">Keeps personal teams and also sees gym-assigned teams once a gym license is attached.</p>
-                  </div>
-                </Card>
               </div>
             </div>
           </Card>
@@ -148,41 +81,18 @@ export default function CoachSettingsPage() {
               <div className="ui-section-header">
                 <div className="ui-section-header__copy">
                   <span className="ui-section-header__eyebrow">Membership</span>
-                  <h2 className="ui-section-header__title">Subscription control</h2>
-                </div>
-                <div className="ui-section-header__actions">
-                  <Button variant="secondary">Manage membership</Button>
+                  <h2 className="ui-section-header__title">Current plan</h2>
                 </div>
               </div>
-              <DetailGrid className="settings-detail-grid">
+              <DetailGrid>
                 {membershipItems.map((item) => (
-                  <div key={item.label} className="settings-detail-item">
-                    <span className="profile-detail-label">{item.label}</span>
-                    <p className="profile-detail-value">{item.value}</p>
+                  <div key={item.label} className="settings-detail-row">
+                    <span>{item.label}</span>
+                    <strong>{item.value}</strong>
                   </div>
                 ))}
               </DetailGrid>
-            </div>
-          </Card>
-
-          <Card radius="panel" className="settings-section">
-            <div className="ui-card__content settings-section">
-              <div className="ui-section-header">
-                <div className="ui-section-header__copy">
-                  <span className="ui-section-header__eyebrow">Security</span>
-                  <h2 className="ui-section-header__title">Access controls</h2>
-                </div>
-              </div>
-              <div className="settings-security-list">
-                <div className="settings-security-item">
-                  <span className="settings-row-title">Password and login</span>
-                  <p className="settings-row-copy">Placeholder until authentication is active again.</p>
-                </div>
-                <div className="settings-security-item">
-                  <span className="settings-row-title">Connected services</span>
-                  <p className="settings-row-copy">Future section for Whop, Supabase, and platform integrations.</p>
-                </div>
-              </div>
+              <Badge variant="accent">Premium member</Badge>
             </div>
           </Card>
         </PageSideColumn>

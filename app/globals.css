@@ -4508,3 +4508,334 @@ input {
     min-width: 760px;
   }
 }
+
+/* Shared button and navigation icon refinements */
+
+.ui-button {
+  position: relative;
+  flex: 0 0 auto;
+  white-space: nowrap;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.ui-button:disabled {
+  pointer-events: none;
+}
+
+.ui-button--primary:hover,
+.ui-button--secondary:hover,
+.ui-button--ghost:hover,
+.ui-button--danger:hover {
+  color: var(--cp-color-black);
+}
+
+.ui-button__label,
+.ui-button__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ui-button__icon {
+  flex: 0 0 auto;
+}
+
+.ui-button__icon svg {
+  width: 16px;
+  height: 16px;
+  stroke-width: 1.9;
+}
+
+.ui-button--sm .ui-button__icon svg {
+  width: 15px;
+  height: 15px;
+}
+
+.ui-button--lg .ui-button__icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.ui-button--icon-only {
+  width: 40px;
+  min-width: 40px;
+  padding: 0;
+}
+
+.ui-button--sm.ui-button--icon-only {
+  width: 36px;
+  min-width: 36px;
+}
+
+.ui-button--lg.ui-button--icon-only {
+  width: 44px;
+  min-width: 44px;
+}
+
+.sidebar-link,
+.sidebar-sublink,
+.sidebar-tools-trigger {
+  white-space: nowrap;
+}
+
+.nav-bullet,
+.sidebar-sublink-bullet {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border: 0;
+  border-radius: 0;
+  font-size: 0;
+  flex: 0 0 auto;
+}
+
+.nav-bullet svg,
+.sidebar-sublink-bullet svg,
+.sidebar-tools-arrow svg {
+  width: 18px;
+  height: 18px;
+  stroke-width: 1.9;
+}
+
+.sidebar-tools-arrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  margin-left: auto;
+  font-size: 0;
+  line-height: 1;
+}
+
+.sidebar[data-collapsed="true"] .nav-bullet {
+  display: inline-flex;
+}
+
+@media (max-width: 900px) {
+  .nav-bullet,
+  .sidebar[data-collapsed="true"] .nav-bullet,
+  .sidebar-sublink-bullet,
+  .sidebar[data-collapsed="true"] .sidebar-sublink-bullet {
+    display: inline-flex;
+  }
+}
+
+/* Planner responsive hardening */
+
+.planner-shell,
+.planner-shell .ui-card,
+.planner-shell .ui-card__content,
+.planner-shell .ui-section-header,
+.planner-shell .ui-section-header__actions,
+.planner-main-column,
+.planner-side-column,
+.planner-panel-stack,
+.planner-team-builder-stack,
+.planner-routine-team-stack,
+.planner-routine-grid-stack,
+.planner-routine-side-stack,
+.planner-team-card,
+.planner-team-edit-card,
+.planner-athlete-pool-row,
+.planner-level-card,
+.planner-create-team-card,
+.planner-routine-editor-card,
+.planner-routine-grid-card,
+.planner-routine-setup-card {
+  min-width: 0;
+}
+
+.planner-workspace-switch .ui-tabs-list,
+.planner-sport-tabs .ui-tabs-list,
+.planner-routine-view-tabs .ui-tabs-list {
+  max-width: 100%;
+}
+
+.planner-athlete-pool-copy,
+.planner-team-card-head__copy,
+.planner-team-member-row > div:first-child,
+.planner-summary-row > * ,
+.planner-team-summary-row > * {
+  min-width: 0;
+}
+
+.planner-athlete-pool-copy p,
+.planner-team-card p,
+.planner-team-member-row p,
+.planner-summary-row span,
+.planner-team-summary-row span,
+.planner-routine-editor-copy span,
+.planner-routine-editor-copy strong,
+.planner-routine-card-head p,
+.planner-routine-grid-head p,
+.planner-routine-summary-card p {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 900px) {
+  .planner-workspace-switch .ui-tabs-list,
+  .planner-sport-tabs .ui-tabs-list,
+  .planner-routine-view-tabs .ui-tabs-list {
+    display: flex;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .planner-workspace-switch .ui-tabs-trigger,
+  .planner-sport-tabs .ui-tabs-trigger,
+  .planner-routine-view-tabs .ui-tabs-trigger {
+    flex: 0 0 auto;
+    min-width: max-content;
+    white-space: nowrap;
+  }
+
+  .planner-hero-header .ui-section-header__actions,
+  .planner-inline-actions,
+  .planner-team-card-actions,
+  .planner-summary-chip-group,
+  .planner-routine-inline-actions {
+    width: 100%;
+  }
+
+  .planner-athlete-search-result {
+    align-items: stretch;
+  }
+
+  .planner-athlete-search-result .ui-badge {
+    align-self: flex-start;
+  }
+}
+
+@media (max-width: 767px) {
+  .planner-shell {
+    gap: 16px;
+  }
+
+  .planner-shell .ui-button,
+  .planner-shell .ui-tabs-trigger {
+    white-space: normal;
+    text-align: center;
+  }
+
+  .planner-hero-header .ui-section-header__actions,
+  .planner-inline-actions,
+  .planner-team-card-actions,
+  .planner-summary-chip-group,
+  .planner-routine-inline-actions,
+  .planner-athlete-intake-toggle,
+  .planner-chip-row {
+    align-items: stretch;
+  }
+
+  .planner-hero-header .ui-section-header__actions > *,
+  .planner-inline-actions > *,
+  .planner-team-card-actions > *,
+  .planner-summary-chip-group > *,
+  .planner-routine-inline-actions > *,
+  .planner-athlete-intake-toggle > *,
+  .planner-chip-row > * {
+    max-width: 100%;
+  }
+
+  .planner-inline-actions > .ui-button,
+  .planner-team-card-actions > .ui-button,
+  .planner-athlete-intake-toggle > .ui-button,
+  .planner-routine-inline-actions > .ui-button,
+  .planner-skill-add-action > .ui-button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .planner-athlete-search-result,
+  .planner-level-head,
+  .planner-team-card-head,
+  .planner-team-member-row,
+  .planner-summary-row,
+  .planner-team-summary-row,
+  .planner-athlete-pool-row__content,
+  .planner-routine-card-head,
+  .planner-routine-grid-head,
+  .planner-routine-summary-head {
+    width: 100%;
+  }
+
+  .planner-athlete-search-result,
+  .planner-level-head,
+  .planner-team-card-head,
+  .planner-team-member-row,
+  .planner-summary-row,
+  .planner-team-summary-row,
+  .planner-athlete-pool-row__content,
+  .planner-routine-card-head,
+  .planner-routine-grid-head,
+  .planner-routine-summary-head,
+  .planner-routine-editor-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .planner-team-coach-grid,
+  .planner-option-grid,
+  .planner-team-stats-grid,
+  .planner-athlete-grid,
+  .planner-count-grid,
+  .planner-team-rules-grid,
+  .planner-team-filters,
+  .planner-skill-row,
+  .planner-routine-setup-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .planner-skill-row-action,
+  .planner-routine-mini-field {
+    min-width: 0;
+  }
+
+  .planner-skill-add-action {
+    justify-content: stretch;
+  }
+
+  .planner-skill-add-action .ui-button {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .planner-routine-grid-scroll,
+  .planner-routine-placed-list,
+  .planner-routine-color-popover {
+    max-width: 100%;
+  }
+
+  .planner-routine-grid-scroll {
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .planner-routine-grid-board {
+    min-width: 640px;
+    grid-template-columns: repeat(8, minmax(80px, 1fr));
+  }
+
+  .planner-routine-grid-cell {
+    height: 48px;
+  }
+
+  .planner-routine-placement-copy {
+    padding: 0 10px;
+    font-size: 10px;
+  }
+
+  .planner-routine-counter-pill,
+  .planner-summary-chip-group .ui-badge,
+  .planner-team-card-actions .ui-badge {
+    align-self: flex-start;
+  }
+}

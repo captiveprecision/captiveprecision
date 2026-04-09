@@ -1,5 +1,6 @@
-"use client";
+﻿"use client";
 
+import { Pencil } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import {
@@ -353,7 +354,7 @@ export function CheerScoreCalculator() {
                     actions={
                       <div className="scorecalc-action-row">
                         {selectedVersionId !== CUSTOM_VERSION_ID && !isEditingTemplate ? (
-                          <Button variant="secondary" onClick={() => setIsEditingTemplate(true)}>
+                          <Button variant="ghost" leadingIcon={<Pencil />} onClick={() => setIsEditingTemplate(true)}>
                             Edit Template
                           </Button>
                         ) : null}
@@ -467,3 +468,4 @@ export function CheerScoreCalculator() {
     </main>
   );
 }
+

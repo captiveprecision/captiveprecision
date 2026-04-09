@@ -1,4 +1,6 @@
-"use client";
+﻿"use client";
+
+import { Pencil } from "lucide-react";
 
 import { Badge, Button, Card, CardContent, EmptyState, SectionHeader } from "@/components/ui";
 import type { CheerPlannerIntegration } from "@/lib/services/planner-integration";
@@ -59,7 +61,7 @@ export function SeasonPlannerSurface(props: SeasonPlannerSurfaceProps) {
                             <Button variant="secondary" size="sm" onClick={cancelSeasonPlannerEdit}>Cancel</Button>
                           </>
                         ) : team.availableCheckpoints.length ? (
-                          <Button size="sm" onClick={() => openSeasonPlannerTeam(team.teamId)}>Edit team</Button>
+                          <Button variant="ghost" size="sm" leadingIcon={<Pencil />} onClick={() => openSeasonPlannerTeam(team.teamId)}>Edit team</Button>
                         ) : null}
                       </div>
                     </div>
@@ -97,3 +99,4 @@ export function SeasonPlannerSurface(props: SeasonPlannerSurfaceProps) {
     </div>
   );
 }
+

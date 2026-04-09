@@ -1,5 +1,6 @@
-"use client";
+﻿"use client";
 
+import { Pencil, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { MyTeamsSurface } from "@/components/features/cheer-planner/my-teams/my-teams-surface";
@@ -251,6 +252,7 @@ export function MyTeamsWorkspaceShell({ coachOptions }: { coachOptions: LinkedCo
                               type="button"
                               variant="ghost"
                               size="sm"
+                              leadingIcon={<Trash2 />}
                               onClick={() => integration.removeParentContact(contact.id)}
                             >
                               Remove
@@ -303,7 +305,7 @@ export function MyTeamsWorkspaceShell({ coachOptions }: { coachOptions: LinkedCo
                       <p>{athlete.registrationNumber} / Age {athlete.age ?? "-"} / Parent {athlete.parentContacts[0]?.name || "No Parent Contact Yet"}</p>
                       <p>Latest Score {integration.formatScore(athlete.displayScore)} / Extra {integration.formatScore(athlete.extraScore)} / Team {athlete.assignedTeamName}</p>
                     </div>
-                    <Button type="button" variant="ghost" size="sm" onClick={() => openEditAthlete(athlete.id)}>
+                    <Button type="button" variant="ghost" size="sm" leadingIcon={<Pencil />} onClick={() => openEditAthlete(athlete.id)}>
                       Edit Record
                     </Button>
                   </CardContent>
@@ -318,3 +320,5 @@ export function MyTeamsWorkspaceShell({ coachOptions }: { coachOptions: LinkedCo
     </main>
   );
 }
+
+

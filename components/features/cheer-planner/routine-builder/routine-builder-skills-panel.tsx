@@ -1,7 +1,6 @@
-"use client";
-
-import { useDraggable } from "@dnd-kit/core";
+﻿import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
+import { Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Button, Card, CardContent, Input } from "@/components/ui";
@@ -19,44 +18,45 @@ const PRESET_COLORS = [
 
 function ColorPicker({
   color,
-  onChange,
-  disabled = false
+  disabled,
+  onChange
 }: {
   color: string;
-  onChange: (color: string) => void;
   disabled?: boolean;
+  onChange: (color: string) => void;
 }) {
-  const [isOpen, setIsOpen] = useState(false);
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    if (disabled && open) {
+      setOpen(false);
+    }
+  }, [disabled, open]);
 
   return (
     <div className="planner-routine-color-picker">
       <button
         type="button"
         className="planner-routine-color-trigger"
-        onClick={() => {
-          if (!disabled) {
-            setIsOpen((current) => !current);
-          }
-        }}
+        onClick={() => setOpen((value) => !value)}
         disabled={disabled}
-        aria-label="Choose section color"
+        aria-label="Select section color"
       >
-        <span className="planner-routine-color-line" style={{ background: color }} />
+        <span className="planner-routine-color-line" style={{ backgroundColor: color }} />
       </button>
-      {isOpen && !disabled ? (
+      {open && !disabled ? (
         <div className="planner-routine-color-popover">
-          {PRESET_COLORS.map((preset) => (
+          {PRESET_COLORS.map((option) => (
             <button
-              key={preset.value}
+              key={option.value}
               type="button"
-              className={preset.value.toLowerCase() === color.toLowerCase() ? "planner-routine-swatch active" : "planner-routine-swatch"}
-              style={{ background: preset.value }}
+              className={option.value === color ? "planner-routine-swatch active" : "planner-routine-swatch"}
+              style={{ backgroundColor: option.value }}
               onClick={() => {
-                onChange(preset.value);
-                setIsOpen(false);
+                onChange(option.value);
+                setOpen(false);
               }}
-              aria-label={preset.label}
-              title={preset.label}
+              aria-label={`Use ${option.label}`}
             />
           ))}
         </div>
@@ -64,6 +64,16 @@ function ColorPicker({
     </div>
   );
 }
+
+type SkillLibraryItemProps = {
+  skill: RoutineBuilderSkillDefinition;
+  isSelected: boolean;
+  placementCount: number;
+  readOnly: boolean;
+  onSelect: (skillId: string) => void;
+  onDurationChange: (skillId: string, duration: number) => void;
+  onColorChange: (skillId: string, color: string) => void;
+};
 
 function SkillLibraryItem({
   skill,
@@ -73,17 +83,9 @@ function SkillLibraryItem({
   onSelect,
   onDurationChange,
   onColorChange
-}: {
-  skill: RoutineBuilderSkillDefinition;
-  isSelected: boolean;
-  placementCount: number;
-  readOnly: boolean;
-  onSelect: (skillId: string) => void;
-  onDurationChange: (skillId: string, duration: number) => void;
-  onColorChange: (skillId: string, color: string) => void;
-}) {
+}: SkillLibraryItemProps) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
-    id: `skill:${skill.id}`,
+    id: skill.id,
     data: {
       type: "skill",
       skillId: skill.id
@@ -343,7 +345,7 @@ export function RoutineBuilderSkillsPanel({
                         onChange={(event) => onPlacementDurationChange(placement.id, Number(event.target.value))}
                       />
                     </label>
-                    <Button type="button" variant="ghost" size="sm" disabled={readOnly} onClick={() => onRemovePlacement(placement.id)}>
+                    <Button type="button" variant="ghost" size="sm" leadingIcon={<Trash2 />} disabled={readOnly} onClick={() => onRemovePlacement(placement.id)}>
                       Remove
                     </Button>
                   </div>

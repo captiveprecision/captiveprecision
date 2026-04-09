@@ -1,3 +1,4 @@
+﻿import { Pencil } from "lucide-react";
 import { Badge, ButtonLink, Card, DetailGrid, PageColumns, PageMainColumn, PageSideColumn, PageHero, StatGrid } from "@/components/ui";
 import { requireAuthSession } from "@/lib/auth/session";
 
@@ -45,7 +46,7 @@ export default async function CoachProfilePage() {
               </div>
             </div>
 
-            <ButtonLink variant="secondary" href="/coach/profile/edit" className="profile-edit-button">Edit</ButtonLink>
+            <ButtonLink variant="ghost" href="/coach/profile/edit" leadingIcon={<Pencil />}>Edit</ButtonLink>
           </div>
         </div>
       </Card>
@@ -149,4 +150,5 @@ export default async function CoachProfilePage() {
     </main>
   );
 }
+
 

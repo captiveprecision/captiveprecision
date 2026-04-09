@@ -1,15 +1,23 @@
-import type { Route } from "next";
+﻿import type { Route } from "next";
+import {
+  CalendarDays,
+  LayoutDashboard,
+  MessageSquare,
+  Settings,
+  SlidersHorizontal,
+  UserRound
+} from "lucide-react";
 
 import { WorkspaceSidebar } from "@/components/navigation/workspace-sidebar";
 import type { AppRole } from "@/lib/auth/session";
 
 const adminNavItems = [
-  { href: "/admin" as Route, title: "Dashboard", shortLabel: "D" },
-  { href: "/admin/scoring-systems" as Route, title: "Scoring Systems", shortLabel: "U" },
-  { href: "/admin/messages" as Route, title: "Messages", shortLabel: "M" },
-  { href: "/admin/profile" as Route, title: "Profile", shortLabel: "P" },
-  { href: "/admin/events" as Route, title: "Events", shortLabel: "E" },
-  { href: "/admin/settings" as Route, title: "Settings", shortLabel: "S" }
+  { href: "/admin" as Route, title: "Dashboard", icon: LayoutDashboard },
+  { href: "/admin/scoring-systems" as Route, title: "Scoring Systems", icon: SlidersHorizontal },
+  { href: "/admin/messages" as Route, title: "Messages", icon: MessageSquare },
+  { href: "/admin/profile" as Route, title: "Profile", icon: UserRound },
+  { href: "/admin/events" as Route, title: "Events", icon: CalendarDays },
+  { href: "/admin/settings" as Route, title: "Settings", icon: Settings }
 ];
 
 export function AdminSidebar({ availableWorkspaces }: { availableWorkspaces: AppRole[] }) {

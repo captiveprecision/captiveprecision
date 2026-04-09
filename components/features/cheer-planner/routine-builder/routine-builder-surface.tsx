@@ -1,5 +1,4 @@
-"use client";
-
+﻿import { Info, Pencil } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { RoutineBuilderEditor } from "@/components/features/cheer-planner/routine-builder/routine-builder-editor";
@@ -87,12 +86,15 @@ export function RoutineBuilderSurface(props: RoutineBuilderSurfaceProps) {
                             <Button
                               variant="secondary"
                               size="sm"
+                              leadingIcon={<Info />}
                               onClick={() => setSelectedTeamId((current) => current === team.teamId ? null : team.teamId)}
                             >
                               {isSelected ? "Hide Details" : "View Team"}
                             </Button>
                             <Button
+                              variant="ghost"
                               size="sm"
+                              leadingIcon={<Pencil />}
                               onClick={() => {
                                 setSelectedTeamId(team.teamId);
                                 void openRoutineBuilderTeam(team.teamId);
@@ -131,5 +133,3 @@ export function RoutineBuilderSurface(props: RoutineBuilderSurfaceProps) {
     </div>
   );
 }
-
-

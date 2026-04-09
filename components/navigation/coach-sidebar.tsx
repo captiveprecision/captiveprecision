@@ -1,21 +1,32 @@
-import type { Route } from "next";
+﻿import type { Route } from "next";
+import {
+  Calculator,
+  CalendarDays,
+  ClipboardCheck,
+  ClipboardList,
+  LayoutDashboard,
+  MessageSquare,
+  Settings,
+  UserRound,
+  Users
+} from "lucide-react";
 
 import { WorkspaceSidebar } from "@/components/navigation/workspace-sidebar";
 import type { AppRole, AuthSession } from "@/lib/auth/session";
 
 const coachNavItems = [
-  { href: "/coach" as Route, title: "Dashboard", shortLabel: "D" },
-  { href: "/coach/cheer-planner" as Route, title: "Cheer Planner", shortLabel: "C" },
-  { href: "/coach/my-teams" as Route, title: "My Teams", shortLabel: "T" },
-  { href: "/coach/profile" as Route, title: "Profile", shortLabel: "P" },
-  { href: "/coach/messages" as Route, title: "Messages", shortLabel: "M" },
-  { href: "/coach/events" as Route, title: "Events", shortLabel: "E" },
-  { href: "/coach/settings" as Route, title: "Settings", shortLabel: "S" }
+  { href: "/coach" as Route, title: "Dashboard", icon: LayoutDashboard },
+  { href: "/coach/cheer-planner" as Route, title: "Cheer Planner", icon: ClipboardList },
+  { href: "/coach/my-teams" as Route, title: "My Teams", icon: Users },
+  { href: "/coach/profile" as Route, title: "Profile", icon: UserRound },
+  { href: "/coach/messages" as Route, title: "Messages", icon: MessageSquare },
+  { href: "/coach/events" as Route, title: "Events", icon: CalendarDays },
+  { href: "/coach/settings" as Route, title: "Settings", icon: Settings }
 ];
 
 const coachToolItems = [
-  { href: "/coach/tools/cheer-score-calculator" as Route, title: "Cheer Score", shortLabel: "C" },
-  { href: "/coach/tools/full-out-evaluator" as Route, title: "Execution Evaluator", shortLabel: "F" }
+  { href: "/coach/tools/cheer-score-calculator" as Route, title: "Cheer Score", icon: Calculator },
+  { href: "/coach/tools/full-out-evaluator" as Route, title: "Execution Evaluator", icon: ClipboardCheck }
 ];
 
 function getCoachReleaseLabel() {
