@@ -128,6 +128,10 @@ export function MyTeamsSurface({ teams, coachOptions, saveMyTeamsTeamProfile, up
   const [isSaving, setIsSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
+  const toggleSelectedTeam = (teamId: string) => {
+    setSelectedTeamId((current) => current === teamId ? null : teamId);
+  };
+
   const openCreateTeam = () => {
     setEditingTeamId(null);
     setTeamDraft(buildEmptyTeamDraft());
@@ -178,7 +182,7 @@ export function MyTeamsSurface({ teams, coachOptions, saveMyTeamsTeamProfile, up
 
   const handleSaveTeam = async () => {
     if (!teamDraft.name.trim() || !teamDraft.teamType.trim() || !teamDraft.teamDivision) {
-      setFormError("Team name, age category, and division are required.");
+      setFormError("Team Name, Age Category, and Division are required.");
       return;
     }
 
@@ -247,11 +251,11 @@ export function MyTeamsSurface({ teams, coachOptions, saveMyTeamsTeamProfile, up
         <CardContent className="planner-panel-stack">
           <SectionHeader
             eyebrow="My Teams"
-            title="Manage team records"
-            description="Create team identities here, then continue roster assignment in Team Builder."
+            title="Manage Team Records"
+            description="Open a team to review details, roster, and planner status. Use Edit Team only when profile changes are needed."
             actions={
               <Button type="button" onClick={openCreateTeam}>
-                Add team
+                Add Team
               </Button>
             }
           />
@@ -260,12 +264,12 @@ export function MyTeamsSurface({ teams, coachOptions, saveMyTeamsTeamProfile, up
             <Card variant="subtle" className="planner-create-team-card">
               <CardContent className="planner-panel-stack">
                 <SectionHeader
-                  eyebrow={editingTeamId ? "Edit team" : "New team"}
-                  title={editingTeamId ? "Update team profile" : "Create team profile"}
+                  eyebrow={editingTeamId ? "Edit Team" : "New Team"}
+                  title={editingTeamId ? "Update Team Profile" : "Create Team Profile"}
                 />
                 <div className="planner-athlete-grid">
                   <Input
-                    label="Team name"
+                    label="Team Name"
                     value={teamDraft.name}
                     onChange={(event) => setTeamDraft((current) => ({ ...current, name: event.target.value }))}
                   />
@@ -279,10 +283,10 @@ export function MyTeamsSurface({ teams, coachOptions, saveMyTeamsTeamProfile, up
                     ))}
                   </Select>
                   <Select
-                    label="Age category"
+                    label="Age Category"
                     value={teamDraft.teamType}
                     onChange={(event) => setTeamDraft((current) => ({ ...current, teamType: event.target.value as MyTeamsTeamDraft["teamType"] }))}
-                    placeholder="Select age category"
+                    placeholder="Select Age Category"
                   >
                     {AGE_CATEGORY_OPTIONS.map((category) => (
                       <option key={category} value={category}>{category}</option>
@@ -292,19 +296,19 @@ export function MyTeamsSurface({ teams, coachOptions, saveMyTeamsTeamProfile, up
                     label="Division"
                     value={teamDraft.teamDivision}
                     onChange={(event) => setTeamDraft((current) => ({ ...current, teamDivision: event.target.value as MyTeamsTeamDraft["teamDivision"] }))}
-                    placeholder="Select division"
+                    placeholder="Select Division"
                   >
                     {TEAM_DIVISION_OPTIONS.map((division) => (
                       <option key={division} value={division}>{division}</option>
                     ))}
                   </Select>
                   <Input
-                    label="Training days"
+                    label="Training Days"
                     value={teamDraft.trainingDays}
                     onChange={(event) => setTeamDraft((current) => ({ ...current, trainingDays: event.target.value }))}
                   />
                   <Input
-                    label="Training hours"
+                    label="Training Hours"
                     value={teamDraft.trainingHours}
                     onChange={(event) => setTeamDraft((current) => ({ ...current, trainingHours: event.target.value }))}
                   />
@@ -313,11 +317,11 @@ export function MyTeamsSurface({ teams, coachOptions, saveMyTeamsTeamProfile, up
                 <div className="planner-athlete-parent-stack">
                   <SectionHeader
                     eyebrow="Coaches"
-                    title="Assigned coaches"
-                    description="Select a gym coach to link the team, or switch to manual entry when the coach is not available yet."
+                    title="Assign Coaches"
+                    description="Add one or more coaches for each team. Select linked gym coaches when available, or keep a manual name temporarily."
                     actions={
                       <Button type="button" variant="ghost" size="sm" onClick={addCoachAssignment}>
-                        Add coach
+                        Add Coach
                       </Button>
                     }
                   />
@@ -334,7 +338,7 @@ export function MyTeamsSurface({ teams, coachOptions, saveMyTeamsTeamProfile, up
 
                         <div className="planner-team-coach-grid">
                           <Select
-                            label="Coach selection"
+                            label="Coach Selection"
                             value={assignment.selectedCoachId}
                             onChange={(event) => {
                               const nextValue = event.target.value;
@@ -348,12 +352,12 @@ export function MyTeamsSurface({ teams, coachOptions, saveMyTeamsTeamProfile, up
                             {coachOptions.map((option) => (
                               <option key={option.id} value={option.id}>{option.label}</option>
                             ))}
-                            <option value={MANUAL_COACH_VALUE}>Manual entry</option>
+                            <option value={MANUAL_COACH_VALUE}>Manual Entry</option>
                           </Select>
 
                           {assignment.selectedCoachId === MANUAL_COACH_VALUE ? (
                             <Input
-                              label="Manual coach name"
+                              label="Manual Coach Name"
                               value={assignment.manualName}
                               onChange={(event) => updateCoachAssignment(index, { manualName: event.target.value })}
                             />
@@ -368,7 +372,7 @@ export function MyTeamsSurface({ teams, coachOptions, saveMyTeamsTeamProfile, up
 
                 <div className="planner-inline-actions">
                   <Button type="button" onClick={handleSaveTeam} disabled={isSaving}>
-                    {isSaving ? "Saving..." : editingTeamId ? "Save changes" : "Save team"}
+                    {isSaving ? "Saving..." : editingTeamId ? "Save Changes" : "Save Team"}
                   </Button>
                   <Button type="button" variant="secondary" onClick={closeCreateTeam} disabled={isSaving}>
                     Cancel
@@ -379,102 +383,125 @@ export function MyTeamsSurface({ teams, coachOptions, saveMyTeamsTeamProfile, up
           ) : null}
 
           <div className="planner-team-card-list">
-            {teams.length ? teams.map((team) => (
-              <Card key={team.teamId} variant="subtle" className="planner-team-card">
-                <CardContent className="planner-panel-stack">
-                  <div className="planner-team-card-head">
-                    <div>
-                      <strong>{team.teamName}</strong>
-                      <p>{[team.teamLevel, team.teamDivision, team.teamType].filter(Boolean).join(" / ")}</p>
-                    </div>
-                    <div className="planner-inline-actions">
-                      <Button type="button" variant="ghost" size="sm" onClick={() => openEditTeam(team)}>
-                        Edit
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setSelectedTeamId((current) => current === team.teamId ? null : team.teamId)}
-                      >
-                        {selectedTeamId === team.teamId ? "Hide details" : "View details"}
-                      </Button>
-                    </div>
-                  </div>
+            {teams.length ? teams.map((team) => {
+              const isSelected = selectedTeamId === team.teamId;
 
-                  <div className="planner-summary-row">
-                    <strong>Status</strong>
-                    <span>{team.memberCount} athletes / {team.assignedCoachNames.length} coaches assigned</span>
-                  </div>
+              return (
+                <Card
+                  key={team.teamId}
+                  variant="subtle"
+                  className="planner-team-card planner-team-card--interactive"
+                  role="button"
+                  tabIndex={0}
+                  aria-expanded={isSelected}
+                  onClick={() => toggleSelectedTeam(team.teamId)}
+                  onKeyDown={(event) => {
+                    if (event.target !== event.currentTarget) {
+                      return;
+                    }
 
-                  {selectedTeamId === team.teamId ? (
-                    <>
-                      <div className="planner-summary-list">
-                        {team.trainingDays ? (
-                          <div className="planner-summary-row">
-                            <strong>Training days</strong>
-                            <span>{team.trainingDays}</span>
-                          </div>
-                        ) : null}
-                        {team.trainingHours ? (
-                          <div className="planner-summary-row">
-                            <strong>Training hours</strong>
-                            <span>{team.trainingHours}</span>
-                          </div>
-                        ) : null}
-                        {!team.trainingDays && !team.trainingHours && team.trainingSchedule ? (
-                          <div className="planner-summary-row">
-                            <strong>Training</strong>
-                            <span>{team.trainingSchedule}</span>
-                          </div>
-                        ) : null}
-                        {team.assignedCoachNames.length ? (
-                          <div className="planner-summary-row">
-                            <strong>Coaches</strong>
-                            <span>{team.assignedCoachNames.join(", ")}</span>
-                          </div>
-                        ) : null}
-                        <div className="planner-summary-row">
-                          <strong>Members</strong>
-                          <span>{team.memberCount} total / {team.qualifiedMemberCount} qualified / {team.unqualifiedMemberCount} unqualified</span>
-                        </div>
-                        <div className="planner-summary-row">
-                          <strong>Skill plan</strong>
-                          <span>{team.skillPlan.selectionCount} selections / {team.skillPlan.approvedSelectionCount} approved</span>
-                        </div>
-                        <div className="planner-summary-row">
-                          <strong>Routine plan</strong>
-                          <span>{team.routinePlan.itemCount} items / {team.routinePlan.approvedItemCount} approved</span>
-                        </div>
-                        <div className="planner-summary-row">
-                          <strong>Season plan</strong>
-                          <span>{team.seasonPlan.checkpointCount} checkpoints / {team.seasonPlan.completedCheckpointCount} completed</span>
-                        </div>
-                        <div className="planner-summary-row">
-                          <strong>Latest evaluation</strong>
-                          <span>{team.latestEvaluationOccurredAt ? new Date(team.latestEvaluationOccurredAt).toLocaleDateString("en-US") : "No evaluation"}</span>
-                        </div>
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      toggleSelectedTeam(team.teamId);
+                    }
+                  }}
+                >
+                  <CardContent className="planner-panel-stack">
+                    <div className="planner-team-card-head">
+                      <div className="planner-team-card-head__copy">
+                        <strong>{team.teamName}</strong>
+                        <p>{[team.teamLevel, team.teamDivision, team.teamType].filter(Boolean).join(" / ")}</p>
                       </div>
+                      <div className="planner-team-card-actions">
+                        <Badge variant="subtle">{isSelected ? "Details Open" : "Open Details"}</Badge>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            openEditTeam(team);
+                          }}
+                        >
+                          Edit Team
+                        </Button>
+                      </div>
+                    </div>
 
-                      <div className="planner-team-members-list">
-                        {team.members.length ? team.members.map((member) => (
-                          <div key={member.athleteId} className="planner-team-member-row">
-                            <div>
-                              <strong>{member.athleteName}</strong>
-                              <p>{member.registrationNumber} / {member.qualifiedLevel}</p>
+                    <div className="planner-summary-row">
+                      <strong>Team Summary</strong>
+                      <span>{team.memberCount} Athletes / {team.assignedCoachNames.length} Coaches Assigned</span>
+                    </div>
+
+                    {isSelected ? (
+                      <>
+                        <div className="planner-summary-list">
+                          {team.trainingDays ? (
+                            <div className="planner-summary-row">
+                              <strong>Training Days</strong>
+                              <span>{team.trainingDays}</span>
                             </div>
-                            <Badge variant="subtle">Skills {member.selectedSkillCount} / Routine {member.plannedRoutineItemCount}</Badge>
+                          ) : null}
+                          {team.trainingHours ? (
+                            <div className="planner-summary-row">
+                              <strong>Training Hours</strong>
+                              <span>{team.trainingHours}</span>
+                            </div>
+                          ) : null}
+                          {!team.trainingDays && !team.trainingHours && team.trainingSchedule ? (
+                            <div className="planner-summary-row">
+                              <strong>Training</strong>
+                              <span>{team.trainingSchedule}</span>
+                            </div>
+                          ) : null}
+                          {team.assignedCoachNames.length ? (
+                            <div className="planner-summary-row">
+                              <strong>Coaches</strong>
+                              <span>{team.assignedCoachNames.join(", ")}</span>
+                            </div>
+                          ) : null}
+                          <div className="planner-summary-row">
+                            <strong>Members</strong>
+                            <span>{team.memberCount} Total / {team.qualifiedMemberCount} Qualified / {team.unqualifiedMemberCount} Unqualified</span>
                           </div>
-                        )) : (
-                          <EmptyState title="No members in this team." description="Team membership is sourced from Team Builder and shown here without mutation." />
-                        )}
-                      </div>
-                    </>
-                  ) : null}
-                </CardContent>
-              </Card>
-            )) : (
-              <EmptyState title="No team summaries available yet." description="Create a new team here to start your program structure." />
+                          <div className="planner-summary-row">
+                            <strong>Skill Plan</strong>
+                            <span>{team.skillPlan.selectionCount} Selections / {team.skillPlan.approvedSelectionCount} Approved</span>
+                          </div>
+                          <div className="planner-summary-row">
+                            <strong>Routine Plan</strong>
+                            <span>{team.routinePlan.itemCount} Items / {team.routinePlan.approvedItemCount} Approved</span>
+                          </div>
+                          <div className="planner-summary-row">
+                            <strong>Season Plan</strong>
+                            <span>{team.seasonPlan.checkpointCount} Checkpoints / {team.seasonPlan.completedCheckpointCount} Completed</span>
+                          </div>
+                          <div className="planner-summary-row">
+                            <strong>Latest Evaluation</strong>
+                            <span>{team.latestEvaluationOccurredAt ? new Date(team.latestEvaluationOccurredAt).toLocaleDateString("en-US") : "No Evaluation"}</span>
+                          </div>
+                        </div>
+
+                        <div className="planner-team-members-list">
+                          {team.members.length ? team.members.map((member) => (
+                            <div key={member.athleteId} className="planner-team-member-row">
+                              <div>
+                                <strong>{member.athleteName}</strong>
+                                <p>{member.registrationNumber} / {member.qualifiedLevel}</p>
+                              </div>
+                              <Badge variant="subtle">Skills {member.selectedSkillCount} / Routine {member.plannedRoutineItemCount}</Badge>
+                            </div>
+                          )) : (
+                            <EmptyState title="No Members In This Team." description="Team membership is sourced from Team Builder and shown here without mutation." />
+                          )}
+                        </div>
+                      </>
+                    ) : null}
+                  </CardContent>
+                </Card>
+              );
+            }) : (
+              <EmptyState title="No Team Summaries Available Yet." description="Create a new team here to start your program structure." />
             )}
           </div>
         </CardContent>

@@ -88,7 +88,7 @@ export const defaultTryoutTemplate: PlannerTryoutTemplate = {
   stage: "tryouts",
   activeSport: "tumbling",
   options: [
-    { id: "does-it", label: "Does it", value: 1 },
+    { id: "does-it", label: "Attempted", value: 1 },
     { id: "needs-work", label: "Needs some work", value: 1.7 },
     { id: "ready-to-compete", label: "Ready to compete", value: 2 }
   ],

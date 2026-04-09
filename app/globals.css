@@ -929,6 +929,14 @@ input {
   display: inline-flex;
 }
 
+.sidebar[data-collapsed="true"] .sidebar-tools-trigger {
+  justify-content: center;
+}
+
+.sidebar[data-collapsed="true"] .sidebar-tools-trigger .sidebar-tools-arrow {
+  margin-left: 0;
+}
+
 .sidebar-tools-group {
   display: grid;
   gap: 4px;
@@ -3101,6 +3109,16 @@ input {
   min-width: 0;
 }
 
+.planner-team-card--interactive {
+  cursor: pointer;
+}
+
+.planner-team-card--interactive:focus-visible {
+  outline: none;
+  border-color: var(--cp-color-black);
+  box-shadow: var(--cp-focus-ring);
+}
+
 .planner-team-stat-card span {
   font-size: 12px;
   font-weight: 700;
@@ -3938,6 +3956,10 @@ input {
 .planner-skill-add-action {
   display: flex;
   justify-content: flex-end;
+}
+
+.planner-skill-add-action .ui-button {
+  min-width: 160px;
 }
 
 .planner-skill-level-field {

@@ -82,7 +82,7 @@ export function TeamBuilderSurface(props: TeamBuilderSurfaceProps) {
         <CardContent className="planner-panel-stack planner-team-stats-summary-card__content">
           <SectionHeader
             eyebrow="Team Builder"
-            title="Current athlete summary"
+            title="Current Athlete Summary"
             description={stats.map((stat) => `${stat.label}: ${stat.value}`).join(" | ")}
           />
         </CardContent>
@@ -94,7 +94,7 @@ export function TeamBuilderSurface(props: TeamBuilderSurfaceProps) {
             <CardContent className="planner-panel-stack">
               <SectionHeader
                 eyebrow="Qualification rules"
-                title="Current thresholds"
+                title="Current Thresholds"
                 actions={
                   <Button variant="ghost" size="sm" onClick={() => setQualificationOpen(true)}>
                     Edit
@@ -116,7 +116,7 @@ export function TeamBuilderSurface(props: TeamBuilderSurfaceProps) {
                     ))}
                   </div>
                   <div className="planner-inline-actions">
-                    <Button onClick={saveQualificationRules}>Save changes</Button>
+                    <Button onClick={saveQualificationRules}>Save Changes</Button>
                   </div>
                 </div>
               ) : null}
@@ -127,10 +127,10 @@ export function TeamBuilderSurface(props: TeamBuilderSurfaceProps) {
             <CardContent className="planner-panel-stack">
               <SectionHeader
                 eyebrow="Athlete pool"
-                title="Latest saved tryouts"
+                title="Latest Saved Tryouts"
                 actions={
                   <Button onClick={() => setCreateTeamOpen((current) => !current)}>
-                    {createTeamOpen ? "Close" : "Create team"}
+                    {createTeamOpen ? "Close" : "Create Team"}
                   </Button>
                 }
               />
@@ -139,12 +139,12 @@ export function TeamBuilderSurface(props: TeamBuilderSurfaceProps) {
                 <Card variant="subtle" className="planner-create-team-card">
                   <CardContent className="planner-panel-stack">
                     <Input
-                      label="Team name"
+                      label="Team Name"
                       value={teamDraft.name}
                       onChange={(event) => setTeamDraft((current) => ({ ...current, name: event.target.value }))}
                     />
                     <Select
-                      label="Team level"
+                      label="Team Level"
                       value={teamDraft.teamLevel}
                       onChange={(event) => setTeamDraft((current) => ({ ...current, teamLevel: event.target.value as PlannerLevelLabel }))}
                     >
@@ -155,11 +155,11 @@ export function TeamBuilderSurface(props: TeamBuilderSurfaceProps) {
                       ))}
                     </Select>
                     <Input
-                      label="Team type"
+                      label="Team Type"
                       value={teamDraft.teamType}
                       onChange={(event) => setTeamDraft((current) => ({ ...current, teamType: event.target.value }))}
                     />
-                    <Button onClick={createTeam}>Save team</Button>
+                    <Button onClick={createTeam}>Save Team</Button>
                   </CardContent>
                 </Card>
               ) : null}
@@ -203,8 +203,8 @@ export function TeamBuilderSurface(props: TeamBuilderSurfaceProps) {
                 >
                   <option value="score-desc">Score</option>
                   <option value="name-asc">Name</option>
-                  <option value="age-asc">Age low to high</option>
-                  <option value="age-desc">Age high to low</option>
+                  <option value="age-asc">Age Low To High</option>
+                  <option value="age-desc">Age High To Low</option>
                 </Select>
               </div>
 
@@ -244,13 +244,13 @@ export function TeamBuilderSurface(props: TeamBuilderSurfaceProps) {
                             assignToTeam(athlete.id, nextTeamId);
                           }}
                         >
-                          <option value="">No team</option>
+                          <option value="">No Team</option>
                           {teams.map((team) => (
                             <option
                               key={team.id}
                               value={team.id}
                             >
-                              {team.name} ({team.teamLevel}){athlete.assignedTeamId !== team.id && !canAssignQualifiedLevelToTeam(athlete.displayLevel, team.teamLevel) ? " / Qualification warning" : ""}
+                              {team.name} ({team.teamLevel}){athlete.assignedTeamId !== team.id && !canAssignQualifiedLevelToTeam(athlete.displayLevel, team.teamLevel) ? " / Qualification Warning" : ""}
                             </option>
                           ))}
                         </Select>
@@ -259,7 +259,7 @@ export function TeamBuilderSurface(props: TeamBuilderSurfaceProps) {
                   ))
                 ) : (
                   <EmptyState
-                    title="No athletes match the current filters."
+                    title="No Athletes Match The Current Filters."
                     description="Adjust filters or save more tryout evaluations."
                   />
                 )}
@@ -271,18 +271,18 @@ export function TeamBuilderSurface(props: TeamBuilderSurfaceProps) {
         <aside className="planner-side-column">
           <Card radius="panel" className="planner-panel-stack">
             <CardContent className="planner-panel-stack">
-              <SectionHeader eyebrow="Teams review" title="Saved rosters" />
+              <SectionHeader eyebrow="Teams Review" title="Saved Rosters" />
 
               {teamEdit ? (
                 <Card variant="subtle" className="planner-team-edit-card">
                   <CardContent className="planner-panel-stack">
                     <Input
-                      label="Team name"
+                      label="Team Name"
                       value={teamEdit.name}
                       onChange={(event) => setTeamEdit((current) => (current ? { ...current, name: event.target.value } : current))}
                     />
                     <Select
-                      label="Team level"
+                      label="Team Level"
                       value={teamEdit.teamLevel}
                       onChange={(event) => setTeamEdit((current) => (current ? { ...current, teamLevel: event.target.value as PlannerLevelLabel } : current))}
                     >
@@ -293,12 +293,12 @@ export function TeamBuilderSurface(props: TeamBuilderSurfaceProps) {
                       ))}
                     </Select>
                     <Input
-                      label="Team type"
+                      label="Team Type"
                       value={teamEdit.teamType}
                       onChange={(event) => setTeamEdit((current) => (current ? { ...current, teamType: event.target.value } : current))}
                     />
                     <div className="planner-inline-actions">
-                      <Button onClick={confirmTeamEdit}>Save edits</Button>
+                      <Button onClick={confirmTeamEdit}>Save Changes</Button>
                       <Button variant="secondary" onClick={() => setTeamEdit(null)}>
                         Cancel
                       </Button>
@@ -323,13 +323,13 @@ export function TeamBuilderSurface(props: TeamBuilderSurfaceProps) {
                         </div>
                         <div className="planner-inline-actions">
                           <Button variant="ghost" size="sm" onClick={() => openTeamEdit(team)}>
-                            Edit
+                            Edit Team
                           </Button>
                           <Button variant="ghost" size="sm" onClick={() => clearTeam(team.id)}>
-                            Clear roster
+                            Clear Roster
                           </Button>
                           <Button variant="danger" size="sm" onClick={() => deleteTeam(team.id)}>
-                            Delete
+                            Delete Team
                           </Button>
                         </div>
                         <div className="planner-team-members-list">
@@ -349,7 +349,7 @@ export function TeamBuilderSurface(props: TeamBuilderSurfaceProps) {
                             ))
                           ) : (
                             <EmptyState
-                              title="No athletes assigned yet."
+                              title="No Athletes Assigned Yet."
                               description="Assign athletes from the pool to start building this roster."
                             />
                           )}
@@ -359,7 +359,7 @@ export function TeamBuilderSurface(props: TeamBuilderSurfaceProps) {
                   ))
                 ) : (
                   <EmptyState
-                    title="Create your first team to start assigning athletes."
+                    title="Create Your First Team To Start Assigning Athletes."
                     description="Team Builder will keep rosters as persistent planner objects."
                   />
                 )}

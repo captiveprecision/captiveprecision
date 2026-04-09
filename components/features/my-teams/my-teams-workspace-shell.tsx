@@ -1,40 +1,130 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 import { MyTeamsSurface } from "@/components/features/cheer-planner/my-teams/my-teams-surface";
 import { Badge, Button, Card, CardContent, EmptyState, Input, SectionHeader, Tabs, Textarea } from "@/components/ui";
+import type { AthleteDraftState } from "@/lib/services/planner-integration";
 import type { LinkedCoachOption } from "@/lib/services/team-coach-directory";
 import { useCheerPlannerIntegration } from "@/lib/services/planner-integration";
 
 type MyTeamsTab = "teams" | "athletes";
+
+type ComparableAthleteDraft = {
+  registrationNumber: string;
+  firstName: string;
+  lastName: string;
+  dateOfBirth: string;
+  notes: string;
+  parentContacts: Array<{
+    name: string;
+    email: string;
+    phone: string;
+  }>;
+};
 
 const MY_TEAMS_TABS: Array<{ value: MyTeamsTab; label: string }> = [
   { value: "teams", label: "Teams" },
   { value: "athletes", label: "Athletes" }
 ];
 
+function buildComparableAthleteDraft(draft: Pick<AthleteDraftState, "registrationNumber" | "firstName" | "lastName" | "dateOfBirth" | "notes" | "parentContacts">): ComparableAthleteDraft {
+  return {
+    registrationNumber: draft.registrationNumber,
+    firstName: draft.firstName,
+    lastName: draft.lastName,
+    dateOfBirth: draft.dateOfBirth,
+    notes: draft.notes,
+    parentContacts: draft.parentContacts.map((contact) => ({
+      name: contact.name,
+      email: contact.email,
+      phone: contact.phone
+    }))
+  };
+}
+
+function buildEmptyComparableAthleteDraft(): ComparableAthleteDraft {
+  return {
+    registrationNumber: "",
+    firstName: "",
+    lastName: "",
+    dateOfBirth: "",
+    notes: "",
+    parentContacts: [{ name: "", email: "", phone: "" }]
+  };
+}
+
+function areComparableAthleteDraftsEqual(left: ComparableAthleteDraft, right: ComparableAthleteDraft) {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
 export function MyTeamsWorkspaceShell({ coachOptions }: { coachOptions: LinkedCoachOption[] }) {
   const integration = useCheerPlannerIntegration("coach");
   const [tab, setTab] = useState<MyTeamsTab>("teams");
   const [createAthleteOpen, setCreateAthleteOpen] = useState(false);
   const [editingAthleteId, setEditingAthleteId] = useState<string | null>(null);
+  const [athleteDraftBaseline, setAthleteDraftBaseline] = useState<ComparableAthleteDraft>(buildEmptyComparableAthleteDraft());
+
+  const isAthleteFormOpen = createAthleteOpen || Boolean(editingAthleteId);
+  const hasUnsavedAthleteChanges = useMemo(() => (
+    isAthleteFormOpen
+    && !areComparableAthleteDraftsEqual(athleteDraftBaseline, buildComparableAthleteDraft(integration.athleteDraft))
+  ), [athleteDraftBaseline, integration.athleteDraft, isAthleteFormOpen]);
+
+  const confirmDiscardAthleteChanges = () => {
+    if (!hasUnsavedAthleteChanges) {
+      return true;
+    }
+
+    return window.confirm("You have unsaved athlete changes. Save the current record before moving on, or confirm to discard this draft.");
+  };
+
+  const resetAthleteEditor = () => {
+    setCreateAthleteOpen(false);
+    setEditingAthleteId(null);
+  };
 
   const openCreateAthlete = () => {
+    if (!confirmDiscardAthleteChanges()) {
+      return;
+    }
+
     integration.startNewAthlete();
+    setAthleteDraftBaseline(buildEmptyComparableAthleteDraft());
     setEditingAthleteId(null);
     setCreateAthleteOpen(true);
   };
 
   const openEditAthlete = (athleteId: string) => {
+    if (!confirmDiscardAthleteChanges()) {
+      return;
+    }
+
+    const athlete = integration.athletePool.find((currentAthlete) => currentAthlete.id === athleteId) ?? null;
+
+    if (!athlete) {
+      return;
+    }
+
     integration.loadRegisteredAthlete(athleteId);
+    setAthleteDraftBaseline(buildComparableAthleteDraft({
+      registrationNumber: athlete.registrationNumber,
+      firstName: athlete.firstName,
+      lastName: athlete.lastName,
+      dateOfBirth: athlete.dateOfBirth,
+      notes: athlete.notes,
+      parentContacts: athlete.parentContacts
+    }));
     setEditingAthleteId(athleteId);
     setCreateAthleteOpen(false);
   };
 
   const closeAthleteForm = () => {
-    setCreateAthleteOpen(false);
-    setEditingAthleteId(null);
+    if (!confirmDiscardAthleteChanges()) {
+      return;
+    }
+
+    resetAthleteEditor();
   };
 
   const handleSaveAthlete = async () => {
@@ -44,11 +134,9 @@ export function MyTeamsWorkspaceShell({ coachOptions }: { coachOptions: LinkedCo
       return;
     }
 
-    setCreateAthleteOpen(false);
-    setEditingAthleteId(integration.athleteDraft.athleteId);
+    setAthleteDraftBaseline(buildComparableAthleteDraft(integration.athleteDraft));
+    resetAthleteEditor();
   };
-
-  const isAthleteFormOpen = createAthleteOpen || Boolean(editingAthleteId);
 
   return (
     <main className="workspace-shell page-stack myteams-shell">
@@ -56,7 +144,8 @@ export function MyTeamsWorkspaceShell({ coachOptions }: { coachOptions: LinkedCo
         <CardContent className="planner-panel-stack myteams-hero-card">
           <SectionHeader
             eyebrow="My Teams"
-            title="Manage teams and athlete records outside the planner flow."
+            title="Manage Teams And Athlete Records"
+            description="Work outside the live planner flow without losing team structure or athlete records."
           />
 
           <div className="planner-panel-stack myteams-hero-controls">
@@ -64,8 +153,22 @@ export function MyTeamsWorkspaceShell({ coachOptions }: { coachOptions: LinkedCo
               className="planner-workspace-switch myteams-switch"
               items={MY_TEAMS_TABS}
               value={tab}
-              onValueChange={(value) => setTab(value)}
-              ariaLabel="My teams workspace"
+              onValueChange={(value) => {
+                if (value === tab) {
+                  return;
+                }
+
+                if (tab === "athletes" && !confirmDiscardAthleteChanges()) {
+                  return;
+                }
+
+                if (tab === "athletes") {
+                  resetAthleteEditor();
+                }
+
+                setTab(value);
+              }}
+              ariaLabel="My Teams Workspace"
             />
             {integration.saveMessage ? <Badge variant="accent">{integration.saveMessage}</Badge> : null}
           </div>
@@ -86,11 +189,11 @@ export function MyTeamsWorkspaceShell({ coachOptions }: { coachOptions: LinkedCo
           <CardContent className="planner-panel-stack">
             <SectionHeader
               eyebrow="Athletes"
-              title="Saved athlete records"
+              title="Saved Athlete Records"
               description="Register athletes here, then search them directly from Tryouts when coaches are ready to evaluate."
               actions={
                 <Button type="button" onClick={openCreateAthlete}>
-                  Add athlete
+                  Add Athlete
                 </Button>
               }
             />
@@ -99,24 +202,24 @@ export function MyTeamsWorkspaceShell({ coachOptions }: { coachOptions: LinkedCo
               <Card variant="subtle" className="planner-create-athlete-card">
                 <CardContent className="planner-panel-stack">
                   <SectionHeader
-                    eyebrow={editingAthleteId ? "Edit athlete" : "New athlete"}
-                    title={editingAthleteId ? "Update athlete registration" : "Register athlete"}
+                    eyebrow={editingAthleteId ? "Edit Athlete" : "New Athlete"}
+                    title={editingAthleteId ? "Update Athlete Record" : "Create Athlete Record"}
                   />
                   <div className="planner-athlete-grid">
-                    <Input label="Registration #" value={integration.athleteDraft.registrationNumber || "Auto-assigned on save"} readOnly />
+                    <Input label="Registration #" value={integration.athleteDraft.registrationNumber || "Auto-assigned on Save"} readOnly />
                     <Input
-                      label="First name"
+                      label="First Name"
                       value={integration.athleteDraft.firstName}
                       onChange={(event) => integration.updateAthleteDraft("firstName", event.target.value)}
                     />
                     <Input
-                      label="Last name"
+                      label="Last Name"
                       value={integration.athleteDraft.lastName}
                       onChange={(event) => integration.updateAthleteDraft("lastName", event.target.value)}
                     />
                     <Input
                       type="date"
-                      label="Date of birth"
+                      label="Date Of Birth"
                       value={integration.athleteDraft.dateOfBirth}
                       onChange={(event) => integration.updateAthleteDraft("dateOfBirth", event.target.value)}
                     />
@@ -132,10 +235,10 @@ export function MyTeamsWorkspaceShell({ coachOptions }: { coachOptions: LinkedCo
                   <div className="planner-athlete-parent-stack">
                     <SectionHeader
                       eyebrow="Parents"
-                      title="Parent or guardian contacts"
+                      title="Parent Or Guardian Contacts"
                       actions={
                         <Button type="button" variant="ghost" size="sm" onClick={integration.addParentContact}>
-                          Add contact
+                          Add Contact
                         </Button>
                       }
                     />
@@ -155,18 +258,18 @@ export function MyTeamsWorkspaceShell({ coachOptions }: { coachOptions: LinkedCo
                           </div>
                           <div className="planner-athlete-grid">
                             <Input
-                              label="Parent name"
+                              label="Parent Name"
                               value={contact.name}
                               onChange={(event) => integration.updateParentContact(contact.id, "name", event.target.value)}
                             />
                             <Input
-                              label="Parent email"
+                              label="Parent Email"
                               type="email"
                               value={contact.email}
                               onChange={(event) => integration.updateParentContact(contact.id, "email", event.target.value)}
                             />
                             <Input
-                              label="Parent phone"
+                              label="Parent Phone"
                               value={contact.phone}
                               onChange={(event) => integration.updateParentContact(contact.id, "phone", event.target.value)}
                             />
@@ -178,7 +281,7 @@ export function MyTeamsWorkspaceShell({ coachOptions }: { coachOptions: LinkedCo
 
                   <div className="planner-inline-actions">
                     <Button type="button" onClick={() => void handleSaveAthlete()}>
-                      Save athlete
+                      Save Athlete
                     </Button>
                     <Button type="button" variant="secondary" onClick={closeAthleteForm}>
                       Cancel
@@ -197,16 +300,16 @@ export function MyTeamsWorkspaceShell({ coachOptions }: { coachOptions: LinkedCo
                         <strong>{athlete.name}</strong>
                         <Badge variant={athlete.displayLevel === "Unqualified" ? "subtle" : "dark"}>{athlete.displayLevel}</Badge>
                       </div>
-                      <p>{athlete.registrationNumber} / Age {athlete.age ?? "-"} / Parent {athlete.parentContacts[0]?.name || "No parent contact yet"}</p>
-                      <p>Latest score {integration.formatScore(athlete.displayScore)} / Extra {integration.formatScore(athlete.extraScore)} / Team {athlete.assignedTeamName}</p>
+                      <p>{athlete.registrationNumber} / Age {athlete.age ?? "-"} / Parent {athlete.parentContacts[0]?.name || "No Parent Contact Yet"}</p>
+                      <p>Latest Score {integration.formatScore(athlete.displayScore)} / Extra {integration.formatScore(athlete.extraScore)} / Team {athlete.assignedTeamName}</p>
                     </div>
                     <Button type="button" variant="ghost" size="sm" onClick={() => openEditAthlete(athlete.id)}>
-                      Edit
+                      Edit Record
                     </Button>
                   </CardContent>
                 </Card>
               )) : (
-                <EmptyState title="No athletes saved yet." description="Register athletes here and they will be available immediately in Tryouts and Team Builder." />
+                <EmptyState title="No Athletes Saved Yet." description="Register athletes here and they will be available immediately in Tryouts and Team Builder." />
               )}
             </div>
           </CardContent>
@@ -215,6 +318,3 @@ export function MyTeamsWorkspaceShell({ coachOptions }: { coachOptions: LinkedCo
     </main>
   );
 }
-
-
-

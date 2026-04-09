@@ -50,7 +50,7 @@ export function RoutineBuilderSurface(props: RoutineBuilderSurfaceProps) {
         <CardContent className="planner-panel-stack">
           <SectionHeader
             eyebrow="Routine Builder"
-            title="Interactive team routine editor"
+            title="Interactive Team Routine Editor"
             description="Select one team to review or edit its full routine map. Skill Planner remains the source for routine-ready sections."
           />
           <div className="planner-team-card-list">
@@ -74,8 +74,8 @@ export function RoutineBuilderSurface(props: RoutineBuilderSurfaceProps) {
                       </div>
                       <div className="planner-team-card-actions">
                         <div className="planner-summary-chip-group">
-                          <Badge variant={team.skillPlan ? "accent" : "subtle"}>{team.skillPlan ? `Skills ${team.skillPlan.status}` : "No skill plan"}</Badge>
-                          <Badge variant={team.routinePlan ? "dark" : "subtle"}>{team.routinePlan ? `Routine ${team.routinePlan.status}` : "No routine"}</Badge>
+                          <Badge variant={team.skillPlan ? "accent" : "subtle"}>{team.skillPlan ? `Skills ${team.skillPlan.status.charAt(0).toUpperCase()}${team.skillPlan.status.slice(1)}` : "No Skill Plan"}</Badge>
+                          <Badge variant={team.routinePlan ? "dark" : "subtle"}>{team.routinePlan ? `Routine ${team.routinePlan.status.charAt(0).toUpperCase()}${team.routinePlan.status.slice(1)}` : "No Routine Plan"}</Badge>
                         </div>
                         {isEditing ? (
                           <>
@@ -89,7 +89,7 @@ export function RoutineBuilderSurface(props: RoutineBuilderSurfaceProps) {
                               size="sm"
                               onClick={() => setSelectedTeamId((current) => current === team.teamId ? null : team.teamId)}
                             >
-                              {isSelected ? "Hide details" : "View team"}
+                              {isSelected ? "Hide Details" : "View Team"}
                             </Button>
                             <Button
                               size="sm"
@@ -98,7 +98,7 @@ export function RoutineBuilderSurface(props: RoutineBuilderSurfaceProps) {
                                 void openRoutineBuilderTeam(team.teamId);
                               }}
                             >
-                              Edit team
+                              Edit Team
                             </Button>
                           </>
                         )}
@@ -123,7 +123,7 @@ export function RoutineBuilderSurface(props: RoutineBuilderSurfaceProps) {
                 </Card>
               );
             }) : (
-              <EmptyState title="No routine inputs available yet." description="Create teams and save team skill rows before building routines." />
+              <EmptyState title="No Routine Inputs Available Yet." description="Create teams and save team skill rows before building routines." />
             )}
           </div>
         </CardContent>

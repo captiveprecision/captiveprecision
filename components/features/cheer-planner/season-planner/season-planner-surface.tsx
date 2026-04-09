@@ -30,7 +30,7 @@ export function SeasonPlannerSurface(props: SeasonPlannerSurfaceProps) {
         <CardContent className="planner-panel-stack">
           <SectionHeader
             eyebrow="Season Planner"
-            title="Team season checkpoints"
+            title="Team Season Checkpoints"
             description="Select the season checkpoints to keep for one team at a time. Saving replaces the full persisted checkpoint set for that team."
           />
           <div className="planner-team-card-list">
@@ -50,8 +50,8 @@ export function SeasonPlannerSurface(props: SeasonPlannerSurfaceProps) {
                       </div>
                       <div className="planner-team-card-actions">
                         <div className="planner-summary-chip-group">
-                          <Badge variant={team.routinePlan ? "accent" : "subtle"}>{team.routinePlan ? `Routine ${team.routinePlan.status}` : "No routine"}</Badge>
-                          <Badge variant={team.seasonPlan ? "dark" : "subtle"}>{team.seasonPlan ? `Season ${team.seasonPlan.status}` : "No season plan"}</Badge>
+                          <Badge variant={team.routinePlan ? "accent" : "subtle"}>{team.routinePlan ? `Routine ${team.routinePlan.status.charAt(0).toUpperCase()}${team.routinePlan.status.slice(1)}` : "No Routine"}</Badge>
+                          <Badge variant={team.seasonPlan ? "dark" : "subtle"}>{team.seasonPlan ? `Season ${team.seasonPlan.status.charAt(0).toUpperCase()}${team.seasonPlan.status.slice(1)}` : "No Season Plan"}</Badge>
                         </div>
                         {isEditing ? (
                           <>
@@ -64,7 +64,7 @@ export function SeasonPlannerSurface(props: SeasonPlannerSurfaceProps) {
                       </div>
                     </div>
                     <div className="planner-team-summary-row">
-                      <span>{team.routineInput ? `${team.routineInput.itemCount} routine items / ${team.routineInput.approvedItemCount} approved` : "No routine context"}</span>
+                      <span>{team.routineInput ? `${team.routineInput.itemCount} Routine Items / ${team.routineInput.approvedItemCount} Approved` : "No Routine Context"}</span>
                       <span>{team.seasonPlan?.checkpoints.length ?? 0} persisted / {selectedCount} current</span>
                     </div>
                     <div className="planner-team-members-list">
@@ -72,7 +72,7 @@ export function SeasonPlannerSurface(props: SeasonPlannerSurfaceProps) {
                         <label key={checkpoint.id} className="planner-team-member-row">
                           <div>
                             <strong>{checkpoint.name}</strong>
-                            <p>{checkpoint.targetDate ? new Date(checkpoint.targetDate).toLocaleDateString("en-US") : "No target date"}</p>
+                            <p>{checkpoint.targetDate ? new Date(checkpoint.targetDate).toLocaleDateString("en-US") : "No Target Date"}</p>
                           </div>
                           <input
                             type="checkbox"
@@ -82,14 +82,14 @@ export function SeasonPlannerSurface(props: SeasonPlannerSurfaceProps) {
                           />
                         </label>
                       )) : (
-                        <EmptyState title="No season checkpoints available." description="Season Planner depends on routine context or an existing season plan for this team." />
+                        <EmptyState title="No Season Checkpoints Available." description="Season Planner depends on routine context or an existing season plan for this team." />
                       )}
                     </div>
                   </CardContent>
                 </Card>
               );
             }) : (
-              <EmptyState title="No teams available yet." description="Season Planner depends on the canonical team pipeline already stored in PlannerProject." />
+              <EmptyState title="No Teams Available Yet." description="Season Planner depends on the canonical team pipeline already stored in PlannerProject." />
             )}
           </div>
         </CardContent>

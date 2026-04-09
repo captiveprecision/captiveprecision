@@ -254,9 +254,6 @@ export function WorkspaceSidebar({
                   aria-expanded={toolsOpen}
                   title={collapsed ? "Tools" : undefined}
                 >
-                  <span className="nav-bullet" aria-hidden="true">
-                    L
-                  </span>
                   <span className="nav-title">Tools</span>
                   <span className="sidebar-tools-arrow" aria-hidden="true">
                     {toolsOpen ? "-" : "+"}

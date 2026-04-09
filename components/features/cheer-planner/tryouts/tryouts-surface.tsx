@@ -17,9 +17,9 @@ import type {
 
 const TRYOUT_SPORT_TABS: { value: PlannerSportTab; label: string }[] = [
   { value: "tumbling", label: "Tumbling" },
-  { value: "dance", label: "Dance / Coming soon" },
-  { value: "jumps", label: "Jumps / Coming soon" },
-  { value: "stunts", label: "Stunts / Coming soon" }
+  { value: "dance", label: "Dance / Coming Soon" },
+  { value: "jumps", label: "Jumps / Coming Soon" },
+  { value: "stunts", label: "Stunts / Coming Soon" }
 ];
 
 type AthleteIntakeMode = "registered" | "new";
@@ -155,7 +155,7 @@ export function TryoutsSurface(props: TryoutsSurfaceProps) {
       <div className="planner-main-column">
         <Card radius="panel" className="planner-panel-stack">
           <CardContent className="planner-panel-stack">
-            <SectionHeader eyebrow="Athlete intake" title="Tryout record" />
+            <SectionHeader eyebrow="Athlete Intake" title="Tryout Record" />
 
             <div className="planner-athlete-intake-stack">
               <div className="planner-athlete-intake-toggle">
@@ -165,7 +165,7 @@ export function TryoutsSurface(props: TryoutsSurfaceProps) {
                   size="sm"
                   onClick={selectRegisteredAthleteMode}
                 >
-                  Registered athlete
+                  Registered Athlete
                 </Button>
                 <Button
                   type="button"
@@ -173,14 +173,14 @@ export function TryoutsSurface(props: TryoutsSurfaceProps) {
                   size="sm"
                   onClick={selectNewAthleteMode}
                 >
-                  New athlete
+                  New Athlete
                 </Button>
               </div>
 
               {athleteIntakeMode === "registered" ? (
                 <div className="planner-panel-stack">
                   <Input
-                    label="Search athletes"
+                    label="Search Athletes"
                     placeholder="Search by name, registration, or parent contact"
                     value={registeredSearch}
                     onChange={(event) => setRegisteredSearch(event.target.value)}
@@ -208,8 +208,8 @@ export function TryoutsSurface(props: TryoutsSurfaceProps) {
                       ))
                     ) : (
                       <EmptyState
-                        title="No registered athletes found."
-                        description="Search another athlete or switch to New athlete to create one."
+                        title="No Registered Athletes Found."
+                        description="Search another athlete or switch to New Athlete to create one."
                       />
                     )}
                   </div>
@@ -219,10 +219,10 @@ export function TryoutsSurface(props: TryoutsSurfaceProps) {
               {showAthleteForm ? (
                 <div className="planner-panel-stack">
                   <div className="planner-athlete-grid">
-                    <Input label="Registration #" value={athleteDraft.registrationNumber || "Auto-assigned on save"} readOnly />
-                    <Input label="First name" value={athleteDraft.firstName} onChange={(event) => updateAthleteDraft("firstName", event.target.value)} />
-                    <Input label="Last name" value={athleteDraft.lastName} onChange={(event) => updateAthleteDraft("lastName", event.target.value)} />
-                    <Input type="date" label="Date of birth" value={athleteDraft.dateOfBirth} onChange={(event) => updateAthleteDraft("dateOfBirth", event.target.value)} />
+                    <Input label="Registration #" value={athleteDraft.registrationNumber || "Auto-assigned on Save"} readOnly />
+                    <Input label="First Name" value={athleteDraft.firstName} onChange={(event) => updateAthleteDraft("firstName", event.target.value)} />
+                    <Input label="Last Name" value={athleteDraft.lastName} onChange={(event) => updateAthleteDraft("lastName", event.target.value)} />
+                    <Input type="date" label="Date Of Birth" value={athleteDraft.dateOfBirth} onChange={(event) => updateAthleteDraft("dateOfBirth", event.target.value)} />
                     <Textarea
                       label="Notes"
                       rows={3}
@@ -235,10 +235,10 @@ export function TryoutsSurface(props: TryoutsSurfaceProps) {
                   <div className="planner-athlete-parent-stack">
                     <SectionHeader
                       eyebrow="Parents"
-                      title="Parent or guardian contacts"
+                      title="Parent Or Guardian Contacts"
                       actions={
                         <Button type="button" variant="ghost" size="sm" onClick={addParentContact}>
-                          Add contact
+                          Add Contact
                         </Button>
                       }
                     />
@@ -252,9 +252,9 @@ export function TryoutsSurface(props: TryoutsSurfaceProps) {
                             </Button>
                           </div>
                           <div className="planner-athlete-grid">
-                            <Input label="Parent name" value={contact.name} onChange={(event) => updateParentContact(contact.id, "name", event.target.value)} />
-                            <Input label="Parent email" type="email" value={contact.email} onChange={(event) => updateParentContact(contact.id, "email", event.target.value)} />
-                            <Input label="Parent phone" value={contact.phone} onChange={(event) => updateParentContact(contact.id, "phone", event.target.value)} />
+                            <Input label="Parent Name" value={contact.name} onChange={(event) => updateParentContact(contact.id, "name", event.target.value)} />
+                            <Input label="Parent Email" type="email" value={contact.email} onChange={(event) => updateParentContact(contact.id, "email", event.target.value)} />
+                            <Input label="Parent Phone" value={contact.phone} onChange={(event) => updateParentContact(contact.id, "phone", event.target.value)} />
                           </div>
                         </CardContent>
                       </Card>
@@ -263,7 +263,7 @@ export function TryoutsSurface(props: TryoutsSurfaceProps) {
                 </div>
               ) : (
                 <EmptyState
-                  title="Select a registered athlete to continue."
+                  title="Select A Registered Athlete To Continue."
                   description="Choosing an athlete will populate the tryout form automatically."
                 />
               )}
@@ -273,7 +273,7 @@ export function TryoutsSurface(props: TryoutsSurfaceProps) {
 
         <Card radius="panel" className="planner-panel-stack">
           <CardContent className="planner-panel-stack">
-            <SectionHeader eyebrow="Sport" title="Tryout track" />
+            <SectionHeader eyebrow="Sport" title="Tryout Track" />
             <Tabs
               className="planner-sport-tabs"
               items={TRYOUT_SPORT_TABS}
@@ -287,7 +287,7 @@ export function TryoutsSurface(props: TryoutsSurfaceProps) {
             />
             {activeSport !== "tumbling" ? (
               <EmptyState
-                title="Tumbling is the active track"
+                title="Tumbling Is The Active Track"
                 description="This step is wired for tumbling first. The other tryout lanes will connect next."
               />
             ) : null}
@@ -300,7 +300,7 @@ export function TryoutsSurface(props: TryoutsSurfaceProps) {
               <CardContent className="planner-panel-stack">
                 <SectionHeader
                   eyebrow="Template"
-                  title="Tryout settings"
+                  title="Tryout Settings"
                   actions={
                     <Button variant="ghost" size="sm" onClick={() => setSettingsOpen((current) => !current)}>
                       {settingsOpen ? "Hide" : "Edit"}
@@ -338,7 +338,7 @@ export function TryoutsSurface(props: TryoutsSurfaceProps) {
                           type="number"
                           min={1}
                           max={20}
-                          label={`${levelLabels[levelKey]} skills`}
+                          label={`${levelLabels[levelKey]} Skills`}
                           value={template.defaultSkillCounts[levelKey]}
                           onChange={(event) => updateSkillCount(levelKey, event.target.value)}
                         />
@@ -346,8 +346,8 @@ export function TryoutsSurface(props: TryoutsSurfaceProps) {
                     </div>
 
                     <div className="planner-inline-actions">
-                      <Button onClick={saveTemplate}>Save template</Button>
-                      <Button variant="secondary" onClick={resetTemplate}>Reset template</Button>
+                      <Button onClick={saveTemplate}>Save Template</Button>
+                      <Button variant="secondary" onClick={resetTemplate}>Reset Template</Button>
                     </div>
                   </div>
                 ) : (
@@ -366,7 +366,7 @@ export function TryoutsSurface(props: TryoutsSurfaceProps) {
               <CardContent className="planner-panel-stack">
                 <SectionHeader
                   eyebrow="Evaluation"
-                  title="Tumbling levels"
+                  title="Tumbling Levels"
                   actions={
                     <div className="planner-summary-chip-group">
                       <Badge variant="accent">Main {formatScore(summary.totalBaseScore)}</Badge>
@@ -428,7 +428,7 @@ export function TryoutsSurface(props: TryoutsSurfaceProps) {
                                 </div>
                               ))}
                               <Button type="button" variant="secondary" size="sm" onClick={() => addExtraSkill(level.levelKey)}>
-                                Add extra skill
+                                Add Extra Skill
                               </Button>
                             </div>
                           ) : null}
@@ -446,24 +446,29 @@ export function TryoutsSurface(props: TryoutsSurfaceProps) {
       <aside className="planner-side-column">
         <Card radius="panel" className="planner-panel-stack">
           <CardContent className="planner-panel-stack">
-            <SectionHeader eyebrow="Live summary" title="Top levels" />
+            <SectionHeader eyebrow="Live Summary" title="Top Levels" />
             <div className="planner-summary-list">
-              {summary.topLevels.map((item) => (
+              {summary.topLevels.length ? summary.topLevels.map((item) => (
                 <div key={item.levelKey} className="planner-summary-row">
                   <strong>{item.levelLabel}</strong>
                   <span>Main {formatScore(item.baseScore)} / Extra {formatScore(item.extraScore)}</span>
                 </div>
-              ))}
+              )) : (
+                <EmptyState
+                  title="No Evaluated Levels Yet."
+                  description="Top Levels will appear after at least one level has recorded an evaluation."
+                />
+              )}
             </div>
             <Button onClick={saveEvaluation} disabled={activeSport !== "tumbling" || !canSaveAthleteRecord}>
-              Save athlete record
+              Save Athlete Record
             </Button>
           </CardContent>
         </Card>
 
         <Card radius="panel" className="planner-panel-stack">
           <CardContent className="planner-panel-stack">
-            <SectionHeader eyebrow="Recent" title="Latest evaluations" />
+            <SectionHeader eyebrow="Recent" title="Latest Evaluations" />
             <div className="planner-recent-list">
               {recentEvaluations.length ? recentEvaluations.map((evaluation) => (
                 <Button
@@ -478,7 +483,7 @@ export function TryoutsSurface(props: TryoutsSurfaceProps) {
                   <span>{new Date(getEvaluationDate(evaluation)).toLocaleDateString("en-US")}</span>
                 </Button>
               )) : (
-                <EmptyState title="No tryout records saved yet." description="Saved evaluations will appear here for quick reload." />
+                <EmptyState title="No Tryout Records Saved Yet." description="Saved evaluations will appear here for quick reload." />
               )}
             </div>
           </CardContent>

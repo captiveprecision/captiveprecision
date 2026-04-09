@@ -16,6 +16,10 @@ function normalizeSkillCounts(defaultSkillCounts: PlannerTryoutTemplate["default
   return Object.fromEntries(LEVEL_KEYS.map((levelKey) => [levelKey, Number(defaultSkillCounts[levelKey] ?? 0)])) as Record<PlannerLevelKey, number>;
 }
 
+function normalizeTemplateOptionLabel(option: PlannerTryoutTemplate["options"][number]) {
+  return option.id === "does-it" ? { ...option, label: "Attempted" } : option;
+}
+
 function buildAthleteName(firstName: string, lastName: string) {
   return [firstName.trim(), lastName.trim()].filter(Boolean).join(" ").trim();
 }
@@ -341,9 +345,13 @@ export function normalizePlannerProject(raw: Partial<PlannerProject>, fallbackTe
       ? {
           ...fallbackTemplate,
           ...raw.template,
+          options: (Array.isArray(raw.template.options) ? raw.template.options : fallbackTemplate.options).map((option) => normalizeTemplateOptionLabel({ ...option })),
           defaultSkillCounts: normalizeSkillCounts({ ...fallbackTemplate.defaultSkillCounts, ...raw.template.defaultSkillCounts })
         }
-      : fallbackTemplate,
+      : {
+          ...fallbackTemplate,
+          options: fallbackTemplate.options.map((option) => normalizeTemplateOptionLabel({ ...option }))
+        },
     athletes: Array.isArray(raw.athletes) ? raw.athletes.map((athlete) => normalizePlannerAthlete(athlete)) : [],
     evaluations: Array.isArray(raw.evaluations)
       ? raw.evaluations.map((evaluation) => normalizePlannerEvaluation(evaluation as Parameters<typeof normalizePlannerEvaluation>[0]))

@@ -92,7 +92,14 @@ export function buildTryoutEvaluationSummary(template: PlannerTryoutTemplate, ev
     };
   });
 
+  const evaluatedLevels = new Set(
+    evaluations
+      .filter((level) => level.skills.some((skill) => Boolean(skill.optionId)))
+      .map((level) => level.levelKey)
+  );
+
   const topLevels = [...levelScores]
+    .filter((level) => evaluatedLevels.has(level.levelKey))
     .sort((left, right) => {
       if (right.baseScore !== left.baseScore) {
         return right.baseScore - left.baseScore;

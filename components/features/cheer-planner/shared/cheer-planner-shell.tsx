@@ -35,7 +35,7 @@ export function CheerPlannerShell({ integration }: CheerPlannerShellProps) {
           <SectionHeader
             className="planner-hero-header"
             eyebrow="Cheer Planner"
-            title="Build and review the full planning pipeline."
+            title="Build Plan Review Pipeline"
             actions={
               <div className="planner-hero-actions">
                 <Tabs
@@ -47,7 +47,7 @@ export function CheerPlannerShell({ integration }: CheerPlannerShellProps) {
                       void integration.setPipelineStage(value);
                     }
                   }}
-                  ariaLabel="Cheer planner workspace"
+                  ariaLabel="Cheer Planner Workspace"
                 />
                 {integration.saveMessage ? <Badge variant="accent">{integration.saveMessage}</Badge> : null}
               </div>
