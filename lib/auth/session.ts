@@ -110,65 +110,79 @@ export function getNextPathForSession(session: Pick<AuthSession, "roles">) {
   return session.roles.length === 1 ? getNextPathForRole(session.roles[0]) : "/select-workspace";
 }
 
+function isNextDynamicServerError(error: unknown) {
+  return typeof error === "object" && error !== null && "digest" in error && (error as { digest?: unknown }).digest === "DYNAMIC_SERVER_USAGE";
+}
+
 export async function getAuthSession(): Promise<AuthSession | null> {
-  const supabase = await createServerSupabaseClient();
-  const {
-    data: { user },
-    error
-  } = await supabase.auth.getUser();
+  try {
+    const supabase = await createServerSupabaseClient();
+    const {
+      data: { user },
+      error
+    } = await supabase.auth.getUser();
 
-  if (error || !user) {
-    return null;
-  }
+    if (error || !user) {
+      return null;
+    }
 
-  const admin = createAdminClient();
-  const { data, error: profileError } = await admin
-    .from("profiles" as never)
-    .select("display_name, email, role, primary_gym_id, beta_access_status, gym_name, city, state, role_label, headline, bio, teams_summary, avatar_url" as never)
-    .eq("id", user.id as never)
-    .maybeSingle();
-
-  const profile = data as ProfileRow | null;
-
-  if (profileError) {
-    return null;
-  }
-
-  const access = getProfileAccessState(profile);
-
-  if (!access.ok || !profile) {
-    return null;
-  }
-
-  const authorizedProfile = profile;
-  let linkedGymName: string | null = null;
-
-  if (authorizedProfile.primary_gym_id) {
-    const { data: gymData } = await admin
-      .from("gyms" as never)
-      .select("name" as never)
-      .eq("id", authorizedProfile.primary_gym_id as never)
+    const admin = createAdminClient();
+    const { data, error: profileError } = await admin
+      .from("profiles" as never)
+      .select("display_name, email, role, primary_gym_id, beta_access_status, gym_name, city, state, role_label, headline, bio, teams_summary, avatar_url" as never)
+      .eq("id", user.id as never)
       .maybeSingle();
 
-    linkedGymName = (gymData as Pick<GymRow, "name"> | null)?.name ?? null;
-  }
+    const profile = data as ProfileRow | null;
 
-  return {
-    userId: user.id,
-    email: authorizedProfile.email ?? user.email ?? "",
-    displayName: authorizedProfile.display_name ?? user.user_metadata.display_name ?? user.email ?? "User",
-    role: access.role,
-    roles: getEffectiveRoles(access.role),
-    primaryGymId: authorizedProfile.primary_gym_id ?? null,
-    primaryGymName: authorizedProfile.gym_name ?? linkedGymName,
-    city: authorizedProfile.city ?? null,
-    state: authorizedProfile.state ?? null,
-    roleLabel: authorizedProfile.role_label ?? null,
-    headline: authorizedProfile.headline ?? null,
-    bio: authorizedProfile.bio ?? null,
-    teamsSummary: authorizedProfile.teams_summary ?? null,
-    avatarUrl: authorizedProfile.avatar_url ?? null
-  };
+    if (profileError) {
+      console.error("[auth] Failed to load profile for authenticated user.", profileError);
+      return null;
+    }
+
+    const access = getProfileAccessState(profile);
+
+    if (!access.ok || !profile) {
+      return null;
+    }
+
+    const authorizedProfile = profile;
+    let linkedGymName: string | null = null;
+
+    if (authorizedProfile.primary_gym_id) {
+      const { data: gymData } = await admin
+        .from("gyms" as never)
+        .select("name" as never)
+        .eq("id", authorizedProfile.primary_gym_id as never)
+        .maybeSingle();
+
+      linkedGymName = (gymData as Pick<GymRow, "name"> | null)?.name ?? null;
+    }
+
+    return {
+      userId: user.id,
+      email: authorizedProfile.email ?? user.email ?? "",
+      displayName: authorizedProfile.display_name ?? user.user_metadata.display_name ?? user.email ?? "User",
+      role: access.role,
+      roles: getEffectiveRoles(access.role),
+      primaryGymId: authorizedProfile.primary_gym_id ?? null,
+      primaryGymName: authorizedProfile.gym_name ?? linkedGymName,
+      city: authorizedProfile.city ?? null,
+      state: authorizedProfile.state ?? null,
+      roleLabel: authorizedProfile.role_label ?? null,
+      headline: authorizedProfile.headline ?? null,
+      bio: authorizedProfile.bio ?? null,
+      teamsSummary: authorizedProfile.teams_summary ?? null,
+      avatarUrl: authorizedProfile.avatar_url ?? null
+    };
+  } catch (error) {
+    if (isNextDynamicServerError(error)) {
+      throw error;
+    }
+
+    console.error("[auth] Failed to resolve authenticated session.", error);
+    return null;
+  }
 }
 
 export async function requireAuthSession(requiredRole?: AppRole) {
