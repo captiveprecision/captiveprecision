@@ -14,7 +14,7 @@
   --cp-radius: 20px;
   --cp-shadow: 0 10px 30px rgba(15, 15, 15, 0.04), 0 2px 8px rgba(15, 15, 15, 0.04);
   --sidebar-width: 280px;
-  --sidebar-width-collapsed: 72px;
+  --sidebar-width-collapsed: 82px;
 
   --cp-color-black: #0f0f0f;
   --cp-color-yellow: #ffc800;
@@ -4843,7 +4843,7 @@ input {
 /* Targeted sidebar + Skill Planner polish */
 
 .sidebar[data-collapsed="true"] .sidebar-panel {
-  padding-inline: 8px;
+  padding-inline: 10px;
 }
 
 .sidebar[data-collapsed="true"] .sidebar-group,
@@ -4854,9 +4854,9 @@ input {
 
 .sidebar[data-collapsed="true"] .sidebar-link,
 .sidebar[data-collapsed="true"] .sidebar-tools-trigger {
-  width: 42px;
-  min-width: 42px;
-  min-height: 42px;
+  width: 38px;
+  min-width: 38px;
+  min-height: 38px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -4865,13 +4865,16 @@ input {
 }
 
 .sidebar[data-collapsed="true"] .nav-bullet {
-  width: 20px;
-  height: 20px;
+  width: 16px;
+  height: 16px;
   margin: 0;
 }
 
 .sidebar[data-collapsed="true"] .nav-bullet svg {
   display: block;
+  width: 16px;
+  height: 16px;
+  stroke-width: 2;
 }
 
 .planner-skill-row {
