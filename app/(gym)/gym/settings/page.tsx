@@ -1,10 +1,9 @@
-﻿import { Badge, Card, CardContent, SectionHeader } from "@/components/ui";
+import { Badge, Card, CardContent, SectionHeader } from "@/components/ui";
 
 const gymMembershipItems = [
   { label: "Plan", value: "Gym Pro" },
   { label: "Status", value: "Active" },
-  { label: "Coach licenses", value: "6 total / 4 assigned" },
-  { label: "Provider", value: "Whop" }
+  { label: "Coach licenses", value: "6 total / 4 assigned" }
 ];
 
 export default function GymSettingsPage() {

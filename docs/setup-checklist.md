@@ -1,28 +1,28 @@
-# Checklist de setup
+# Setup Checklist
 
 ## GitHub
 
-- inicializar repositorio Git
-- crear `.env.local` a partir de `.env.example`
-- hacer primer commit con la base del proyecto
+- initialize the Git repository
+- create `.env.local` from `.env.example`
+- commit the project baseline
 
 ## Supabase
 
-- crear proyecto
-- habilitar Auth
-- ejecutar `supabase/migrations/001_initial_schema.sql`
-- configurar URL y keys en `.env.local`
+- create the Supabase project
+- enable Auth
+- run all files in `supabase/migrations` in order
+- configure URL and keys in `.env.local` and production hosting
 
-## Whop
+## Application
 
-- crear producto o membresÃ­a
-- registrar `external_product_id` en `membership_plans`
-- configurar webhook hacia `/api/webhooks/whop`
-- guardar `WHOP_WEBHOOK_SECRET`
+- install dependencies
+- run `npm run dev`
+- test `/api/health`
+- test real login, logout, workspace selection, and protected routes
+- verify planner data persists in Supabase after refresh
 
-## AplicaciÃ³n
+## Billing
 
-- instalar dependencias
-- levantar `npm run dev`
-- probar `/api/health`
-- probar login real y sincronizaciÃ³n de membresÃ­a en la siguiente fase
+- no billing provider is connected in this phase
+- do not configure any billing provider
+- do not configure Stripe until a dedicated billing integration phase is opened

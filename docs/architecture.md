@@ -1,78 +1,82 @@
-# Arquitectura inicial
+# Architecture
 
-## Objetivo
+## Goal
 
-Preparar una base estable para una plataforma web en Next.js donde:
+Maintain a stable Next.js platform where:
 
-- el usuario crea o recupera su cuenta con Supabase Auth
-- la plataforma recuerda su perfil e historial
-- las herramientas premium se desbloquean por membresÃ­a activa en Whop
-- cada herramienta puede guardar sus propios registros sin rediseÃ±ar la base cada vez
+- Supabase Auth owns user credentials
+- `public.profiles` owns application profile and role data
+- planner data is persisted in Supabase as the source of truth
+- feature surfaces can grow without redefining domain entities or duplicating storage
 
-## Decisiones base
+## Base Decisions
 
-### 1. Auth desacoplado de billing
+### 1. Auth Is Separate From Billing
 
-- `auth.users` es la fuente de identidad
-- `public.profiles` guarda datos de producto y presentaciÃ³n
-- Whop no reemplaza el login; Whop solo define acceso premium
+- `auth.users` is the identity source
+- `public.profiles` stores product profile, role, and presentation data
+- no billing provider is connected in this phase
+- future billing should be integrated through a dedicated provider-neutral boundary
 
-Esto evita acoplar autenticaciÃ³n y pagos, y simplifica soporte, recuperaciÃ³n de cuenta y administraciÃ³n.
+This keeps login, account recovery, support, and authorization independent from payment decisions.
 
-### 2. CatÃ¡logo de herramientas en base de datos
+### 2. Tool Catalog In Database
 
-La tabla `public.tools` permite activar, ocultar, ordenar y tipificar herramientas sin tocar cÃ³digo de routing cada vez.
+`public.tools` can activate, hide, order, and classify tool surfaces without changing routes every time.
 
-### 3. Registros genÃ©ricos por herramienta
+### 3. Generic Tool Records
 
-La tabla `public.tool_records` guarda:
+`public.tool_records` stores:
 
 - `input_data`
 - `output_data`
 - `status`
-- relaciÃ³n con usuario y herramienta
+- user and tool relationships
 
-Con eso se cubren varias herramientas desde el inicio. Si una herramienta futura necesita alto volumen o estructura muy especÃ­fica, despuÃ©s se puede derivar a tablas especializadas.
+This supports simple tool history while allowing future high-volume tools to move to specialized tables later.
 
-### 4. MembresÃ­a y acceso
+### 4. Provider-Neutral Membership Structures
 
-- `public.membership_plans` define planes comerciales
-- `public.user_memberships` guarda el estado sincronizado desde Whop
-- `public.tool_access_rules` decide quÃ© plan habilita quÃ© herramienta
+The schema keeps neutral membership and license structures:
 
-La verificaciÃ³n real de acceso se concentra en la funciÃ³n SQL `user_has_tool_access`.
+- `public.membership_plans`
+- `public.user_memberships`
+- `public.tool_access_rules`
+- `public.gym_coach_licenses`
 
-## Modelo de datos
+These are not connected to a payment provider right now. Stripe can be scoped later without reintroducing provider-specific assumptions into the core app.
 
-### Identidad
+## Data Model
+
+### Identity
 
 - `auth.users`
 - `public.profiles`
 
-### Comercial
+### Commercial / Access Readiness
 
 - `public.membership_plans`
 - `public.user_memberships`
-- `public.whop_webhook_events`
+- `public.tool_access_rules`
+- `public.gym_coach_licenses`
 
-### Producto
+### Product
 
 - `public.tools`
-- `public.tool_access_rules`
 - `public.tool_records`
+- planner tables in `supabase/migrations/006_planner_remote_persistence.sql`
 
-## Flujo sugerido
+## Current Flow
 
-1. El usuario se registra o inicia sesiÃ³n con Supabase.
-2. Se crea o actualiza `public.profiles`.
-3. Whop envÃ­a un webhook cuando una membresÃ­a cambia.
-4. El backend guarda el evento y sincroniza `public.user_memberships`.
-5. Cuando el usuario intenta usar una herramienta, la app consulta si tiene acceso.
-6. El uso de la herramienta queda guardado en `public.tool_records`.
+1. User signs up or logs in with Supabase.
+2. The app creates or loads `public.profiles`.
+3. Runtime authorization derives effective workspaces from `profiles.role`.
+4. Planner and team data are loaded from Supabase.
+5. Feature-specific save actions persist to Supabase and then refresh local state.
 
-## Pendientes de definiciÃ³n
+## Deferred Decisions
 
-- mÃ©todo exacto de login: magic link, email/password o social
-- modelo comercial final en Whop: un plan Ãºnico o varios niveles
-- si algunas herramientas gratis requieren tambiÃ©n guardar historial
-- si habrÃ¡ equipos, coaches o cuentas multiusuario en una fase posterior
+- Stripe billing model and checkout flow
+- plan tiers and entitlement rules
+- whether free tools require persisted history
+- deeper organization-level membership administration

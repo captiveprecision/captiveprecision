@@ -513,29 +513,6 @@ export type Database = {
         };
         Update: Partial<Database["public"]["Tables"]["user_memberships"]["Insert"]>;
       };
-      whop_webhook_events: {
-        Row: {
-          created_at: string;
-          error_message: string | null;
-          event_type: string;
-          id: string;
-          payload: Json;
-          processed_at: string | null;
-          provider_event_id: string;
-          status: string;
-        };
-        Insert: {
-          created_at?: string;
-          error_message?: string | null;
-          event_type: string;
-          id?: string;
-          payload: Json;
-          processed_at?: string | null;
-          provider_event_id: string;
-          status?: string;
-        };
-        Update: Partial<Database["public"]["Tables"]["whop_webhook_events"]["Insert"]>;
-      };
     };
     Functions: {
       user_has_tool_access: {
@@ -548,7 +525,3 @@ export type Database = {
     };
   };
 };
-
-
-
-

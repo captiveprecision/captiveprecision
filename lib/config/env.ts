@@ -7,9 +7,7 @@ const clientSchema = z.object({
 });
 
 const serverSchema = clientSchema.extend({
-  SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
-  WHOP_API_KEY: z.string().min(1).optional(),
-  WHOP_WEBHOOK_SECRET: z.string().min(1).optional()
+  SUPABASE_SERVICE_ROLE_KEY: z.string().min(1)
 });
 
 function readClientEnv() {
@@ -20,17 +18,10 @@ function readClientEnv() {
   };
 }
 
-function optionalEnv(value: string | undefined) {
-  const normalized = value?.trim();
-  return normalized ? normalized : undefined;
-}
-
 function readServerEnv() {
   return {
     ...readClientEnv(),
-    SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
-    WHOP_API_KEY: optionalEnv(process.env.WHOP_API_KEY),
-    WHOP_WEBHOOK_SECRET: optionalEnv(process.env.WHOP_WEBHOOK_SECRET)
+    SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY
   };
 }
 

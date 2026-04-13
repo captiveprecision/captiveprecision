@@ -1,4 +1,4 @@
-﻿import { Pencil } from "lucide-react";
+import { Pencil } from "lucide-react";
 import { Badge, Button, ButtonLink, Card, DetailGrid, PageColumns, PageHero, PageMainColumn, PageSideColumn } from "@/components/ui";
 
 const notificationItems = [
@@ -23,8 +23,7 @@ const membershipItems = [
   { label: "Plan", value: "Premium Monthly" },
   { label: "Coach type", value: "Independent Coach" },
   { label: "Status", value: "Active" },
-  { label: "Renewal", value: "April 12, 2026" },
-  { label: "Provider", value: "Whop" }
+  { label: "Renewal", value: "April 12, 2026" }
 ];
 
 export default function SettingsPage() {
@@ -181,7 +180,7 @@ export default function SettingsPage() {
                 </div>
                 <div className="settings-security-item">
                   <span className="settings-row-title">Connected services</span>
-                  <p className="settings-row-copy">Future section for Whop, Supabase, and platform integrations.</p>
+                  <p className="settings-row-copy">Future section for billing, Supabase, and platform integrations.</p>
                 </div>
               </div>
             </div>
@@ -191,4 +190,3 @@ export default function SettingsPage() {
     </main>
   );
 }
-

@@ -1,4 +1,4 @@
-﻿import { Pencil } from "lucide-react";
+import { Pencil } from "lucide-react";
 import { Badge, Button, ButtonLink, Card, DetailGrid, PageColumns, PageHero, PageMainColumn, PageSideColumn } from "@/components/ui";
 
 const notificationItems = [
@@ -23,8 +23,7 @@ const membershipItems = [
   { label: "Plan", value: "Premium Monthly" },
   { label: "Coach type", value: "Independent Coach" },
   { label: "Status", value: "Active" },
-  { label: "Renewal", value: "April 12, 2026" },
-  { label: "Provider", value: "Whop" }
+  { label: "Renewal", value: "April 12, 2026" }
 ];
 
 export default function CoachSettingsPage() {

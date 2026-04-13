@@ -25,7 +25,7 @@ create table if not exists public.membership_plans (
   code text not null unique,
   name text not null,
   description text,
-  provider text not null default 'whop',
+  provider text not null default 'manual',
   external_product_id text unique,
   interval_label text,
   active boolean not null default true,
@@ -38,7 +38,7 @@ create table if not exists public.user_memberships (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references public.profiles(id) on delete cascade,
   membership_plan_id uuid references public.membership_plans(id) on delete set null,
-  provider text not null default 'whop',
+  provider text not null default 'manual',
   provider_customer_id text,
   provider_membership_id text not null unique,
   status text not null,
@@ -90,17 +90,6 @@ create table if not exists public.tool_records (
   constraint tool_records_status_check check (status in ('queued', 'processing', 'completed', 'failed'))
 );
 
-create table if not exists public.whop_webhook_events (
-  id uuid primary key default gen_random_uuid(),
-  provider_event_id text not null unique,
-  event_type text not null,
-  payload jsonb not null,
-  status text not null default 'received',
-  error_message text,
-  processed_at timestamptz,
-  created_at timestamptz not null default timezone('utc'::text, now()),
-  constraint whop_webhook_events_status_check check (status in ('received', 'processed', 'failed'))
-);
 
 create or replace function public.handle_new_user()
 returns trigger
@@ -175,8 +164,6 @@ create index if not exists idx_tools_status_sort
 create index if not exists idx_tool_records_user_tool_created
   on public.tool_records (user_id, tool_id, created_at desc);
 
-create index if not exists idx_whop_webhook_events_status
-  on public.whop_webhook_events (status, created_at desc);
 
 drop trigger if exists set_profiles_updated_at on public.profiles;
 create trigger set_profiles_updated_at
@@ -209,7 +196,6 @@ alter table public.user_memberships enable row level security;
 alter table public.tools enable row level security;
 alter table public.tool_access_rules enable row level security;
 alter table public.tool_records enable row level security;
-alter table public.whop_webhook_events enable row level security;
 
 drop policy if exists "profiles_select_own" on public.profiles;
 create policy "profiles_select_own"
