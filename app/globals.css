@@ -4839,3 +4839,91 @@ input {
     align-self: flex-start;
   }
 }
+
+/* Targeted sidebar + Skill Planner polish */
+
+.sidebar[data-collapsed="true"] .sidebar-panel {
+  padding-inline: 8px;
+}
+
+.sidebar[data-collapsed="true"] .sidebar-group,
+.sidebar[data-collapsed="true"] .sidebar-tools-group {
+  justify-items: center;
+  width: 100%;
+}
+
+.sidebar[data-collapsed="true"] .sidebar-link,
+.sidebar[data-collapsed="true"] .sidebar-tools-trigger {
+  width: 42px;
+  min-width: 42px;
+  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  padding: 0;
+}
+
+.sidebar[data-collapsed="true"] .nav-bullet {
+  width: 20px;
+  height: 20px;
+  margin: 0;
+}
+
+.sidebar[data-collapsed="true"] .nav-bullet svg {
+  display: block;
+}
+
+.planner-skill-row {
+  grid-template-columns: minmax(220px, 0.8fr) minmax(360px, 1.15fr) minmax(120px, auto);
+  align-items: end;
+  column-gap: 14px;
+  row-gap: 12px;
+}
+
+.planner-skill-row .ui-field {
+  max-width: 560px;
+}
+
+.planner-skill-row-action {
+  align-items: end;
+  justify-content: flex-start;
+  padding-bottom: 2px;
+}
+
+.planner-skill-row-action .ui-button {
+  min-width: 112px;
+  justify-content: center;
+}
+
+.planner-skill-level-toggle__button {
+  white-space: normal;
+  line-height: 1.15;
+  padding: 0 10px;
+}
+
+@media (max-width: 1100px) {
+  .planner-skill-row {
+    grid-template-columns: minmax(0, 1fr) minmax(320px, 1fr);
+  }
+
+  .planner-skill-row-action {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 820px) {
+  .planner-skill-row {
+    grid-template-columns: 1fr;
+  }
+
+  .planner-skill-row .ui-field {
+    max-width: none;
+  }
+
+  .planner-skill-row-action,
+  .planner-skill-row-action .ui-button {
+    width: 100%;
+  }
+}
