@@ -1,3 +1,4 @@
+import type { Route } from "next";
 import { redirect } from "next/navigation";
 
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -102,11 +103,11 @@ export function getEffectiveRoles(role: AppRole): AppRole[] {
   }
 }
 
-export function getNextPathForRole(role: AppRole) {
-  return `/${role}`;
+export function getNextPathForRole(role: AppRole): Route {
+  return `/${role}` as Route;
 }
 
-export function getNextPathForSession(session: Pick<AuthSession, "roles">) {
+export function getNextPathForSession(session: Pick<AuthSession, "roles">): Route {
   return session.roles.length === 1 ? getNextPathForRole(session.roles[0]) : "/select-workspace";
 }
 
@@ -198,6 +199,3 @@ export async function requireAuthSession(requiredRole?: AppRole) {
 
   return session;
 }
-
-
-
