@@ -1,4 +1,6 @@
-﻿import type { Route } from "next";
+"use client";
+
+import type { Route } from "next";
 import {
   Building2,
   Calculator,
@@ -67,3 +69,4 @@ export function GymSidebar({ availableWorkspaces }: { availableWorkspaces: AppRo
     />
   );
 }
+

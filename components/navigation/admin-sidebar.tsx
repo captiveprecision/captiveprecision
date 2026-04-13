@@ -1,4 +1,6 @@
-﻿import type { Route } from "next";
+"use client";
+
+import type { Route } from "next";
 import {
   CalendarDays,
   LayoutDashboard,
@@ -33,3 +35,4 @@ export function AdminSidebar({ availableWorkspaces }: { availableWorkspaces: App
     />
   );
 }
+

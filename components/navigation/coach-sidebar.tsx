@@ -1,4 +1,6 @@
-﻿import type { Route } from "next";
+"use client";
+
+import type { Route } from "next";
 import {
   Calculator,
   CalendarDays,
@@ -76,3 +78,4 @@ export function CoachSidebar({
     />
   );
 }
+
