@@ -1447,7 +1447,6 @@ declare
   root_row public.workspace_roots;
   current_row public.teams;
   next_row public.teams;
-  team_id uuid;
   change_set_id uuid;
   version_id uuid;
   change_type text;
@@ -1546,7 +1545,7 @@ begin
   end if;
 
   delete from public.team_coaches
-  where team_id = next_row.id;
+  where public.team_coaches.team_id = next_row.id;
 
   if coalesce(array_length(p_linked_coach_ids, 1), 0) > 0 then
     insert into public.team_coaches (team_id, coach_profile_id, role)
