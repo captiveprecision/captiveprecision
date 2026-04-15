@@ -82,6 +82,8 @@ export type PlannerSportTab = "tumbling" | "dance" | "jumps" | "stunts";
 
 export type AthleteDraftState = {
   athleteId: string | null;
+  workspaceRootId?: string;
+  lockVersion?: number;
   registrationNumber: string;
   firstName: string;
   lastName: string;
@@ -165,6 +167,13 @@ function buildAthleteName(firstName: string, lastName: string) {
   return [firstName.trim(), lastName.trim()].filter(Boolean).join(" ").trim();
 }
 
+function upsertAthleteRecord(athletes: AthleteRecord[], athlete: AthleteRecord) {
+  return [
+    ...athletes.filter((currentAthlete) => currentAthlete.id !== athlete.id),
+    athlete
+  ].sort((left, right) => left.name.localeCompare(right.name));
+}
+
 function buildEmptyParentContact(index = 0): AthleteParentContact {
   return {
     id: `parent-contact-${Date.now()}-${index + 1}-${Math.random().toString(36).slice(2, 8)}`,
@@ -177,6 +186,8 @@ function buildEmptyParentContact(index = 0): AthleteParentContact {
 function buildEmptyAthleteDraft(): AthleteDraftState {
   return {
     athleteId: null,
+    workspaceRootId: undefined,
+    lockVersion: undefined,
     registrationNumber: "",
     firstName: "",
     lastName: "",
@@ -891,6 +902,12 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
     setSaveMessage("Ready for a new athlete.");
   };
 
+  const resetAthleteDraft = () => {
+    setAthleteDraft(buildEmptyAthleteDraft());
+    setLevelsDraft(buildLevelEvaluations(plannerState.template));
+    setOpenLevels([]);
+  };
+
   const loadRegisteredAthlete = (athleteId: string) => {
     const athlete = plannerState.athletes.find((item) => item.id === athleteId) ?? null;
 
@@ -902,6 +919,8 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
     setActiveSport("tumbling");
     setAthleteDraft({
       athleteId: athlete.id,
+      workspaceRootId: athlete.workspaceRootId,
+      lockVersion: athlete.lockVersion,
       registrationNumber: athlete.registrationNumber,
       firstName: athlete.firstName,
       lastName: athlete.lastName,
@@ -1069,6 +1088,8 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
     try {
       const remoteAthlete = await savePlannerAthlete(scope, {
         athleteId: athleteDraft.athleteId,
+        workspaceRootId: athleteDraft.workspaceRootId ?? plannerState.workspaceRootId ?? null,
+        expectedLockVersion: athleteDraft.lockVersion ?? null,
         firstName: athleteDraft.firstName.trim(),
         lastName: athleteDraft.lastName.trim(),
         dateOfBirth: athleteDraft.dateOfBirth,
@@ -1076,12 +1097,24 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
         notes: athleteDraft.notes.trim(),
         parentContacts: athleteDraft.parentContacts
       });
-      await refreshRemoteFoundation();
+      persistState((current) => ({
+        ...current,
+        athletes: upsertAthleteRecord(current.athletes, remoteAthlete)
+      }));
       setAthleteDraft((current) => ({
         ...current,
         athleteId: remoteAthlete.id,
+        workspaceRootId: remoteAthlete.workspaceRootId,
+        lockVersion: remoteAthlete.lockVersion,
         registrationNumber: remoteAthlete.registrationNumber
       }));
+
+      try {
+        await refreshRemoteFoundation();
+      } catch {
+        // Keep the locally-updated athlete visible even if the remote refresh lags.
+      }
+
       setSaveMessage(`Saved athlete ${remoteAthlete.name}. Registration ${remoteAthlete.registrationNumber}.`);
       return true;
     } catch (error) {
@@ -1824,6 +1857,7 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
     summary,
     recentEvaluations,
     saveAthleteProfile,
+    resetAthleteDraft,
     startNewMyTeamsTeamDraft,
     updateAssignedCoachName,
     addAssignedCoachName,

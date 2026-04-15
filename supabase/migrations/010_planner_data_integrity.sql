@@ -1150,7 +1150,6 @@ declare
   root_row public.workspace_roots;
   current_row public.athletes;
   next_row public.athletes;
-  athlete_id uuid;
   change_set_id uuid;
   version_id uuid;
   change_type text;

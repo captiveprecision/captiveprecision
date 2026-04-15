@@ -135,7 +135,8 @@ export function MyTeamsWorkspaceShell({ coachOptions }: { coachOptions: LinkedCo
       return;
     }
 
-    setAthleteDraftBaseline(buildComparableAthleteDraft(integration.athleteDraft));
+    integration.resetAthleteDraft();
+    setAthleteDraftBaseline(buildEmptyComparableAthleteDraft());
     resetAthleteEditor();
   };
 
