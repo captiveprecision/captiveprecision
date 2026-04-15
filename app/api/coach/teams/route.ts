@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 
+import { getAuthSession } from "@/lib/auth/session";
+import { requireCheerPlannerPremium } from "@/lib/access/membership";
+import { parsePlannerWorkspaceScope, resolvePlannerScopeContext } from "@/lib/services/planner-workspace";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { findCoachOptionByText, listAvailableCoachOptionsForSession } from "@/lib/services/team-coach-directory";
+import { getPlannerCommandError, savePlannerTeamCommand, softDeletePlannerTeamCommand } from "@/lib/services/planner-command-service";
 import type { Database } from "@/lib/types/database";
 
 const TEAM_LEVEL_OPTIONS = new Set(["Level 1", "Level 2", "Level 3", "Level 4", "Level 5", "Level 6", "Level 7"]);
@@ -142,61 +146,51 @@ export async function POST(request: NextRequest) {
     }
 
     const payload = await request.json().catch(() => null);
+    const session = await getAuthSession();
+
+    if (!session) {
+      return NextResponse.json({ error: "Authentication is required." }, { status: 401 });
+    }
+
+    const scope = resolvePlannerScopeContext(session, parsePlannerWorkspaceScope((payload as Record<string, unknown> | null)?.scope));
+    const premiumError = await requireCheerPlannerPremium(session, scope);
+
+    if (premiumError) {
+      return premiumError;
+    }
     const resolved = await resolveTeamPayload(payload, profile, user.email ?? "");
 
     if (resolved.error || !resolved.data) {
       return NextResponse.json({ error: resolved.error }, { status: 400 });
     }
 
-    const admin = createAdminClient();
-    const { data: createdTeamData, error: insertError } = await admin
-      .from("teams" as never)
-      .insert({
-        name: resolved.data.name,
-        gym_id: profile.primary_gym_id ?? null,
-        primary_coach_profile_id: resolved.data.linkedCoachIds[0] ?? profile.id,
-        division: resolved.data.teamDivision,
-        visibility_scope: profile.primary_gym_id ? "gym" : "private",
-        metadata: {
-          teamLevel: resolved.data.teamLevel,
-          ageCategory: resolved.data.teamType,
-          trainingDays: resolved.data.trainingDays,
-          trainingHours: resolved.data.trainingHours,
-          assignedCoachNames: resolved.data.assignedCoachNames,
-          linkedCoachIds: resolved.data.linkedCoachIds
-        }
-      } as never)
-      .select("id" as never)
-      .single();
-
-    const createdTeam = createdTeamData as { id: string } | null;
-
-    if (insertError || !createdTeam) {
-      return NextResponse.json({ error: insertError?.message ?? "Unable to create team." }, { status: 500 });
-    }
-
-    if (resolved.data.linkedCoachIds.length) {
-      const coachRows = resolved.data.linkedCoachIds.map((coachId, index) => ({
-        team_id: createdTeam.id,
-        coach_profile_id: coachId,
-        role: index === 0 ? "head" : "assistant"
-      }));
-
-      const { error: teamCoachError } = await admin.from("team_coaches" as never).insert(coachRows as never);
-
-      if (teamCoachError) {
-        return NextResponse.json({ error: teamCoachError.message }, { status: 500 });
-      }
-    }
+    const result = await savePlannerTeamCommand(session, scope.scope, {
+      workspaceRootId: typeof (payload as Record<string, unknown> | null)?.workspaceRootId === "string"
+        ? (payload as Record<string, unknown>).workspaceRootId as string
+        : null,
+      expectedLockVersion: null,
+      name: resolved.data.name,
+      teamLevel: resolved.data.teamLevel,
+      teamType: resolved.data.teamType,
+      teamDivision: resolved.data.teamDivision,
+      trainingDays: resolved.data.trainingDays,
+      trainingHours: resolved.data.trainingHours,
+      linkedCoachIds: resolved.data.linkedCoachIds,
+      assignedCoachNames: resolved.data.assignedCoachNames
+    });
 
     return NextResponse.json({
-      teamId: createdTeam.id,
+      teamId: result.entity.id,
+      team: result.entity,
       assignedCoachNames: resolved.data.assignedCoachNames,
-      linkedCoachIds: resolved.data.linkedCoachIds
+      linkedCoachIds: resolved.data.linkedCoachIds,
+      lockVersion: result.lockVersion,
+      changeSetId: result.changeSetId,
+      latestVersionNumber: result.latestVersionNumber
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unexpected team creation failure.";
-    return NextResponse.json({ error: message }, { status: 500 });
+    const plannerError = getPlannerCommandError(error);
+    return NextResponse.json({ error: plannerError.message, code: plannerError.code }, { status: plannerError.code ? 409 : 500 });
   }
 }
 
@@ -209,6 +203,18 @@ export async function PATCH(request: NextRequest) {
     }
 
     const payload = await request.json().catch(() => null) as ({ teamId?: string } & Record<string, unknown>) | null;
+    const session = await getAuthSession();
+
+    if (!session) {
+      return NextResponse.json({ error: "Authentication is required." }, { status: 401 });
+    }
+
+    const scope = resolvePlannerScopeContext(session, parsePlannerWorkspaceScope(payload?.scope));
+    const premiumError = await requireCheerPlannerPremium(session, scope);
+
+    if (premiumError) {
+      return premiumError;
+    }
     const remoteTeamId = normalizeText(payload?.teamId);
 
     if (!remoteTeamId) {
@@ -221,79 +227,32 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: resolved.error }, { status: 400 });
     }
 
-    const admin = createAdminClient();
-    const { data: currentTeamData, error: currentTeamError } = await admin
-      .from("teams" as never)
-      .select("id, gym_id, primary_coach_profile_id" as never)
-      .eq("id", remoteTeamId as never)
-      .maybeSingle();
-
-    const currentTeam = currentTeamData as { id: string; gym_id: string | null; primary_coach_profile_id: string | null } | null;
-
-    if (currentTeamError || !currentTeam) {
-      return NextResponse.json({ error: "The linked workspace team could not be found." }, { status: 404 });
-    }
-
-    const canEdit = currentTeam.gym_id
-      ? currentTeam.gym_id === (profile.primary_gym_id ?? null)
-      : currentTeam.primary_coach_profile_id === profile.id;
-
-    if (!canEdit) {
-      return NextResponse.json({ error: "You do not have access to edit this team." }, { status: 403 });
-    }
-
-    const { error: updateError } = await admin
-      .from("teams" as never)
-      .update({
-        name: resolved.data.name,
-        primary_coach_profile_id: resolved.data.linkedCoachIds[0] ?? currentTeam.primary_coach_profile_id ?? profile.id,
-        division: resolved.data.teamDivision,
-        metadata: {
-          teamLevel: resolved.data.teamLevel,
-          ageCategory: resolved.data.teamType,
-          trainingDays: resolved.data.trainingDays,
-          trainingHours: resolved.data.trainingHours,
-          assignedCoachNames: resolved.data.assignedCoachNames,
-          linkedCoachIds: resolved.data.linkedCoachIds
-        }
-      } as never)
-      .eq("id", remoteTeamId as never);
-
-    if (updateError) {
-      return NextResponse.json({ error: updateError.message }, { status: 500 });
-    }
-
-    const { error: deleteLinksError } = await admin
-      .from("team_coaches" as never)
-      .delete()
-      .eq("team_id", remoteTeamId as never);
-
-    if (deleteLinksError) {
-      return NextResponse.json({ error: deleteLinksError.message }, { status: 500 });
-    }
-
-    if (resolved.data.linkedCoachIds.length) {
-      const coachRows = resolved.data.linkedCoachIds.map((coachId, index) => ({
-        team_id: remoteTeamId,
-        coach_profile_id: coachId,
-        role: index === 0 ? "head" : "assistant"
-      }));
-
-      const { error: insertLinksError } = await admin.from("team_coaches" as never).insert(coachRows as never);
-
-      if (insertLinksError) {
-        return NextResponse.json({ error: insertLinksError.message }, { status: 500 });
-      }
-    }
+    const result = await savePlannerTeamCommand(session, scope.scope, {
+      workspaceRootId: typeof payload?.workspaceRootId === "string" ? payload.workspaceRootId : null,
+      expectedLockVersion: typeof payload?.expectedLockVersion === "number" ? payload.expectedLockVersion : null,
+      teamId: remoteTeamId,
+      name: resolved.data.name,
+      teamLevel: resolved.data.teamLevel,
+      teamType: resolved.data.teamType,
+      teamDivision: resolved.data.teamDivision,
+      trainingDays: resolved.data.trainingDays,
+      trainingHours: resolved.data.trainingHours,
+      linkedCoachIds: resolved.data.linkedCoachIds,
+      assignedCoachNames: resolved.data.assignedCoachNames
+    });
 
     return NextResponse.json({
-      teamId: remoteTeamId,
+      teamId: result.entity.id,
+      team: result.entity,
       assignedCoachNames: resolved.data.assignedCoachNames,
-      linkedCoachIds: resolved.data.linkedCoachIds
+      linkedCoachIds: resolved.data.linkedCoachIds,
+      lockVersion: result.lockVersion,
+      changeSetId: result.changeSetId,
+      latestVersionNumber: result.latestVersionNumber
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unexpected team update failure.";
-    return NextResponse.json({ error: message }, { status: 500 });
+    const plannerError = getPlannerCommandError(error);
+    return NextResponse.json({ error: plannerError.message, code: plannerError.code }, { status: plannerError.code ? 409 : 500 });
   }
 }
 
@@ -309,45 +268,41 @@ export async function DELETE(request: NextRequest) {
     }
 
     const payload = await request.json().catch(() => null) as ({ teamId?: string } & Record<string, unknown>) | null;
+    const session = await getAuthSession();
+
+    if (!session) {
+      return NextResponse.json({ error: "Authentication is required." }, { status: 401 });
+    }
+
+    const scope = resolvePlannerScopeContext(session, parsePlannerWorkspaceScope(payload?.scope));
+    const premiumError = await requireCheerPlannerPremium(session, scope);
+
+    if (premiumError) {
+      return premiumError;
+    }
     const remoteTeamId = normalizeText(payload?.teamId);
 
     if (!remoteTeamId) {
       return NextResponse.json({ error: "A linked team id is required to delete this team." }, { status: 400 });
     }
 
-    const admin = createAdminClient();
-    const { data: currentTeamData, error: currentTeamError } = await admin
-      .from("teams" as never)
-      .select("id, gym_id, primary_coach_profile_id" as never)
-      .eq("id", remoteTeamId as never)
-      .maybeSingle();
+    const result = await softDeletePlannerTeamCommand(session, scope.scope, {
+      workspaceRootId: typeof payload?.workspaceRootId === "string" ? payload.workspaceRootId : null,
+      teamId: remoteTeamId,
+      expectedLockVersion: typeof payload?.expectedLockVersion === "number" ? payload.expectedLockVersion : null
+    });
 
-    const currentTeam = currentTeamData as { id: string; gym_id: string | null; primary_coach_profile_id: string | null } | null;
-
-    if (currentTeamError || !currentTeam) {
-      return NextResponse.json({ error: "The linked workspace team could not be found." }, { status: 404 });
-    }
-
-    const canDelete = currentTeam.gym_id
-      ? currentTeam.gym_id === (profile.primary_gym_id ?? null)
-      : currentTeam.primary_coach_profile_id === profile.id;
-
-    if (!canDelete) {
-      return NextResponse.json({ error: "You do not have access to delete this team." }, { status: 403 });
-    }
-
-    const { error: deleteError } = await admin
-      .from("teams" as never)
-      .delete()
-      .eq("id", remoteTeamId as never);
-
-    if (deleteError) {
-      return NextResponse.json({ error: deleteError.message }, { status: 500 });
-    }
-
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({
+      ok: true,
+      team: result.entity,
+      lockVersion: result.lockVersion,
+      changeSetId: result.changeSetId,
+      latestVersionNumber: result.latestVersionNumber
+    });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unexpected team delete failure.";
-    return NextResponse.json({ error: message }, { status: 500 });
+    const plannerError = getPlannerCommandError(error);
+    return NextResponse.json({ error: plannerError.message, code: plannerError.code }, { status: plannerError.code ? 409 : 500 });
   }
 }
+
+

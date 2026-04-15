@@ -1,5 +1,6 @@
 "use client";
 
+import { PremiumUpgradeModal } from "@/components/billing/premium-upgrade-modal";
 import { RoutineBuilderSurface } from "@/components/features/cheer-planner/routine-builder/routine-builder-surface";
 import { SeasonPlannerSurface } from "@/components/features/cheer-planner/season-planner/season-planner-surface";
 import { TeamBuilderSurface } from "@/components/features/cheer-planner/team-builder/team-builder-surface";
@@ -161,6 +162,11 @@ export function CheerPlannerShell({ integration }: CheerPlannerShellProps) {
           saveSeasonPlannerEdit={integration.saveSeasonPlannerEdit}
         />
       ) : null}
+
+      <PremiumUpgradeModal open={integration.premiumPromptOpen} onClose={() => integration.setPremiumPromptOpen(false)} />
     </main>
   );
 }
+
+
+

@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { normalizeTeamSkillPlan } from "@/lib/services/planner-domain-mappers";
 import { getPlannerScopeContext, requirePlannerSession, canEditTeamForSession } from "@/lib/services/planner-api-access";
-import { ensurePlannerProjectRow } from "@/lib/services/planner-supabase-foundation";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { requireCheerPlannerPremium } from "@/lib/access/membership";
 import type { TeamSkillPlan, TeamSkillPlanStatus } from "@/lib/domain/skill-plan";
+import { getPlannerCommandError, savePlannerSkillPlanCommand } from "@/lib/services/planner-command-service";
 
 type SkillPlanPayload = {
   teamId?: string;
@@ -32,10 +31,10 @@ export async function POST(request: NextRequest) {
 
     const payload = await request.json().catch(() => null) as SkillPlanPayload | null;
     const scope = getPlannerScopeContext(request, session, payload?.scope ?? null);
-    const currentProject = await ensurePlannerProjectRow(scope);
+    const premiumError = await requireCheerPlannerPremium(session, scope);
 
-    if (!currentProject) {
-      return NextResponse.json({ error: "Supabase planner tables are missing. Run migration 006_planner_remote_persistence.sql first." }, { status: 409 });
+    if (premiumError) {
+      return premiumError;
     }
 
     const teamId = asString(payload?.teamId);
@@ -50,55 +49,28 @@ export async function POST(request: NextRequest) {
     if (!(await canEditTeamForSession(teamId, session, scope))) {
       return NextResponse.json({ error: "You do not have access to edit this skill plan." }, { status: 403 });
     }
-
-    const admin = createAdminClient();
-    const { data, error: upsertError } = await admin
-      .from("team_skill_plans" as never)
-      .upsert({
-        team_id: teamId,
-        planner_project_id: scope.projectId,
-        status,
-        notes,
-        selections
-      } as never, { onConflict: "planner_project_id,team_id" as never })
-      .select("*" as never)
-      .single();
-
-    if (upsertError || !data) {
-      if (upsertError?.code === "42P01") {
-        return NextResponse.json({ error: "Supabase planner tables are missing. Run migration 006_planner_remote_persistence.sql first." }, { status: 409 });
-      }
-
-      return NextResponse.json({ error: upsertError?.message ?? "Unable to save the skill plan." }, { status: 500 });
-    }
-
-    const row = data as {
-      id: string;
-      planner_project_id: string;
-      team_id: string;
-      status: TeamSkillPlanStatus;
-      notes: string;
-      selections?: unknown;
-      checkpoints?: unknown;
-      created_at: string;
-      updated_at: string;
-    };
+    const result = await savePlannerSkillPlanCommand(session, scope.scope, {
+      workspaceRootId: typeof (payload as Record<string, unknown> | null)?.workspaceRootId === "string"
+        ? (payload as Record<string, unknown>).workspaceRootId as string
+        : null,
+      expectedLockVersion: typeof (payload as Record<string, unknown> | null)?.expectedLockVersion === "number"
+        ? (payload as Record<string, unknown>).expectedLockVersion as number
+        : null,
+      teamId,
+      status,
+      notes,
+      selections
+    });
 
     return NextResponse.json({
-      skillPlan: normalizeTeamSkillPlan({
-        id: row.id,
-        workspaceId: scope.workspaceId,
-        plannerProjectId: row.planner_project_id,
-        teamId: row.team_id,
-        status: row.status,
-        notes: row.notes,
-        selections: Array.isArray(row.selections) ? row.selections : [],
-        createdAt: row.created_at,
-        updatedAt: row.updated_at
-      })
+      skillPlan: result.entity,
+      lockVersion: result.lockVersion,
+      changeSetId: result.changeSetId,
+      latestVersionNumber: result.latestVersionNumber
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unable to save the skill plan.";
-    return NextResponse.json({ error: message }, { status: 500 });
+    const plannerError = getPlannerCommandError(error);
+    return NextResponse.json({ error: plannerError.message, code: plannerError.code }, { status: plannerError.code ? 409 : 500 });
   }
 }
+

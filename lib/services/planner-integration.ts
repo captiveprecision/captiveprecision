@@ -10,6 +10,8 @@ import { buildMyTeamsTeamSummaries } from "@/lib/services/planner-my-teams";
 import { mergeRemoteFoundationIntoProject, type PlannerRemoteFoundationSnapshot } from "@/lib/services/planner-supabase-foundation";
 import {
   fetchPlannerFoundation,
+  isPremiumRequiredError,
+  PlannerApiError,
   savePlannerAthlete,
   savePlannerEvaluation,
   savePlannerProjectConfig,
@@ -132,6 +134,16 @@ type SeasonPlannerDraftState = {
   teamId: string;
   checkpointIds: string[];
 } | null;
+
+type PremiumAccessState = {
+  tier: "free" | "premium" | "loading";
+  scope: "individual" | "gym" | "none";
+  status: string;
+  currentPeriodEnd: string | null;
+  cancelAtPeriodEnd: boolean;
+};
+
+const PREMIUM_REQUIRED_MESSAGE = "Esta es una funcion premium. Actualiza tu plan hoy para seguir editando, guardar registros por equipo y desbloquear Cheer Planner completo.";
 
 function round(value: number, decimals = 2) {
   const factor = 10 ** decimals;
@@ -308,13 +320,17 @@ async function syncRemotePlannerConfig(scope: PlannerWorkspaceScope, project: Ch
     status: project.status,
     pipelineStage: project.pipelineStage,
     template: project.template,
-    qualificationRules: project.qualificationRules
+    qualificationRules: project.qualificationRules,
+    workspaceRootId: project.workspaceRootId,
+    lockVersion: project.lockVersion
   });
 }
 
 async function syncRemoteAthleteRecord(scope: PlannerWorkspaceScope, athlete: AthleteRecord) {
   return savePlannerAthlete(scope, {
     athleteId: isUuidString(athlete.id) ? athlete.id : null,
+    workspaceRootId: athlete.workspaceRootId ?? null,
+    expectedLockVersion: athlete.lockVersion ?? null,
     firstName: athlete.firstName,
     lastName: athlete.lastName,
     dateOfBirth: athlete.dateOfBirth,
@@ -335,23 +351,23 @@ async function syncRemoteSkillPlan(scope: PlannerWorkspaceScope, plan: TeamSkill
   });
 }
 
-async function syncRemoteRoster(action: "assign" | "remove" | "clear", teamId: string, athleteId?: string) {
+async function syncRemoteRoster(scope: PlannerWorkspaceScope, action: "assign" | "remove" | "clear", teamId: string, athleteId?: string) {
   const response = await fetch("/api/coach/teams/roster", {
     method: "POST",
     headers: {
       "Content-Type": "application/json"
     },
     credentials: "include",
-    body: JSON.stringify({ action, teamId, athleteId })
+    body: JSON.stringify({ scope, action, teamId, athleteId })
   });
-  const result = await response.json().catch(() => null) as { error?: string } | null;
+  const result = await response.json().catch(() => null) as { error?: string; code?: string } | null;
 
   if (!response.ok) {
-    throw new Error(result?.error ?? "Unable to update Supabase roster.");
+    throw new PlannerApiError(result?.error ?? "Unable to update Supabase roster.", result?.code);
   }
 }
 
-async function createRemoteTeamRecord(draft: TeamBuilderTeamDraftInput): Promise<{
+async function createRemoteTeamRecord(scope: PlannerWorkspaceScope, draft: TeamBuilderTeamDraftInput): Promise<{
   teamId: string;
   assignedCoachNames: string[];
   linkedCoachIds: string[];
@@ -369,6 +385,7 @@ async function createRemoteTeamRecord(draft: TeamBuilderTeamDraftInput): Promise
       teamDivision: draft.teamDivision || "Elite",
       trainingDays: draft.trainingDays || "",
       trainingHours: draft.trainingHours || "",
+      scope,
       coachAssignments: (draft.linkedCoachIds ?? []).map((coachId) => ({ selectedCoachId: coachId }))
     })
   });
@@ -377,10 +394,11 @@ async function createRemoteTeamRecord(draft: TeamBuilderTeamDraftInput): Promise
     assignedCoachNames?: string[];
     linkedCoachIds?: string[];
     error?: string;
+    code?: string;
   } | null;
 
   if (!response.ok || !result?.teamId) {
-    throw new Error(result?.error ?? "Unable to create the team in Supabase.");
+    throw new PlannerApiError(result?.error ?? "Unable to create the team in Supabase.", result?.code);
   }
 
   return {
@@ -390,19 +408,19 @@ async function createRemoteTeamRecord(draft: TeamBuilderTeamDraftInput): Promise
   };
 }
 
-async function deleteRemoteTeamRecord(teamId: string) {
+async function deleteRemoteTeamRecord(scope: PlannerWorkspaceScope, teamId: string) {
   const response = await fetch("/api/coach/teams", {
     method: "DELETE",
     headers: {
       "Content-Type": "application/json"
     },
     credentials: "include",
-    body: JSON.stringify({ teamId })
+    body: JSON.stringify({ scope, teamId })
   });
-  const result = await response.json().catch(() => null) as { error?: string } | null;
+  const result = await response.json().catch(() => null) as { error?: string; code?: string } | null;
 
   if (!response.ok) {
-    throw new Error(result?.error ?? "Unable to delete Supabase team.");
+    throw new PlannerApiError(result?.error ?? "Unable to delete Supabase team.", result?.code);
   }
 }
 
@@ -461,7 +479,7 @@ async function migratePlannerStateToSupabase(
       continue;
     }
 
-    const createdTeam = await createRemoteTeamRecord({
+    const createdTeam = await createRemoteTeamRecord(scope, {
       name: team.name,
       teamLevel: team.teamLevel,
       teamType: team.teamType,
@@ -489,7 +507,7 @@ async function migratePlannerStateToSupabase(
     for (const athleteId of team.memberAthleteIds) {
       const remoteAthleteId = athleteIdMap.get(athleteId) || (isUuidString(athleteId) ? athleteId : null);
       if (remoteAthleteId) {
-        await syncRemoteRoster("assign", remoteTeamId, remoteAthleteId);
+        await syncRemoteRoster(scope, "assign", remoteTeamId, remoteAthleteId);
       }
     }
   }
@@ -623,6 +641,14 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
   const [routineBuilderDraft, setRoutineBuilderDraft] = useState<RoutineBuilderDraftState>(null);
   const [seasonPlannerDraft, setSeasonPlannerDraft] = useState<SeasonPlannerDraftState>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [premiumPromptOpen, setPremiumPromptOpen] = useState(false);
+  const [premiumAccess, setPremiumAccess] = useState<PremiumAccessState>({
+    tier: "loading",
+    scope: "none",
+    status: "loading",
+    currentPeriodEnd: null,
+    cancelAtPeriodEnd: false
+  });
   const { config: scoringConfig, isReady: isScoringReady } = useScoringSystems();
 
   useEffect(() => {
@@ -657,6 +683,53 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
       cancelled = true;
     };
   }, [scope]);
+
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const response = await fetch("/api/billing/status", { credentials: "include" });
+        const result = await response.json().catch(() => null) as PremiumAccessState | null;
+
+        if (!cancelled && response.ok && result) {
+          setPremiumAccess(result);
+        }
+      } catch {
+        if (!cancelled) {
+          setPremiumAccess((current) => ({ ...current, tier: "free", status: "unknown" }));
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const requestPremiumAccess = () => {
+    setPremiumPromptOpen(true);
+    setSaveMessage(PREMIUM_REQUIRED_MESSAGE);
+  };
+
+  const canUsePremiumAction = () => {
+    if (premiumAccess.tier === "free") {
+      requestPremiumAccess();
+      return false;
+    }
+
+    return true;
+  };
+
+  const handlePremiumWriteError = (error: unknown, fallback: string) => {
+    if (isPremiumRequiredError(error)) {
+      requestPremiumAccess();
+      return;
+    }
+
+    setSaveMessage(error instanceof Error ? error.message : fallback);
+  };
 
   useEffect(() => {
     if (!saveMessage) {
@@ -883,6 +956,10 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
   };
 
   const saveTemplate = async () => {
+    if (!canUsePremiumAction()) {
+      return;
+    }
+
     const nextTemplate = {
       ...plannerState.template,
       updatedAt: new Date().toISOString()
@@ -900,11 +977,15 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
       await refreshRemoteFoundation();
       setSaveMessage("Template saved.");
     } catch (error) {
-      setSaveMessage(error instanceof Error ? error.message : "Unable to save the template to Supabase.");
+      handlePremiumWriteError(error, "Unable to save the template to Supabase.");
     }
   };
 
   const resetTemplate = async () => {
+    if (!canUsePremiumAction()) {
+      return;
+    }
+
     const nextTemplate = cloneCheerPlannerState(defaultCheerPlannerState).template;
     const nextState = persistProjectConfigState((current) => ({
       ...current,
@@ -919,7 +1000,7 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
       await refreshRemoteFoundation();
       setSaveMessage("Template reset.");
     } catch (error) {
-      setSaveMessage(error instanceof Error ? error.message : "Unable to reset the template in Supabase.");
+      handlePremiumWriteError(error, "Unable to reset the template in Supabase.");
     }
   };
 
@@ -974,6 +1055,10 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
   };
 
   const saveAthleteProfile = async () => {
+    if (!canUsePremiumAction()) {
+      return;
+    }
+
     const trimmedName = buildAthleteName(athleteDraft.firstName, athleteDraft.lastName);
 
     if (!trimmedName) {
@@ -1000,12 +1085,16 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
       setSaveMessage(`Saved athlete ${remoteAthlete.name}. Registration ${remoteAthlete.registrationNumber}.`);
       return true;
     } catch (error) {
-      setSaveMessage(error instanceof Error ? error.message : "Unable to save athlete to Supabase.");
+      handlePremiumWriteError(error, "Unable to save athlete to Supabase.");
       return false;
     }
   };
 
   const saveEvaluation = async () => {
+    if (!canUsePremiumAction()) {
+      return;
+    }
+
     if (activeSport !== "tumbling") {
       setSaveMessage("Tumbling is the only active tryout track right now.");
       return;
@@ -1053,7 +1142,7 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
       }));
       setSaveMessage(`Saved evaluation for ${remoteAthlete.name}. Registration ${remoteAthlete.registrationNumber}.`);
     } catch (error) {
-      setSaveMessage(error instanceof Error ? error.message : "Unable to save the evaluation to Supabase.");
+      handlePremiumWriteError(error, "Unable to save the evaluation to Supabase.");
     }
   };
 
@@ -1094,6 +1183,10 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
   };
 
   const saveQualificationRules = async () => {
+    if (!canUsePremiumAction()) {
+      return;
+    }
+
     const nextState = persistProjectConfigState((current) => current);
 
     try {
@@ -1102,7 +1195,7 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
       setQualificationOpen(false);
       setSaveMessage("Qualification rules saved.");
     } catch (error) {
-      setSaveMessage(error instanceof Error ? error.message : "Unable to save qualification rules to Supabase.");
+      handlePremiumWriteError(error, "Unable to save qualification rules to Supabase.");
     }
   };
 
@@ -1125,6 +1218,10 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
   };
 
   const createTeam = async () => {
+    if (!canUsePremiumAction()) {
+      return;
+    }
+
     const normalizedTeamType = teamDraft.teamType.trim();
 
     if (!["Tiny", "Mini", "Youth", "Junior", "Senior", "Open"].includes(normalizedTeamType)) {
@@ -1146,6 +1243,7 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
           teamDivision: "Elite",
           trainingDays: "",
           trainingHours: "",
+          scope,
           coachAssignments: []
         })
       });
@@ -1176,7 +1274,7 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
       setTeamDraft({ name: "", teamLevel: "Beginner", teamType: "Youth", trainingSchedule: "", assignedCoachNames: [""] });
       setSaveMessage(`Created ${nextTeam.name}.`);
     } catch (error) {
-      setSaveMessage(error instanceof Error ? error.message : "Unable to create the team in Supabase.");
+      handlePremiumWriteError(error, "Unable to create the team in Supabase.");
     }
   };
 
@@ -1231,6 +1329,10 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
   };
 
   const assignToTeam = async (athleteId: string, teamId: string) => {
+    if (!canUsePremiumAction()) {
+      return;
+    }
+
     const athlete = athleteMapById.get(athleteId);
     const team = teamMap.get(teamId);
 
@@ -1248,15 +1350,19 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
 
     try {
       const remoteAthlete = await syncRemoteAthleteRecord(scope, athlete);
-      await syncRemoteRoster("assign", team.remoteTeamId || team.id, remoteAthlete.id);
+      await syncRemoteRoster(scope, "assign", team.remoteTeamId || team.id, remoteAthlete.id);
       await refreshRemoteFoundation();
       setSaveMessage(`Assigned ${remoteAthlete.name} to ${team.name}.`);
     } catch (error) {
-      setSaveMessage(error instanceof Error ? error.message : "Unable to save the roster assignment to Supabase.");
+      handlePremiumWriteError(error, "Unable to save the roster assignment to Supabase.");
     }
   };
 
   const removeFromTeam = async (athleteId: string, teamId: string) => {
+    if (!canUsePremiumAction()) {
+      return;
+    }
+
     const athlete = athleteMapById.get(athleteId);
     const team = teamMap.get(teamId);
 
@@ -1266,15 +1372,19 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
     }
 
     try {
-      await syncRemoteRoster("remove", team.remoteTeamId || team.id, athlete.id);
+      await syncRemoteRoster(scope, "remove", team.remoteTeamId || team.id, athlete.id);
       await refreshRemoteFoundation();
       setSaveMessage(`Removed ${athlete.name} from ${team.name}.`);
     } catch (error) {
-      setSaveMessage(error instanceof Error ? error.message : "Unable to update the roster in Supabase.");
+      handlePremiumWriteError(error, "Unable to update the roster in Supabase.");
     }
   };
 
   const clearTeam = async (teamId: string) => {
+    if (!canUsePremiumAction()) {
+      return;
+    }
+
     const team = teamMap.get(teamId);
 
     if (!team) {
@@ -1283,15 +1393,19 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
     }
 
     try {
-      await syncRemoteRoster("clear", team.remoteTeamId || team.id);
+      await syncRemoteRoster(scope, "clear", team.remoteTeamId || team.id);
       await refreshRemoteFoundation();
       setSaveMessage(`Cleared ${team.name} roster.`);
     } catch (error) {
-      setSaveMessage(error instanceof Error ? error.message : "Unable to clear the roster in Supabase.");
+      handlePremiumWriteError(error, "Unable to clear the roster in Supabase.");
     }
   };
 
   const deleteTeam = async (teamId: string) => {
+    if (!canUsePremiumAction()) {
+      return;
+    }
+
     const team = teamMap.get(teamId);
 
     if (!team) {
@@ -1301,12 +1415,12 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
 
     try {
       if (team.remoteTeamId || isUuidString(team.id)) {
-        await deleteRemoteTeamRecord(team.remoteTeamId || team.id);
+        await deleteRemoteTeamRecord(scope, team.remoteTeamId || team.id);
       }
       await refreshRemoteFoundation();
       setSaveMessage(`Deleted ${team.name}.`);
     } catch (error) {
-      setSaveMessage(error instanceof Error ? error.message : "Unable to delete the team in Supabase.");
+      handlePremiumWriteError(error, "Unable to delete the team in Supabase.");
     }
   };
 
@@ -1320,6 +1434,10 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
   };
 
   const confirmTeamEdit = async () => {
+    if (!canUsePremiumAction()) {
+      return;
+    }
+
     if (!teamEdit) {
       return;
     }
@@ -1361,10 +1479,11 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
             teamDivision: currentTeam.teamDivision || "Elite",
             trainingDays: currentTeam.trainingDays || "",
             trainingHours: currentTeam.trainingHours || "",
+            scope,
             coachAssignments: (currentTeam.linkedCoachIds ?? []).map((coachId) => ({ selectedCoachId: coachId }))
           })
         });
-        const result = await response.json().catch(() => null) as { error?: string } | null;
+        const result = await response.json().catch(() => null) as { error?: string; code?: string } | null;
 
         if (!response.ok) {
           throw new Error(result?.error ?? "Unable to update the team in Supabase.");
@@ -1375,7 +1494,7 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
       setSaveMessage(`Updated ${teamEdit.name.trim() || currentTeam.name}.`);
       setTeamEdit(null);
     } catch (error) {
-      setSaveMessage(error instanceof Error ? error.message : "Unable to update the team in Supabase.");
+      handlePremiumWriteError(error, "Unable to update the team in Supabase.");
     }
   };
 
@@ -1475,6 +1594,10 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
   };
 
   const saveSkillPlannerEdit = async () => {
+    if (!canUsePremiumAction()) {
+      return;
+    }
+
     if (!skillPlannerDraft || !skillPlannerEditingTeam) {
       setSaveMessage("No Skill Planner draft is open.");
       return;
@@ -1506,7 +1629,7 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
       setSkillPlannerDraft(null);
       setSaveMessage(`Saved Skill Planner selections for ${skillPlannerEditingTeam.teamName}.`);
     } catch (error) {
-      setSaveMessage(error instanceof Error ? error.message : "Unable to save the Skill Planner selections to Supabase.");
+      handlePremiumWriteError(error, "Unable to save the Skill Planner selections to Supabase.");
     }
   };
 
@@ -1545,7 +1668,7 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
       await refreshRemoteFoundation();
       setSaveMessage(`Migrated ${team.teamName} routine plan.`);
     } catch (error) {
-      setSaveMessage(error instanceof Error ? error.message : "Unable to migrate the routine plan to Supabase.");
+      handlePremiumWriteError(error, "Unable to migrate the routine plan to Supabase.");
     }
   };
 
@@ -1567,6 +1690,10 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
   };
 
   const saveRoutineBuilderEdit = async () => {
+    if (!canUsePremiumAction()) {
+      return;
+    }
+
     if (!routineBuilderDraft || !routineBuilderEditingTeam) {
       setSaveMessage("No Routine Builder draft is open.");
       return;
@@ -1594,7 +1721,7 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
       setRoutineBuilderDraft(null);
       setSaveMessage(`Saved Routine Builder plan for ${routineBuilderEditingTeam.teamName}.`);
     } catch (error) {
-      setSaveMessage(error instanceof Error ? error.message : "Unable to save the routine plan to Supabase.");
+      handlePremiumWriteError(error, "Unable to save the routine plan to Supabase.");
     }
   };
 
@@ -1634,6 +1761,10 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
   };
 
   const saveSeasonPlannerEdit = async () => {
+    if (!canUsePremiumAction()) {
+      return;
+    }
+
     if (!seasonPlannerDraft || !seasonPlannerEditingTeam) {
       setSaveMessage("No Season Planner draft is open.");
       return;
@@ -1665,7 +1796,7 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
       setSeasonPlannerDraft(null);
       setSaveMessage(`Saved Season Planner checkpoints for ${seasonPlannerEditingTeam.teamName}.`);
     } catch (error) {
-      setSaveMessage(error instanceof Error ? error.message : "Unable to save the season plan to Supabase.");
+      handlePremiumWriteError(error, "Unable to save the season plan to Supabase.");
     }
   };
 
@@ -1673,6 +1804,9 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
     plannerState,
     athletePool,
     saveMessage,
+    premiumAccess,
+    premiumPromptOpen,
+    setPremiumPromptOpen,
     activeSport,
     setActiveSport,
     athleteDraft,
@@ -1764,6 +1898,25 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
 }
 
 export type CheerPlannerIntegration = ReturnType<typeof useCheerPlannerIntegration>;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

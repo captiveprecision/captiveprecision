@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import type { AthleteParentContact } from "@/lib/domain/athlete";
-import { buildPlannerAthleteFromRow } from "@/lib/services/planner-supabase-foundation";
-import { getEditableAthleteRow, getPlannerScopeContext, requirePlannerSession } from "@/lib/services/planner-api-access";
+import { getPlannerScopeContext, requirePlannerSession } from "@/lib/services/planner-api-access";
+import { requireCheerPlannerPremium } from "@/lib/access/membership";
 import { isUuidString, type PlannerWorkspaceScope } from "@/lib/services/planner-workspace";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getPlannerCommandError, resolveWorkspaceRoot, savePlannerAthleteCommand } from "@/lib/services/planner-command-service";
 
 type AthletePayload = {
   athleteId?: string;
@@ -44,28 +45,23 @@ function normalizeParentContacts(value: unknown): AthleteParentContact[] {
 
 async function findExistingAthleteByRegistration(
   registrationNumber: string,
-  scope: ReturnType<typeof getPlannerScopeContext>,
-  userId: string
+  workspaceRootId: string
 ) {
   if (!registrationNumber) {
     return null;
   }
 
   const admin = createAdminClient();
-  let query = admin
+  const query = admin
     .from("athletes" as never)
     .select("*" as never)
     .eq("registration_number", registrationNumber as never)
+    .eq("workspace_root_id", workspaceRootId as never)
+    .is("deleted_at" as never, null)
     .limit(1);
 
-  if (scope.scopeType === "gym") {
-    query = query.eq("gym_id", (scope.gymId ?? null) as never);
-  } else {
-    query = query.eq("created_by_profile_id", userId as never);
-  }
-
   const { data } = await query.maybeSingle();
-  return data as Awaited<ReturnType<typeof getEditableAthleteRow>>;
+  return data as { id: string } | null;
 }
 
 async function saveAthlete(request: NextRequest) {
@@ -78,6 +74,11 @@ async function saveAthlete(request: NextRequest) {
 
     const payload = await request.json().catch(() => null) as AthletePayload | null;
     const scope = getPlannerScopeContext(request, session, payload?.scope ?? null);
+    const premiumError = await requireCheerPlannerPremium(session, scope);
+
+    if (premiumError) {
+      return premiumError;
+    }
     const firstName = asString(payload?.firstName);
     const lastName = asString(payload?.lastName);
     const athleteId = asString(payload?.athleteId);
@@ -85,66 +86,38 @@ async function saveAthlete(request: NextRequest) {
     const notes = asString(payload?.notes);
     const dateOfBirth = asString(payload?.dateOfBirth);
     const parentContacts = normalizeParentContacts(payload?.parentContacts);
+    const workspaceRoot = await resolveWorkspaceRoot(session, scope.scope);
 
     if (!firstName || !lastName) {
       return NextResponse.json({ error: "First name and last name are required." }, { status: 400 });
     }
-
-    const admin = createAdminClient();
-    const editableAthlete = isUuidString(athleteId)
-      ? await getEditableAthleteRow(athleteId, session, scope)
+    const matchedAthlete = !athleteId
+      ? await findExistingAthleteByRegistration(registrationNumber, workspaceRoot.id)
       : null;
-
-    if (athleteId && isUuidString(athleteId) && !editableAthlete) {
-      return NextResponse.json({ error: "You do not have access to edit this athlete." }, { status: 403 });
-    }
-
-    const matchedAthlete = editableAthlete ?? await findExistingAthleteByRegistration(registrationNumber, scope, session.userId);
-    const persistencePayload = {
-      gym_id: scope.scopeType === "gym" ? (scope.gymId ?? session.primaryGymId ?? null) : null,
-      created_by_profile_id: session.userId,
-      first_name: firstName,
-      last_name: lastName,
-      birth_date: dateOfBirth || null,
-      registration_number: registrationNumber || null,
+    const result = await savePlannerAthleteCommand(session, scope.scope, {
+      workspaceRootId: workspaceRoot.id,
+      expectedLockVersion: typeof (payload as Record<string, unknown> | null)?.expectedLockVersion === "number"
+        ? (payload as Record<string, unknown>).expectedLockVersion as number
+        : null,
+      athleteId: isUuidString(athleteId) ? athleteId : matchedAthlete?.id ?? null,
+      firstName,
+      lastName,
+      dateOfBirth,
+      registrationNumber,
       notes,
-      parent_contacts: parentContacts,
-      metadata: {
-        registrationNumber,
-        notes,
-        parentContacts,
-        createdByProfileId: session.userId
-      }
-    };
+      parentContacts
+    });
 
-    const query = matchedAthlete
-      ? admin
-          .from("athletes" as never)
-          .update(persistencePayload as never)
-          .eq("id", matchedAthlete.id as never)
-          .select("*" as never)
-          .single()
-      : admin
-          .from("athletes" as never)
-          .insert(persistencePayload as never)
-          .select("*" as never)
-          .single();
-
-    const { data, error: writeError } = await query;
-
-    if (writeError || !data) {
-      if (writeError?.code === "42703" || writeError?.code === "42P01") {
-        return NextResponse.json({ error: "Supabase athlete columns are missing. Run migration 006_planner_remote_persistence.sql first." }, { status: 409 });
-      }
-
-      return NextResponse.json({ error: writeError?.message ?? "Unable to save athlete." }, { status: 500 });
-    }
-
-    const athlete = buildPlannerAthleteFromRow(data, scope.workspaceId);
-    return NextResponse.json({ athleteId: athlete.id, athlete });
+    return NextResponse.json({
+      athleteId: result.entity.id,
+      athlete: result.entity,
+      lockVersion: result.lockVersion,
+      changeSetId: result.changeSetId,
+      latestVersionNumber: result.latestVersionNumber
+    });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unable to save athlete.";
-    return NextResponse.json({ error: message }, { status: 500 });
+    const plannerError = getPlannerCommandError(error);
+    return NextResponse.json({ error: plannerError.message, code: plannerError.code }, { status: plannerError.code ? 409 : 500 });
   }
 }
 
@@ -155,3 +128,4 @@ export async function POST(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   return saveAthlete(request);
 }
+

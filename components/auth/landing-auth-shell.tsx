@@ -133,52 +133,60 @@ export function LandingAuthShell() {
     event.preventDefault();
     setLoginState({ mode: "loading" });
 
-    const response = await fetch("/api/auth/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: loginEmail, password: loginPassword })
-    });
+    try {
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: loginEmail, password: loginPassword })
+      });
 
-    const payload = await readAuthResponse(response);
+      const payload = await readAuthResponse(response);
 
-    if (!response.ok) {
-      setLoginState({ mode: "error", message: payload.error ?? "Unable to sign in." });
-      return;
+      if (!response.ok) {
+        setLoginState({ mode: "error", message: payload.error ?? "Unable to sign in." });
+        return;
+      }
+
+      window.location.assign(payload.nextPath ?? "/select-workspace");
+    } catch {
+      setLoginState({ mode: "error", message: "Unable to reach the sign-in service. Check your connection and try again." });
     }
-
-    window.location.assign(payload.nextPath ?? "/select-workspace");
   }
 
   async function handleBetaRequest(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBetaState({ mode: "loading" });
 
-    const response = await fetch("/api/auth/register", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        displayName: betaName,
-        email: betaEmail,
-        password: betaPassword,
-        role: betaRole
-      })
-    });
+    try {
+      const response = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          displayName: betaName,
+          email: betaEmail,
+          password: betaPassword,
+          role: betaRole
+        })
+      });
 
-    const payload = await readAuthResponse(response);
+      const payload = await readAuthResponse(response);
 
-    if (!response.ok) {
-      setBetaState({ mode: "error", message: payload.error ?? "Unable to submit beta request." });
-      return;
+      if (!response.ok) {
+        setBetaState({ mode: "error", message: payload.error ?? "Unable to submit beta request." });
+        return;
+      }
+
+      setBetaState({
+        mode: "success",
+        message: payload.message ?? "Beta request received. An admin must approve your account before you can sign in."
+      });
+      setBetaName("");
+      setBetaEmail("");
+      setBetaPassword("");
+      setBetaRole("coach");
+    } catch {
+      setBetaState({ mode: "error", message: "Unable to reach the access request service. Check your connection and try again." });
     }
-
-    setBetaState({
-      mode: "success",
-      message: payload.message ?? "Beta request received. An admin must approve your account before you can sign in."
-    });
-    setBetaName("");
-    setBetaEmail("");
-    setBetaPassword("");
-    setBetaRole("coach");
   }
 
   return (
@@ -283,7 +291,7 @@ export function LandingAuthShell() {
                         ))}
                       </Select>
                       <div className="landing-auth-actions landing-auth-actions--stacked">
-                        <Button type="submit" variant="primary" size="lg">
+                        <Button type="submit" variant="primary" size="lg" disabled={betaState.mode === "loading"}>
                           {betaState.mode === "loading" ? "Submitting request..." : "Request Access to Beta"}
                         </Button>
                         <Button type="button" variant="secondary" size="lg" onClick={backToSignIn}>
@@ -308,7 +316,7 @@ export function LandingAuthShell() {
                           {showLoginPassword ? "Hide password" : "Show password"}
                         </Button>
                       </div>
-                      <Button type="submit" variant="primary" size="lg">
+                      <Button type="submit" variant="primary" size="lg" disabled={loginState.mode === "loading"}>
                         {loginState.mode === "loading" ? "Signing in..." : "Sign in"}
                       </Button>
                       {loginState.mode === "error" ? <p className="landing-auth-error">{loginState.message}</p> : null}

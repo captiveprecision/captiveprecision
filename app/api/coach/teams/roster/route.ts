@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { getAuthSession } from "@/lib/auth/session";
+import { requireCheerPlannerPremium } from "@/lib/access/membership";
+import { parsePlannerWorkspaceScope, resolvePlannerScopeContext } from "@/lib/services/planner-workspace";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getPlannerCommandError, setPlannerTeamAssignmentsCommand } from "@/lib/services/planner-command-service";
 
 type RosterAction = "assign" | "remove" | "clear";
 
@@ -9,6 +12,7 @@ type RosterPayload = {
   action?: RosterAction;
   teamId?: string;
   athleteId?: string;
+  scope?: "coach" | "gym";
 };
 
 function asString(value: unknown) {
@@ -51,6 +55,13 @@ export async function POST(request: NextRequest) {
     }
 
     const payload = await request.json().catch(() => null) as RosterPayload | null;
+    const scope = resolvePlannerScopeContext(session, parsePlannerWorkspaceScope(payload?.scope));
+    const premiumError = await requireCheerPlannerPremium(session, scope);
+
+    if (premiumError) {
+      return premiumError;
+    }
+
     const action = payload?.action;
     const teamId = asString(payload?.teamId);
     const athleteId = asString(payload?.athleteId);
@@ -60,66 +71,76 @@ export async function POST(request: NextRequest) {
     }
 
     const admin = createAdminClient();
+    const { data: assignmentData, error: assignmentError } = await admin
+      .from("athlete_team_assignments" as never)
+      .select("athlete_id" as never)
+      .eq("team_id", teamId as never)
+      .is("deleted_at" as never, null);
+
+    if (assignmentError) {
+      return NextResponse.json({ error: assignmentError.message }, { status: 500 });
+    }
+
+    const currentAthleteIds = new Set(
+      ((assignmentData ?? []) as Array<{ athlete_id: string }>).map((row) => row.athlete_id)
+    );
 
     if (action === "assign") {
       if (!athleteId) {
         return NextResponse.json({ error: "An athlete id is required to assign roster membership." }, { status: 400 });
       }
+      currentAthleteIds.add(athleteId);
+      const result = await setPlannerTeamAssignmentsCommand(session, scope.scope, {
+        teamId,
+        athleteIds: [...currentAthleteIds]
+      });
 
-      const { error: deleteError } = await admin
-        .from("athlete_team_assignments" as never)
-        .delete()
-        .eq("athlete_id", athleteId as never);
-
-      if (deleteError) {
-        return NextResponse.json({ error: deleteError.message }, { status: 500 });
-      }
-
-      const { error: insertError } = await admin
-        .from("athlete_team_assignments" as never)
-        .insert({ athlete_id: athleteId, team_id: teamId } as never);
-
-      if (insertError) {
-        return NextResponse.json({ error: insertError.message }, { status: 500 });
-      }
-
-      return NextResponse.json({ ok: true });
+      return NextResponse.json({
+        ok: true,
+        assignments: result.entity,
+        changeSetId: result.changeSetId,
+        latestVersionNumber: result.latestVersionNumber
+      });
     }
 
     if (action === "remove") {
       if (!athleteId) {
         return NextResponse.json({ error: "An athlete id is required to remove roster membership." }, { status: 400 });
       }
+      currentAthleteIds.delete(athleteId);
+      const result = await setPlannerTeamAssignmentsCommand(session, scope.scope, {
+        teamId,
+        athleteIds: [...currentAthleteIds]
+      });
 
-      const { error: deleteError } = await admin
-        .from("athlete_team_assignments" as never)
-        .delete()
-        .eq("team_id", teamId as never)
-        .eq("athlete_id", athleteId as never);
-
-      if (deleteError) {
-        return NextResponse.json({ error: deleteError.message }, { status: 500 });
-      }
-
-      return NextResponse.json({ ok: true });
+      return NextResponse.json({
+        ok: true,
+        assignments: result.entity,
+        changeSetId: result.changeSetId,
+        latestVersionNumber: result.latestVersionNumber
+      });
     }
 
     if (action === "clear") {
-      const { error: deleteError } = await admin
-        .from("athlete_team_assignments" as never)
-        .delete()
-        .eq("team_id", teamId as never);
+      const result = await setPlannerTeamAssignmentsCommand(session, scope.scope, {
+        teamId,
+        athleteIds: []
+      });
 
-      if (deleteError) {
-        return NextResponse.json({ error: deleteError.message }, { status: 500 });
-      }
-
-      return NextResponse.json({ ok: true });
+      return NextResponse.json({
+        ok: true,
+        assignments: result.entity,
+        changeSetId: result.changeSetId,
+        latestVersionNumber: result.latestVersionNumber
+      });
     }
 
     return NextResponse.json({ error: "Unsupported roster action." }, { status: 400 });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unable to update roster.";
-    return NextResponse.json({ error: message }, { status: 500 });
+    const plannerError = getPlannerCommandError(error);
+    return NextResponse.json({ error: plannerError.message, code: plannerError.code }, { status: plannerError.code ? 409 : 500 });
   }
 }
+
+
+

@@ -7,6 +7,7 @@ import type { TeamRoutinePlan } from "@/lib/domain/routine-plan";
 import type { TeamSeasonPlan } from "@/lib/domain/season-plan";
 import type { TeamSkillPlan } from "@/lib/domain/skill-plan";
 import type { TeamRecord } from "@/lib/domain/team";
+import type { SyncMetadata, WorkspaceRoot } from "@/lib/domain/planner-versioning";
 import {
   normalizePlannerEvaluation,
   normalizePlannerProject,
@@ -18,10 +19,10 @@ import { deriveRoutineItemsFromDocument, normalizeRoutineDocument } from "@/lib/
 import {
   buildDefaultPlannerProject,
   parsePlannerWorkspaceScope,
-  resolvePlannerScopeContext,
   type PlannerScopeContext,
   type PlannerWorkspaceScope
 } from "@/lib/services/planner-workspace";
+import { getPlannerSyncMetadata, resolveWorkspaceRoot } from "@/lib/services/planner-command-service";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { defaultQualificationRules, defaultTryoutTemplate } from "@/lib/tools/cheer-planner-tryouts";
 import type { Database, Json } from "@/lib/types/database";
@@ -53,14 +54,26 @@ type AthleteMetadata = {
   createdByProfileId?: string;
 };
 
+type VersionedRow = {
+  workspace_root_id?: string | null;
+  lock_version?: number;
+  archived_at?: string | null;
+  deleted_at?: string | null;
+  restored_from_version_id?: string | null;
+  last_change_set_id?: string | null;
+};
+
 export type PlannerRemoteFoundationSnapshot = {
+  workspaceRoot: WorkspaceRoot;
   plannerProject: PlannerProject;
+  assignments: Array<{ id: string; athleteId: string; teamId: string; createdAt: string; updatedAt: string; lockVersion?: number }>;
   athletes: AthleteRecord[];
   evaluations: EvaluationRecord[];
   teams: TeamRecord[];
   skillPlans: TeamSkillPlan[];
   routinePlans: TeamRoutinePlan[];
   seasonPlans: TeamSeasonPlan[];
+  syncMetadata: SyncMetadata;
 };
 
 const AGE_CATEGORY_FALLBACK = "Youth";
@@ -116,10 +129,50 @@ function parseTeamLevel(value: unknown): PlannerLevelLabel {
   ) ? value : TEAM_LEVEL_FALLBACK;
 }
 
+function buildWorkspaceId(workspaceRoot: WorkspaceRoot) {
+  return `workspace:${workspaceRoot.scopeType}:${workspaceRoot.id}`;
+}
+
+function buildFallbackScopeContext(workspaceRoot: WorkspaceRoot): PlannerScopeContext {
+  return {
+    scope: workspaceRoot.scopeType,
+    scopeType: workspaceRoot.scopeType,
+    projectId: `planner-project:${workspaceRoot.id}`,
+    workspaceId: buildWorkspaceId(workspaceRoot),
+    ownerProfileId: workspaceRoot.ownerProfileId,
+    gymId: workspaceRoot.gymId
+  };
+}
+
+function getWorkspaceRootId(row: VersionedRow) {
+  return row.workspace_root_id ?? undefined;
+}
+
+function getLockVersion(row: VersionedRow) {
+  return row.lock_version ?? 1;
+}
+
+function getLastChangeSetId(row: VersionedRow) {
+  return row.last_change_set_id ?? null;
+}
+
+function getArchivedAt(row: VersionedRow) {
+  return row.archived_at ?? null;
+}
+
+function getDeletedAt(row: VersionedRow) {
+  return row.deleted_at ?? null;
+}
+
+function getRestoredFromVersionId(row: VersionedRow) {
+  return row.restored_from_version_id ?? null;
+}
+
 export function buildPlannerAthleteFromRow(row: AthleteRow, workspaceId: string): AthleteRecord {
   const metadata = asObject(row.metadata) as AthleteMetadata;
   const firstName = row.first_name.trim();
   const lastName = row.last_name.trim();
+  const versionedRow = row as AthleteRow & VersionedRow;
   const registrationNumber = asString(row.registration_number) || asString(metadata.registrationNumber) || row.id.slice(0, 8).toUpperCase();
   const notes = asString(row.notes) || asString(metadata.notes);
   const parentContacts = parseParentContacts(row.parent_contacts);
@@ -128,6 +181,7 @@ export function buildPlannerAthleteFromRow(row: AthleteRow, workspaceId: string)
   return {
     id: row.id,
     workspaceId,
+    workspaceRootId: getWorkspaceRootId(versionedRow),
     registrationNumber,
     firstName,
     lastName,
@@ -138,6 +192,11 @@ export function buildPlannerAthleteFromRow(row: AthleteRow, workspaceId: string)
     status: "active",
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    lockVersion: getLockVersion(versionedRow),
+    lastChangeSetId: getLastChangeSetId(versionedRow),
+    archivedAt: getArchivedAt(versionedRow),
+    deletedAt: getDeletedAt(versionedRow),
+    restoredFromVersionId: getRestoredFromVersionId(versionedRow),
     athleteNotes: notes
   };
 }
@@ -150,6 +209,7 @@ function buildTeamRecord(
   workspaceId: string
 ): TeamRecord {
   const metadata = asObject(row.metadata) as TeamMetadata;
+  const versionedRow = row as TeamRow & VersionedRow;
   const linkedCoachIds = asStringArray(metadata.linkedCoachIds);
   const memberAthleteIds = athleteAssignments
     .filter((assignment) => assignment.team_id === row.id)
@@ -158,6 +218,7 @@ function buildTeamRecord(
   return {
     id: row.id,
     workspaceId,
+    workspaceRootId: getWorkspaceRootId(versionedRow),
     remoteTeamId: row.id,
     name: row.name.trim(),
     teamLevel: parseTeamLevel(metadata.teamLevel),
@@ -174,26 +235,40 @@ function buildTeamRecord(
       .filter(Boolean),
     status: "draft",
     createdAt: row.created_at,
-    updatedAt: row.updated_at
+    updatedAt: row.updated_at,
+    lockVersion: getLockVersion(versionedRow),
+    lastChangeSetId: getLastChangeSetId(versionedRow),
+    archivedAt: getArchivedAt(versionedRow),
+    deletedAt: getDeletedAt(versionedRow),
+    restoredFromVersionId: getRestoredFromVersionId(versionedRow)
   };
 }
 
-export function buildPlannerProjectFromRow(row: PlannerProjectRow, scope: PlannerScopeContext): PlannerProject {
+export function buildPlannerProjectFromRow(row: PlannerProjectRow, workspaceId: string): PlannerProject {
+  const versionedRow = row as PlannerProjectRow & VersionedRow;
+
   return normalizePlannerProject({
     id: row.id,
-    workspaceId: scope.workspaceId,
+    workspaceId,
+    workspaceRootId: getWorkspaceRootId(versionedRow),
     name: row.name,
     status: row.status as PlannerProject["status"],
     pipelineStage: row.pipeline_stage as PlannerProject["pipelineStage"],
     template: asObject(row.template) as PlannerProject["template"],
     qualificationRules: asObject(row.qualification_rules) as PlannerProject["qualificationRules"],
     createdAt: row.created_at,
-    updatedAt: row.updated_at
+    updatedAt: row.updated_at,
+    lockVersion: getLockVersion(versionedRow),
+    lastChangeSetId: getLastChangeSetId(versionedRow),
+    archivedAt: getArchivedAt(versionedRow),
+    deletedAt: getDeletedAt(versionedRow),
+    restoredFromVersionId: getRestoredFromVersionId(versionedRow)
   }, defaultTryoutTemplate, defaultQualificationRules);
 }
 
 export function buildPlannerEvaluationFromRow(row: PlannerEvaluationRow, workspaceId: string): EvaluationRecord {
   const record = asObject(row.record) as Parameters<typeof normalizePlannerEvaluation>[0];
+  const versionedRow = row as PlannerEvaluationRow & VersionedRow;
 
   return normalizePlannerEvaluation({
     ...record,
@@ -203,11 +278,19 @@ export function buildPlannerEvaluationFromRow(row: PlannerEvaluationRow, workspa
     plannerProjectId: row.planner_project_id,
     occurredAt: row.occurred_at ?? record.occurredAt ?? null,
     createdAt: row.created_at,
-    updatedAt: row.updated_at
+    updatedAt: row.updated_at,
+    workspaceRootId: getWorkspaceRootId(versionedRow),
+    lockVersion: getLockVersion(versionedRow),
+    lastChangeSetId: getLastChangeSetId(versionedRow),
+    archivedAt: getArchivedAt(versionedRow),
+    deletedAt: getDeletedAt(versionedRow),
+    restoredFromVersionId: getRestoredFromVersionId(versionedRow)
   });
 }
 
 export function buildTeamSkillPlanFromRow(row: TeamSkillPlanRow, workspaceId: string): TeamSkillPlan {
+  const versionedRow = row as TeamSkillPlanRow & VersionedRow;
+
   return normalizeTeamSkillPlan({
     id: row.id,
     workspaceId,
@@ -217,11 +300,19 @@ export function buildTeamSkillPlanFromRow(row: TeamSkillPlanRow, workspaceId: st
     notes: row.notes,
     selections: Array.isArray(row.selections) ? row.selections as TeamSkillPlan["selections"] : [],
     createdAt: row.created_at,
-    updatedAt: row.updated_at
+    updatedAt: row.updated_at,
+    workspaceRootId: getWorkspaceRootId(versionedRow),
+    lockVersion: getLockVersion(versionedRow),
+    lastChangeSetId: getLastChangeSetId(versionedRow),
+    archivedAt: getArchivedAt(versionedRow),
+    deletedAt: getDeletedAt(versionedRow),
+    restoredFromVersionId: getRestoredFromVersionId(versionedRow)
   });
 }
 
 export function buildTeamSeasonPlanFromRow(row: TeamSeasonPlanRow, workspaceId: string): TeamSeasonPlan {
+  const versionedRow = row as TeamSeasonPlanRow & VersionedRow;
+
   return normalizeTeamSeasonPlan({
     id: row.id,
     workspaceId,
@@ -231,11 +322,18 @@ export function buildTeamSeasonPlanFromRow(row: TeamSeasonPlanRow, workspaceId: 
     notes: row.notes,
     checkpoints: Array.isArray(row.checkpoints) ? row.checkpoints as TeamSeasonPlan["checkpoints"] : [],
     createdAt: row.created_at,
-    updatedAt: row.updated_at
+    updatedAt: row.updated_at,
+    workspaceRootId: getWorkspaceRootId(versionedRow),
+    lockVersion: getLockVersion(versionedRow),
+    lastChangeSetId: getLastChangeSetId(versionedRow),
+    archivedAt: getArchivedAt(versionedRow),
+    deletedAt: getDeletedAt(versionedRow),
+    restoredFromVersionId: getRestoredFromVersionId(versionedRow)
   });
 }
 
 export function buildRoutinePlanFromRow(row: TeamRoutinePlanRow, workspaceId: string): TeamRoutinePlan {
+  const versionedRow = row as TeamRoutinePlanRow & VersionedRow;
   const document = normalizeRoutineDocument(asObject(row.document) as TeamRoutinePlan["document"], "Routine Builder");
 
   return normalizeTeamRoutinePlan({
@@ -248,7 +346,13 @@ export function buildRoutinePlanFromRow(row: TeamRoutinePlanRow, workspaceId: st
     document,
     items: deriveRoutineItemsFromDocument(document),
     createdAt: row.created_at,
-    updatedAt: row.updated_at
+    updatedAt: row.updated_at,
+    workspaceRootId: getWorkspaceRootId(versionedRow),
+    lockVersion: getLockVersion(versionedRow),
+    lastChangeSetId: getLastChangeSetId(versionedRow),
+    archivedAt: getArchivedAt(versionedRow),
+    deletedAt: getDeletedAt(versionedRow),
+    restoredFromVersionId: getRestoredFromVersionId(versionedRow)
   });
 }
 
@@ -338,6 +442,7 @@ function mergeProjectConfig(localProject: PlannerProject, remoteProject: Planner
   return normalizePlannerProject({
     id: remoteProject.id,
     workspaceId: remoteProject.workspaceId,
+    workspaceRootId: remoteProject.workspaceRootId,
     name: configSource.name,
     status: configSource.status,
     pipelineStage: configSource.pipelineStage,
@@ -350,7 +455,12 @@ function mergeProjectConfig(localProject: PlannerProject, remoteProject: Planner
     routinePlans: merged.routinePlans,
     seasonPlans: merged.seasonPlans,
     createdAt: remoteProject.createdAt,
-    updatedAt: Math.max(localUpdatedAt || 0, remoteUpdatedAt || 0) === localUpdatedAt ? localProject.updatedAt : remoteProject.updatedAt
+    updatedAt: Math.max(localUpdatedAt || 0, remoteUpdatedAt || 0) === localUpdatedAt ? localProject.updatedAt : remoteProject.updatedAt,
+    lockVersion: remoteProject.lockVersion,
+    lastChangeSetId: remoteProject.lastChangeSetId,
+    archivedAt: remoteProject.archivedAt,
+    deletedAt: remoteProject.deletedAt,
+    restoredFromVersionId: remoteProject.restoredFromVersionId
   }, remoteProject.template, remoteProject.qualificationRules);
 }
 
@@ -370,64 +480,6 @@ export function mergeRemoteFoundationIntoProject(
   };
 
   return mergeProjectConfig(project, snapshot.plannerProject, merged);
-}
-
-async function listAccessibleTeamRows(
-  session: Pick<AuthSession, "role" | "userId" | "primaryGymId">,
-  scope: PlannerScopeContext
-) {
-  const admin = createAdminClient();
-  const teamMap = new Map<string, TeamRow>();
-
-  if (session.role === "admin") {
-    const { data } = await admin
-      .from("teams" as never)
-      .select("*" as never)
-      .order("created_at", { ascending: false });
-
-    ((data ?? []) as TeamRow[]).forEach((team) => teamMap.set(team.id, team));
-    return [...teamMap.values()];
-  }
-
-  if (scope.scopeType === "gym") {
-    if (scope.gymId) {
-      const { data } = await admin
-        .from("teams" as never)
-        .select("*" as never)
-        .eq("gym_id", scope.gymId as never)
-        .order("created_at", { ascending: false });
-
-      ((data ?? []) as TeamRow[]).forEach((team) => teamMap.set(team.id, team));
-    }
-
-    return [...teamMap.values()];
-  }
-
-  const { data: ownedTeams } = await admin
-    .from("teams" as never)
-    .select("*" as never)
-    .eq("primary_coach_profile_id", session.userId as never)
-    .order("created_at", { ascending: false });
-
-  ((ownedTeams ?? []) as TeamRow[]).forEach((team) => teamMap.set(team.id, team));
-
-  const { data: linkedRows } = await admin
-    .from("team_coaches" as never)
-    .select("team_id" as never)
-    .eq("coach_profile_id", session.userId as never);
-
-  const linkedTeamIds = Array.from(new Set(((linkedRows ?? []) as Array<Pick<TeamCoachRow, "team_id">>).map((row) => row.team_id)));
-
-  if (linkedTeamIds.length) {
-    const { data: linkedTeams } = await admin
-      .from("teams" as never)
-      .select("*" as never)
-      .in("id", linkedTeamIds as never);
-
-    ((linkedTeams ?? []) as TeamRow[]).forEach((team) => teamMap.set(team.id, team));
-  }
-
-  return [...teamMap.values()];
 }
 
 async function listCoachDisplayNames(teamCoachRows: TeamCoachRow[]) {
@@ -451,226 +503,81 @@ async function listCoachDisplayNames(teamCoachRows: TeamCoachRow[]) {
   );
 }
 
-export async function ensurePlannerProjectRow(scope: PlannerScopeContext) {
+export async function ensurePlannerProjectRow(workspaceRoot: WorkspaceRoot) {
   const admin = createAdminClient();
-  const { data, error } = await admin
-    .from("planner_projects" as never)
-    .select("*" as never)
-    .eq("id", scope.projectId as never)
-    .maybeSingle();
+  const { data, error } = await admin.rpc("planner_ensure_project_row" as never, {
+    p_workspace_root_id: workspaceRoot.id
+  } as never);
 
   if (error) {
-    if (error.code === "42P01") {
-      return null;
-    }
-
     throw error;
   }
 
-  if (data) {
-    return data as PlannerProjectRow;
-  }
-
-  const defaultProject = buildDefaultPlannerProject(scope);
-  const { data: inserted, error: insertError } = await admin
-    .from("planner_projects" as never)
-    .insert({
-      id: scope.projectId,
-      scope_type: scope.scopeType,
-      owner_profile_id: scope.ownerProfileId,
-      gym_id: scope.gymId,
-      name: defaultProject.name,
-      status: defaultProject.status,
-      pipeline_stage: defaultProject.pipelineStage,
-      template: defaultProject.template,
-      qualification_rules: defaultProject.qualificationRules
-    } as never)
-    .select("*" as never)
-    .single();
-
-  if (insertError) {
-    throw insertError;
-  }
-
-  return inserted as PlannerProjectRow;
+  return (data ?? null) as PlannerProjectRow | null;
 }
 
-async function listRoutinePlanRows(projectId: string, teamIds: string[]) {
-  if (!teamIds.length) {
-    return [] as TeamRoutinePlanRow[];
-  }
-
-  const admin = createAdminClient();
-  const { data, error } = await admin
-    .from("team_routine_plans" as never)
-    .select("*" as never)
-    .eq("planner_project_id", projectId as never)
-    .in("team_id", teamIds as never)
-    .order("updated_at", { ascending: false });
-
-  if (error) {
-    if (error.code === "42P01") {
-      return [] as TeamRoutinePlanRow[];
-    }
-
-    throw error;
-  }
-
-  return (data ?? []) as TeamRoutinePlanRow[];
-}
-
-async function listPlannerEvaluationRows(projectId: string) {
-  const admin = createAdminClient();
-  const { data, error } = await admin
-    .from("planner_evaluations" as never)
-    .select("*" as never)
-    .eq("planner_project_id", projectId as never)
-    .order("occurred_at", { ascending: false });
-
-  if (error) {
-    if (error.code === "42P01") {
-      return [] as PlannerEvaluationRow[];
-    }
-
-    throw error;
-  }
-
-  return (data ?? []) as PlannerEvaluationRow[];
-}
-
-async function listTeamSkillPlanRows(projectId: string, teamIds: string[]) {
-  if (!teamIds.length) {
-    return [] as TeamSkillPlanRow[];
-  }
-
-  const admin = createAdminClient();
-  const { data, error } = await admin
-    .from("team_skill_plans" as never)
-    .select("*" as never)
-    .eq("planner_project_id", projectId as never)
-    .in("team_id", teamIds as never)
-    .order("updated_at", { ascending: false });
-
-  if (error) {
-    if (error.code === "42P01") {
-      return [] as TeamSkillPlanRow[];
-    }
-
-    throw error;
-  }
-
-  return (data ?? []) as TeamSkillPlanRow[];
-}
-
-async function listTeamSeasonPlanRows(projectId: string, teamIds: string[]) {
-  if (!teamIds.length) {
-    return [] as TeamSeasonPlanRow[];
-  }
-
-  const admin = createAdminClient();
-  const { data, error } = await admin
-    .from("team_season_plans" as never)
-    .select("*" as never)
-    .eq("planner_project_id", projectId as never)
-    .in("team_id", teamIds as never)
-    .order("updated_at", { ascending: false });
-
-  if (error) {
-    if (error.code === "42P01") {
-      return [] as TeamSeasonPlanRow[];
-    }
-
-    throw error;
-  }
-
-  return (data ?? []) as TeamSeasonPlanRow[];
-}
-
-async function listAccessibleAthleteRows(
-  session: Pick<AuthSession, "role" | "userId" | "primaryGymId">,
-  scope: PlannerScopeContext,
-  assignmentRows: AthleteAssignmentRow[]
+async function listWorkspaceRows<T extends Record<string, unknown>>(
+  table: string,
+  workspaceRootId: string,
+  orderColumn = "created_at"
 ) {
   const admin = createAdminClient();
-  const athleteIdSet = new Set<string>(assignmentRows.map((assignment) => assignment.athlete_id));
-
-  if (session.role === "admin") {
-    const { data } = await admin
-      .from("athletes" as never)
-      .select("*" as never)
-      .order("created_at", { ascending: false });
-
-    return (data ?? []) as AthleteRow[];
-  }
-
-  if (scope.scopeType === "gym" && scope.gymId) {
-    const { data } = await admin
-      .from("athletes" as never)
-      .select("*" as never)
-      .eq("gym_id", scope.gymId as never)
-      .order("created_at", { ascending: false });
-
-    return (data ?? []) as AthleteRow[];
-  }
-
-  const { data: ownedAthletes } = await admin
-    .from("athletes" as never)
+  const { data, error } = await admin
+    .from(table as never)
     .select("*" as never)
-    .eq("created_by_profile_id", session.userId as never)
-    .order("created_at", { ascending: false });
+    .eq("workspace_root_id", workspaceRootId as never)
+    .is("deleted_at" as never, null)
+    .order(orderColumn as never, { ascending: false });
 
-  ((ownedAthletes ?? []) as AthleteRow[]).forEach((athlete) => athleteIdSet.add(athlete.id));
+  if (error) {
+    if (error.code === "42P01" || error.code === "42703") {
+      return [] as T[];
+    }
 
-  if (!athleteIdSet.size) {
-    return (ownedAthletes ?? []) as AthleteRow[];
+    throw error;
   }
 
-  const { data } = await admin
-    .from("athletes" as never)
-    .select("*" as never)
-    .in("id", [...athleteIdSet] as never)
-    .order("created_at", { ascending: false });
-
-  return (data ?? []) as AthleteRow[];
+  return (data ?? []) as T[];
 }
 
 export async function listRemotePlannerFoundation(
   session: Pick<AuthSession, "role" | "userId" | "primaryGymId">,
   scopeInput: PlannerWorkspaceScope | string
 ): Promise<PlannerRemoteFoundationSnapshot> {
-  const scope = resolvePlannerScopeContext(session, parsePlannerWorkspaceScope(scopeInput));
-  const plannerProjectRow = await ensurePlannerProjectRow(scope);
+  const scope = parsePlannerWorkspaceScope(scopeInput);
+  const workspaceRoot = await resolveWorkspaceRoot(session as AuthSession, scope);
+  const workspaceId = buildWorkspaceId(workspaceRoot);
+  const plannerProjectRow = await ensurePlannerProjectRow(workspaceRoot);
   const plannerProject = plannerProjectRow
-    ? buildPlannerProjectFromRow(plannerProjectRow, scope)
-    : buildDefaultPlannerProject(scope);
+    ? buildPlannerProjectFromRow(plannerProjectRow, workspaceId)
+    : buildDefaultPlannerProject(buildFallbackScopeContext(workspaceRoot));
 
-  const admin = createAdminClient();
-  const teamRows = await listAccessibleTeamRows(session, scope);
+  const [teamRows, assignmentRows, athleteRows, evaluationRows, skillPlanRows, routinePlanRows, seasonPlanRows, syncMetadata] = await Promise.all([
+    listWorkspaceRows<TeamRow>("teams", workspaceRoot.id),
+    listWorkspaceRows<AthleteAssignmentRow>("athlete_team_assignments", workspaceRoot.id),
+    listWorkspaceRows<AthleteRow>("athletes", workspaceRoot.id),
+    listWorkspaceRows<PlannerEvaluationRow>("planner_evaluations", workspaceRoot.id, "occurred_at"),
+    listWorkspaceRows<TeamSkillPlanRow>("team_skill_plans", workspaceRoot.id, "updated_at"),
+    listWorkspaceRows<TeamRoutinePlanRow>("team_routine_plans", workspaceRoot.id, "updated_at"),
+    listWorkspaceRows<TeamSeasonPlanRow>("team_season_plans", workspaceRoot.id, "updated_at"),
+    getPlannerSyncMetadata(workspaceRoot.id)
+  ]);
+
   const teamIds = teamRows.map((team) => team.id);
-
+  const admin = createAdminClient();
   const { data: teamCoachData } = teamIds.length
     ? await admin.from("team_coaches" as never).select("*" as never).in("team_id", teamIds as never)
     : { data: [] as unknown[] };
   const teamCoachRows = (teamCoachData ?? []) as TeamCoachRow[];
 
-  const { data: assignmentData } = teamIds.length
-    ? await admin.from("athlete_team_assignments" as never).select("*" as never).in("team_id", teamIds as never)
-    : { data: [] as unknown[] };
-  const assignmentRows = (assignmentData ?? []) as AthleteAssignmentRow[];
-
-  const athleteRows = await listAccessibleAthleteRows(session, scope, assignmentRows);
   const athleteMap = new Map(athleteRows.map((row) => {
-    const athlete = buildPlannerAthleteFromRow(row, plannerProject.workspaceId);
+    const athlete = buildPlannerAthleteFromRow(row, workspaceId);
     return [athlete.id, athlete] as const;
   }));
   const coachDisplayNameMap = await listCoachDisplayNames(teamCoachRows);
-  const routinePlanRows = await listRoutinePlanRows(plannerProject.id, teamIds);
-  const evaluationRows = plannerProjectRow ? await listPlannerEvaluationRows(plannerProject.id) : [];
-  const skillPlanRows = await listTeamSkillPlanRows(plannerProject.id, teamIds);
-  const seasonPlanRows = await listTeamSeasonPlanRows(plannerProject.id, teamIds);
 
   const teams = teamRows.map((row) => {
-    const team = buildTeamRecord(row, teamCoachRows, assignmentRows, athleteMap, plannerProject.workspaceId);
+    const team = buildTeamRecord(row, teamCoachRows, assignmentRows, athleteMap, workspaceId);
     const metadata = asObject(row.metadata) as TeamMetadata;
     const assignedCoachNames = team.linkedCoachIds?.length
       ? team.linkedCoachIds.map((coachId) => coachDisplayNameMap.get(coachId) ?? "").filter(Boolean)
@@ -683,12 +590,26 @@ export async function listRemotePlannerFoundation(
   });
 
   return {
+    workspaceRoot,
     plannerProject,
+    assignments: assignmentRows.map((row) => {
+      const versionedRow = row as AthleteAssignmentRow & VersionedRow & { updated_at?: string };
+
+      return {
+        id: row.id,
+        athleteId: row.athlete_id,
+        teamId: row.team_id,
+        createdAt: row.created_at,
+        updatedAt: versionedRow.updated_at ?? row.created_at,
+        lockVersion: getLockVersion(versionedRow)
+      };
+    }),
     athletes: [...athleteMap.values()].sort((left, right) => left.name.localeCompare(right.name)),
-    evaluations: evaluationRows.map((row) => buildPlannerEvaluationFromRow(row, plannerProject.workspaceId)),
+    evaluations: evaluationRows.map((row) => buildPlannerEvaluationFromRow(row, workspaceId)),
     teams,
-    skillPlans: skillPlanRows.map((row) => buildTeamSkillPlanFromRow(row, plannerProject.workspaceId)),
-    routinePlans: routinePlanRows.map((row) => buildRoutinePlanFromRow(row, plannerProject.workspaceId)),
-    seasonPlans: seasonPlanRows.map((row) => buildTeamSeasonPlanFromRow(row, plannerProject.workspaceId))
+    skillPlans: skillPlanRows.map((row) => buildTeamSkillPlanFromRow(row, workspaceId)),
+    routinePlans: routinePlanRows.map((row) => buildRoutinePlanFromRow(row, workspaceId)),
+    seasonPlans: seasonPlanRows.map((row) => buildTeamSeasonPlanFromRow(row, workspaceId)),
+    syncMetadata
   };
 }

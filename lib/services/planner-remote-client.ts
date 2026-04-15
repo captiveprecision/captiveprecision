@@ -7,6 +7,19 @@ import type { TeamSkillPlan } from "@/lib/domain/skill-plan";
 import type { PlannerRemoteFoundationSnapshot } from "@/lib/services/planner-supabase-foundation";
 import type { PlannerWorkspaceScope } from "@/lib/services/planner-workspace";
 
+export class PlannerApiError extends Error {
+  code: string | null;
+
+  constructor(message: string, code?: string | null) {
+    super(message);
+    this.name = "PlannerApiError";
+    this.code = code ?? null;
+  }
+}
+
+export function isPremiumRequiredError(error: unknown) {
+  return error instanceof PlannerApiError && error.code === "PREMIUM_REQUIRED";
+}
 function buildPlannerUrl(path: string, scope: PlannerWorkspaceScope) {
   const url = new URL(path, window.location.origin);
   url.searchParams.set("scope", scope);
@@ -21,10 +34,10 @@ export async function fetchPlannerFoundation(scope: PlannerWorkspaceScope) {
   const response = await fetch(buildPlannerUrl("/api/planner/foundation", scope), {
     credentials: "include"
   });
-  const result = await parseResponse<PlannerRemoteFoundationSnapshot & { error?: string }>(response);
+  const result = await parseResponse<PlannerRemoteFoundationSnapshot & { error?: string; code?: string }>(response);
 
   if (!response.ok || !result) {
-    throw new Error(result?.error ?? "Unable to load Supabase planner data.");
+    throw new PlannerApiError(result?.error ?? "Unable to load Supabase planner data.", result?.code);
   }
 
   return result;
@@ -32,18 +45,27 @@ export async function fetchPlannerFoundation(scope: PlannerWorkspaceScope) {
 
 export async function savePlannerProjectConfig(
   scope: PlannerWorkspaceScope,
-  payload: Pick<PlannerProject, "name" | "status" | "pipelineStage" | "template" | "qualificationRules">
+  payload: Pick<PlannerProject, "name" | "status" | "pipelineStage" | "template" | "qualificationRules" | "workspaceRootId" | "lockVersion">
 ) {
   const response = await fetch(buildPlannerUrl("/api/planner/project-config", scope), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
-    body: JSON.stringify({ scope, ...payload })
+    body: JSON.stringify({
+      scope,
+      workspaceRootId: payload.workspaceRootId ?? null,
+      expectedLockVersion: payload.lockVersion ?? null,
+      name: payload.name,
+      status: payload.status,
+      pipelineStage: payload.pipelineStage,
+      template: payload.template,
+      qualificationRules: payload.qualificationRules
+    })
   });
-  const result = await parseResponse<{ plannerProject?: PlannerProject; error?: string }>(response);
+  const result = await parseResponse<{ plannerProject?: PlannerProject; error?: string; code?: string }>(response);
 
   if (!response.ok || !result?.plannerProject) {
-    throw new Error(result?.error ?? "Unable to save planner configuration.");
+    throw new PlannerApiError(result?.error ?? "Unable to save planner configuration.", result?.code);
   }
 
   return result.plannerProject;
@@ -53,6 +75,8 @@ export async function savePlannerAthlete(
   scope: PlannerWorkspaceScope,
   payload: {
     athleteId?: string | null;
+    workspaceRootId?: string | null;
+    expectedLockVersion?: number | null;
     firstName: string;
     lastName: string;
     dateOfBirth: string;
@@ -67,10 +91,10 @@ export async function savePlannerAthlete(
     credentials: "include",
     body: JSON.stringify({ scope, ...payload })
   });
-  const result = await parseResponse<{ athlete?: AthleteRecord; athleteId?: string; error?: string }>(response);
+  const result = await parseResponse<{ athlete?: AthleteRecord; athleteId?: string; error?: string; code?: string }>(response);
 
   if (!response.ok || !result?.athlete) {
-    throw new Error(result?.error ?? "Unable to save athlete to Supabase.");
+    throw new PlannerApiError(result?.error ?? "Unable to save athlete to Supabase.", result?.code);
   }
 
   return result.athlete;
@@ -81,12 +105,16 @@ export async function savePlannerEvaluation(scope: PlannerWorkspaceScope, evalua
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
-    body: JSON.stringify({ scope, evaluation })
+    body: JSON.stringify({
+      scope,
+      workspaceRootId: evaluation.workspaceRootId ?? null,
+      evaluation
+    })
   });
-  const result = await parseResponse<{ evaluation?: EvaluationRecord; error?: string }>(response);
+  const result = await parseResponse<{ evaluation?: EvaluationRecord; error?: string; code?: string }>(response);
 
   if (!response.ok || !result?.evaluation) {
-    throw new Error(result?.error ?? "Unable to save evaluation to Supabase.");
+    throw new PlannerApiError(result?.error ?? "Unable to save evaluation to Supabase.", result?.code);
   }
 
   return result.evaluation;
@@ -99,16 +127,18 @@ export async function savePlannerSkillPlan(scope: PlannerWorkspaceScope, plan: T
     credentials: "include",
     body: JSON.stringify({
       scope,
+      workspaceRootId: plan.workspaceRootId ?? null,
+      expectedLockVersion: plan.lockVersion ?? null,
       teamId: plan.teamId,
       status: plan.status,
       notes: plan.notes,
       selections: plan.selections
     })
   });
-  const result = await parseResponse<{ skillPlan?: TeamSkillPlan; error?: string }>(response);
+  const result = await parseResponse<{ skillPlan?: TeamSkillPlan; error?: string; code?: string }>(response);
 
   if (!response.ok || !result?.skillPlan) {
-    throw new Error(result?.error ?? "Unable to save skill plan to Supabase.");
+    throw new PlannerApiError(result?.error ?? "Unable to save skill plan to Supabase.", result?.code);
   }
 
   return result.skillPlan;
@@ -121,16 +151,18 @@ export async function savePlannerRoutinePlan(scope: PlannerWorkspaceScope, plan:
     credentials: "include",
     body: JSON.stringify({
       scope,
+      workspaceRootId: plan.workspaceRootId ?? null,
+      expectedLockVersion: plan.lockVersion ?? null,
       teamId: remoteTeamId,
       status: plan.status,
       notes: plan.notes,
       document: plan.document
     })
   });
-  const result = await parseResponse<{ routinePlan?: TeamRoutinePlan; error?: string }>(response);
+  const result = await parseResponse<{ routinePlan?: TeamRoutinePlan; error?: string; code?: string }>(response);
 
   if (!response.ok || !result?.routinePlan) {
-    throw new Error(result?.error ?? "Unable to save routine plan to Supabase.");
+    throw new PlannerApiError(result?.error ?? "Unable to save routine plan to Supabase.", result?.code);
   }
 
   return result.routinePlan;
@@ -143,17 +175,21 @@ export async function savePlannerSeasonPlan(scope: PlannerWorkspaceScope, plan: 
     credentials: "include",
     body: JSON.stringify({
       scope,
+      workspaceRootId: plan.workspaceRootId ?? null,
+      expectedLockVersion: plan.lockVersion ?? null,
       teamId: plan.teamId,
       status: plan.status,
       notes: plan.notes,
       checkpoints: plan.checkpoints
     })
   });
-  const result = await parseResponse<{ seasonPlan?: TeamSeasonPlan; error?: string }>(response);
+  const result = await parseResponse<{ seasonPlan?: TeamSeasonPlan; error?: string; code?: string }>(response);
 
   if (!response.ok || !result?.seasonPlan) {
-    throw new Error(result?.error ?? "Unable to save season plan to Supabase.");
+    throw new PlannerApiError(result?.error ?? "Unable to save season plan to Supabase.", result?.code);
   }
 
   return result.seasonPlan;
 }
+
+

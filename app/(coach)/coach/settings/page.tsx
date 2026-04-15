@@ -1,5 +1,9 @@
-import { Pencil } from "lucide-react";
+﻿import { Pencil } from "lucide-react";
+
+import { BillingPortalButton, CheckoutButton } from "@/components/billing/checkout-button";
 import { Badge, Button, ButtonLink, Card, DetailGrid, PageColumns, PageHero, PageMainColumn, PageSideColumn } from "@/components/ui";
+import { getAuthSession } from "@/lib/auth/session";
+import { resolveBillingStatus } from "@/lib/billing/stripe";
 
 const notificationItems = [
   {
@@ -19,14 +23,22 @@ const notificationItems = [
   }
 ];
 
-const membershipItems = [
-  { label: "Plan", value: "Premium Monthly" },
-  { label: "Coach type", value: "Independent Coach" },
-  { label: "Status", value: "Active" },
-  { label: "Renewal", value: "April 12, 2026" }
-];
+function formatPeriodEnd(value: string | null) {
+  return value ? new Date(value).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "Not scheduled";
+}
 
-export default function CoachSettingsPage() {
+export default async function CoachSettingsPage() {
+  const session = await getAuthSession();
+  const billingStatus = session ? await resolveBillingStatus(session) : null;
+  const isPremium = billingStatus?.tier === "premium";
+
+  const membershipItems = [
+    { label: "Plan", value: isPremium ? "Premium" : "Free" },
+    { label: "Coach type", value: billingStatus?.scope === "gym" ? "Gym assigned" : "Independent Coach" },
+    { label: "Status", value: billingStatus?.status ?? "none" },
+    { label: "Period end", value: formatPeriodEnd(billingStatus?.currentPeriodEnd ?? null) }
+  ];
+
   return (
     <main className="workspace-shell page-stack">
       <PageHero
@@ -91,7 +103,11 @@ export default function CoachSettingsPage() {
                   </div>
                 ))}
               </DetailGrid>
-              <Badge variant="accent">Premium member</Badge>
+              <Badge variant={isPremium ? "accent" : "subtle"}>{isPremium ? "Premium member" : "Free plan"}</Badge>
+              <div className="settings-inline-actions">
+                {isPremium ? <BillingPortalButton /> : <CheckoutButton scope="coach" label="Upgrade to Premium" />}
+                <ButtonLink href="/plans" variant="secondary">View plans</ButtonLink>
+              </div>
             </div>
           </Card>
         </PageSideColumn>

@@ -176,10 +176,14 @@ export function PwaInstallPrompt({
   }
 
   const handleClick = async () => {
-    const result = await promptInstall();
+    try {
+      const result = await promptInstall();
 
-    if (result === "ios") {
-      setShowIosHelp((current) => !current);
+      if (result === "ios") {
+        setShowIosHelp((current) => !current);
+      }
+    } catch {
+      setShowIosHelp(true);
     }
   };
 

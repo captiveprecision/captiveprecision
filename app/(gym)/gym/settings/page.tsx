@@ -1,12 +1,25 @@
-import { Badge, Card, CardContent, SectionHeader } from "@/components/ui";
+﻿import { BillingPortalButton, CheckoutButton } from "@/components/billing/checkout-button";
+import { Badge, ButtonLink, Card, CardContent, SectionHeader } from "@/components/ui";
+import { getAuthSession } from "@/lib/auth/session";
+import { resolveBillingStatus } from "@/lib/billing/stripe";
 
-const gymMembershipItems = [
-  { label: "Plan", value: "Gym Pro" },
-  { label: "Status", value: "Active" },
-  { label: "Coach licenses", value: "6 total / 4 assigned" }
-];
+function formatPeriodEnd(value: string | null) {
+  return value ? new Date(value).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "Not scheduled";
+}
 
-export default function GymSettingsPage() {
+export default async function GymSettingsPage() {
+  const session = await getAuthSession();
+  const billingStatus = session ? await resolveBillingStatus(session) : null;
+  const isPremium = billingStatus?.tier === "premium";
+  const gymId = session?.primaryGymId ?? null;
+
+  const gymMembershipItems = [
+    { label: "Plan", value: isPremium ? "Premium" : "Free" },
+    { label: "Status", value: billingStatus?.status ?? "none" },
+    { label: "Scope", value: billingStatus?.scope ?? "none" },
+    { label: "Period end", value: formatPeriodEnd(billingStatus?.currentPeriodEnd ?? null) }
+  ];
+
   return (
     <main className="workspace-shell page-stack">
       <Card radius="panel" className="settings-hero">
@@ -15,6 +28,7 @@ export default function GymSettingsPage() {
             eyebrow="Gym settings"
             title="Organization settings"
             description="Membership, coach license allocation, and gym-level visibility controls."
+            actions={<ButtonLink href="/plans" variant="secondary">View plans</ButtonLink>}
           />
         </CardContent>
       </Card>
@@ -30,14 +44,14 @@ export default function GymSettingsPage() {
                     <span className="settings-row-title">License capacity</span>
                     <Badge variant="accent">Gym plan</Badge>
                   </div>
-                  <p className="settings-row-copy">Gym memberships define how many coach accounts can be attached to the organization.</p>
+                  <p className="settings-row-copy">Gym memberships unlock premium access for coaches with active manual licenses.</p>
                 </div>
                 <div className="settings-security-item">
                   <div className="settings-card-topline">
                     <span className="settings-row-title">Coach visibility</span>
                     <Badge variant="subtle">Shared</Badge>
                   </div>
-                  <p className="settings-row-copy">Assigned coaches keep their own coach workspace while also gaining gym-linked visibility.</p>
+                  <p className="settings-row-copy">Assigned coaches keep their own coach workspace while also gaining gym-linked premium visibility.</p>
                 </div>
               </div>
             </CardContent>
@@ -55,6 +69,11 @@ export default function GymSettingsPage() {
                     <p className="profile-detail-value">{item.value}</p>
                   </div>
                 ))}
+              </div>
+              <Badge variant={isPremium ? "accent" : "subtle"}>{isPremium ? "Premium active" : "Free plan"}</Badge>
+              <div className="settings-inline-actions">
+                {isPremium ? <BillingPortalButton /> : <CheckoutButton scope="gym" gymId={gymId} label="Upgrade gym" />}
+                <ButtonLink href="/plans" variant="secondary">View plans</ButtonLink>
               </div>
             </CardContent>
           </Card>

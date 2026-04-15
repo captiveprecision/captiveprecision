@@ -1,11 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import type { TeamRoutinePlanStatus } from "@/lib/domain/routine-plan";
-import { normalizeTeamRoutinePlan } from "@/lib/services/planner-domain-mappers";
 import { deriveRoutineItemsFromDocument, normalizeRoutineDocument } from "@/lib/services/planner-routine-builder";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { getPlannerScopeContext, requirePlannerSession, canEditTeamForSession } from "@/lib/services/planner-api-access";
-import { ensurePlannerProjectRow } from "@/lib/services/planner-supabase-foundation";
+import { requireCheerPlannerPremium } from "@/lib/access/membership";
+import { getPlannerCommandError, savePlannerRoutinePlanCommand } from "@/lib/services/planner-command-service";
 
 type RoutinePlanPayload = {
   teamId?: string;
@@ -33,10 +31,10 @@ export async function POST(request: NextRequest) {
 
     const payload = await request.json().catch(() => null) as RoutinePlanPayload | null;
     const scope = getPlannerScopeContext(request, session, payload?.scope ?? null);
-    const currentProject = await ensurePlannerProjectRow(scope);
+    const premiumError = await requireCheerPlannerPremium(session, scope);
 
-    if (!currentProject) {
-      return NextResponse.json({ error: "Supabase planner tables are missing. Run migration 006_planner_remote_persistence.sql first." }, { status: 409 });
+    if (premiumError) {
+      return premiumError;
     }
 
     const teamId = asString(payload?.teamId);
@@ -52,53 +50,31 @@ export async function POST(request: NextRequest) {
     }
 
     const document = normalizeRoutineDocument(payload?.document as Parameters<typeof normalizeRoutineDocument>[0], "Untitled routine");
-    const admin = createAdminClient();
-    const { data, error: upsertError } = await admin
-      .from("team_routine_plans" as never)
-      .upsert({
-        team_id: teamId,
-        planner_project_id: scope.projectId,
-        status,
-        notes,
-        document
-      } as never, { onConflict: "planner_project_id,team_id" as never })
-      .select("*" as never)
-      .single();
-
-    if (upsertError || !data) {
-      if (upsertError?.code === "42P01") {
-        return NextResponse.json({ error: "Supabase routine plans table is missing. Run migrations 005_team_routine_plans.sql and 007_planner_plan_scope_indexes.sql first." }, { status: 409 });
-      }
-
-      return NextResponse.json({ error: upsertError?.message ?? "Unable to save the routine plan." }, { status: 500 });
-    }
-
-    const row = data as {
-      id: string;
-      planner_project_id: string;
-      team_id: string;
-      status: TeamRoutinePlanStatus;
-      notes: string;
-      created_at: string;
-      updated_at: string;
-    };
-
-    const normalizedPlan = normalizeTeamRoutinePlan({
-      id: row.id,
-      workspaceId: scope.workspaceId,
-      plannerProjectId: row.planner_project_id,
-      teamId: row.team_id,
-      status: row.status,
-      notes: row.notes,
-      document,
-      items: deriveRoutineItemsFromDocument(document),
-      createdAt: row.created_at,
-      updatedAt: row.updated_at
+    const result = await savePlannerRoutinePlanCommand(session, scope.scope, {
+      workspaceRootId: typeof (payload as Record<string, unknown> | null)?.workspaceRootId === "string"
+        ? (payload as Record<string, unknown>).workspaceRootId as string
+        : null,
+      expectedLockVersion: typeof (payload as Record<string, unknown> | null)?.expectedLockVersion === "number"
+        ? (payload as Record<string, unknown>).expectedLockVersion as number
+        : null,
+      teamId,
+      status,
+      notes,
+      document: document as Record<string, unknown>
     });
 
-    return NextResponse.json({ routinePlan: normalizedPlan });
+    return NextResponse.json({
+      routinePlan: {
+        ...result.entity,
+        items: deriveRoutineItemsFromDocument(result.entity.document ?? document)
+      },
+      lockVersion: result.lockVersion,
+      changeSetId: result.changeSetId,
+      latestVersionNumber: result.latestVersionNumber
+    });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unable to save routine plan.";
-    return NextResponse.json({ error: message }, { status: 500 });
+    const plannerError = getPlannerCommandError(error);
+    return NextResponse.json({ error: plannerError.message, code: plannerError.code }, { status: plannerError.code ? 409 : 500 });
   }
 }
+

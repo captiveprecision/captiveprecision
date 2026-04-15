@@ -7,6 +7,7 @@ import {
   CalendarDays,
   ClipboardCheck,
   ClipboardList,
+  CreditCard,
   LayoutDashboard,
   MessageSquare,
   Settings,
@@ -23,6 +24,7 @@ const gymNavItems = [
   { href: "/gym/profile" as Route, title: "Profile", icon: UserRound },
   { href: "/gym/messages" as Route, title: "Messages", icon: MessageSquare },
   { href: "/gym/events" as Route, title: "Events", icon: CalendarDays },
+  { href: "/plans" as Route, title: "Plans", icon: CreditCard },
   { href: "/gym/settings" as Route, title: "Settings", icon: Settings }
 ];
 
@@ -65,8 +67,13 @@ export function GymSidebar({ availableWorkspaces }: { availableWorkspaces: AppRo
       footerTitle="Early Access"
       footerCopy="Features are still being tested, refined, and improved across releases."
       footerMeta={getGymReleaseLabel()}
+      secondaryActionHref="/plans"
+      secondaryActionLabel="View plans"
+      
       logoutHref="/api/auth/logout"
     />
   );
 }
+
+
 

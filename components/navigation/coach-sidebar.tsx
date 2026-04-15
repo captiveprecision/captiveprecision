@@ -4,6 +4,7 @@ import type { Route } from "next";
 import {
   Calculator,
   CalendarDays,
+  CreditCard,
   ClipboardCheck,
   ClipboardList,
   LayoutDashboard,
@@ -23,6 +24,7 @@ const coachNavItems = [
   { href: "/coach/profile" as Route, title: "Profile", icon: UserRound },
   { href: "/coach/messages" as Route, title: "Messages", icon: MessageSquare },
   { href: "/coach/events" as Route, title: "Events", icon: CalendarDays },
+  { href: "/plans" as Route, title: "Plans", icon: CreditCard },
   { href: "/coach/settings" as Route, title: "Settings", icon: Settings }
 ];
 
@@ -74,8 +76,13 @@ export function CoachSidebar({
       footerTitle="Early Access"
       footerCopy="Features are still being tested, refined, and improved across releases."
       footerMeta={getCoachReleaseLabel()}
+      secondaryActionHref="/plans"
+      secondaryActionLabel="View plans"
+      
       logoutHref="/api/auth/logout"
     />
   );
 }
+
+
 
