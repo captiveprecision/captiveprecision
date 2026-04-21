@@ -24,7 +24,7 @@ type PwaContextValue = {
 const PwaContext = createContext<PwaContextValue | null>(null);
 
 function isLocalDevelopmentHost(hostname: string) {
-  return hostname === "localhost" || hostname === "127.0.0.1";
+  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "0.0.0.0";
 }
 
 async function clearRegisteredServiceWorkers() {
@@ -62,9 +62,18 @@ export function PwaProvider({ children }: { children: ReactNode }) {
     setIsIosInstall(isIosInstallCandidate());
 
     if (typeof window !== "undefined") {
-      const serviceWorkerSetup = isLocalDevelopmentHost(window.location.hostname)
-        ? clearRegisteredServiceWorkers()
-        : registerProductionServiceWorker();
+      const shouldRegisterServiceWorker = (
+        process.env.NODE_ENV === "production"
+        && window.isSecureContext
+        && !isLocalDevelopmentHost(window.location.hostname)
+      );
+      const serviceWorkerSetup = shouldRegisterServiceWorker
+        ? registerProductionServiceWorker()
+        : clearRegisteredServiceWorkers();
+
+      if (!shouldRegisterServiceWorker) {
+        setInstallEvent(null);
+      }
 
       void serviceWorkerSetup.catch(() => undefined);
     }

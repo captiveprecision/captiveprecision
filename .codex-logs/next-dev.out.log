@@ -1,0 +1,15 @@
+
+> captive-precision-platform@0.1.0 dev
+> next dev
+
+   ▲ Next.js 15.5.15
+   - Local:        http://localhost:3000
+   - Network:      http://10.0.0.52:3000
+   - Environments: .env.local
+
+ ✓ Starting...
+ ✓ Ready in 4.3s
+ ✓ Compiled /middleware in 490ms (175 modules)
+ ○ Compiling /api/billing/checkout ...
+ ✓ Compiled /api/billing/checkout in 2.2s (570 modules)
+ POST /api/billing/checkout 401 in 2916ms

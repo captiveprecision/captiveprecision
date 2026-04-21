@@ -47,6 +47,14 @@ function buildAthleteName(firstName: string, lastName: string) {
   return [firstName.trim(), lastName.trim()].filter(Boolean).join(" ").trim();
 }
 
+function createTryoutRecordId(prefix: string) {
+  if (typeof globalThis !== "undefined" && globalThis.crypto?.randomUUID) {
+    return `${prefix}-${globalThis.crypto.randomUUID()}`;
+  }
+
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 export function buildTryoutSkillRow(name: string, isExtra = false): PlannerSkillEvaluation {
   return {
     id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -58,16 +66,15 @@ export function buildTryoutSkillRow(name: string, isExtra = false): PlannerSkill
 
 export function buildTryoutLevelEvaluations(
   template: PlannerTryoutTemplate,
-  levelKeys: readonly PlannerLevelKey[],
-  skillLibrary: Record<PlannerLevelKey, string[]>
+  levelKeys: readonly PlannerLevelKey[]
 ): PlannerLevelEvaluation[] {
   return levelKeys.map((levelKey) => {
-    const desiredCount = template.defaultSkillCounts[levelKey] || 3;
-    const defaults = skillLibrary[levelKey] || [];
+    const defaults = template.skillLibrary[levelKey] ?? [];
+    const desiredCount = Math.max(template.defaultSkillCounts[levelKey] || 0, defaults.length || 0);
 
     return {
       levelKey,
-      skills: Array.from({ length: desiredCount }, (_, index) => buildTryoutSkillRow(defaults[index] || "", false))
+      skills: Array.from({ length: desiredCount }, (_, index) => buildTryoutSkillRow(defaults[index]?.name || "", false))
     };
   });
 }
@@ -241,8 +248,9 @@ export function buildTryoutEvaluationRecord(input: {
   const { athlete, occurredAt, project, levels, resultSummary, scoringContext, sport } = input;
 
   return {
-    id: `${Date.now()}`,
+    id: createTryoutRecordId("evaluation"),
     workspaceId: project.workspaceId,
+    workspaceRootId: athlete.workspaceRootId ?? project.workspaceRootId,
     recordType: "planner-tryout",
     status: "active",
     athleteId: athlete.id,

@@ -1,0 +1,215 @@
+﻿:root {
+  --cp-bg: #ffffff;
+  --cp-card: #ffffff;
+  --cp-text: #0f0f0f;
+  --cp-text-strong: #0f0f0f;
+  --cp-text-body: #1f1f1f;
+  --cp-muted: #787878;
+  --cp-border: #e6e6e6;
+  --cp-border-strong: #d8d8d8;
+  --cp-dark: #0f0f0f;
+  --cp-accent: #ffc800;
+  --cp-accent-soft: rgba(255, 200, 0, 0.12);
+  --cp-dark-soft: rgba(255, 255, 255, 0.07);
+  --cp-radius: 20px;
+  --cp-shadow: 0 10px 30px rgba(15, 15, 15, 0.04), 0 2px 8px rgba(15, 15, 15, 0.04);
+  --sidebar-width: 280px;
+  --sidebar-width-collapsed: 82px;
+
+  --cp-color-black: #0f0f0f;
+  --cp-color-yellow: #ffc800;
+  --cp-color-white: #ffffff;
+  --cp-color-gray-100: #e6e6e6;
+  --cp-color-gray-500: #787878;
+  --cp-color-gray-900: #1f1f1f;
+
+  --cp-space-1: 4px;
+  --cp-space-2: 8px;
+  --cp-space-3: 16px;
+  --cp-space-4: 24px;
+  --cp-space-5: 32px;
+  --cp-space-6: 48px;
+
+  --cp-radius-control: 8px;
+  --cp-radius-card-sm: 12px;
+  --cp-radius-panel: 14px;
+
+  --cp-shadow-subtle: 0 1px 2px rgba(15, 15, 15, 0.05), 0 6px 18px rgba(15, 15, 15, 0.04);
+  --cp-shadow-none: 0 0 0 rgba(15, 15, 15, 0);
+
+  --cp-font-family-base: Inter, "Segoe UI", sans-serif;
+  --cp-font-size-h1: 32px;
+  --cp-font-size-h2: 24px;
+  --cp-font-size-h3: 18px;
+  --cp-font-size-body: 15px;
+  --cp-font-size-label: 12px;
+  --cp-font-weight-regular: 400;
+  --cp-font-weight-semibold: 600;
+  --cp-font-weight-bold: 700;
+  --cp-letter-spacing-label: 0.08em;
+
+  --cp-focus-color: #0f0f0f;
+  --cp-focus-ring: 0 0 0 1px var(--cp-focus-color);
+  --cp-state-hover-bg: rgba(15, 15, 15, 0.03);
+  --cp-state-disabled-opacity: 0.56;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  font-family: var(--cp-font-family-base);
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  color: var(--cp-text-body);
+  background: #f7f7f5;
+  font-size: var(--cp-font-size-body);
+  font-weight: var(--cp-font-weight-regular);
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+/* Legacy compatibility layer: shared app shell and pre-DS surfaces */
+
+.app-frame {
+  min-height: 100vh;
+  display: flex;
+  background: #f7f7f5;
+}
+
+.app-main {
+  flex: 1;
+  min-width: 0;
+  padding: 24px;
+}
+
+.workspace-shell {
+  max-width: 1280px;
+  margin: 0 auto;
+}
+
+.workspace-grid {
+  display: grid;
+  gap: 18px;
+}
+
+.workspace-top {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(320px, 0.9fr);
+  gap: 18px;
+  align-items: stretch;
+}
+
+.surface-card,
+.surface-card-dark {
+  border-radius: 24px;
+  box-shadow: var(--cp-shadow);
+  overflow: hidden;
+}
+
+.surface-card {
+  background: var(--cp-card);
+  border: 1px solid var(--cp-border);
+}
+
+.surface-card-dark {
+  background: var(--cp-dark);
+  color: #fff;
+}
+
+.panel-pad {
+  padding: 22px;
+}
+
+.page-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: var(--cp-accent-soft);
+  color: var(--cp-text);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.page-title {
+  margin: 14px 0 10px;
+  font-size: clamp(2rem, 4vw, var(--cp-font-size-h1));
+  font-weight: var(--cp-font-weight-semibold);
+  line-height: 1;
+  letter-spacing: -0.04em;
+  color: var(--cp-text-strong);
+}
+
+.page-copy,
+.muted-copy {
+  margin: 0;
+  color: var(--cp-muted);
+  line-height: 1.6;
+}
+
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.metric-card {
+  padding: 16px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.metric-card-light {
+  background: #fff;
+  border: 1px solid var(--cp-border);
+}
+
+.metric-label {
+  font-size: var(--cp-font-size-label);
+  text-transform: uppercase;
+  letter-spacing: var(--cp-letter-spacing-label);
+  font-weight: var(--cp-font-weight-bold);
+  color: var(--cp-muted);
+}
+
+.surface-card-dark .metric-label {
+  color: rgba(255, 255, 255, 0.68);
+}
+
+.metric-value {
+  margin-top: 8px;
+  font-size: 28px;
+  line-height: 1;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+}
+
+.metric-subtext {
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--cp-muted);
+}
+
+.surface-card-dark .metric-subtext {
+  color: rgba(255, 255, 255, 0.72);
+}
+
+
+

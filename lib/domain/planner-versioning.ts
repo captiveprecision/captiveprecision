@@ -64,7 +64,32 @@ export type RestorePreview = {
   versionId: string;
   versionNumber: number;
   currentLockVersion: number | null;
+  displayName?: string;
+  secondaryLabel?: string | null;
+  deletedAt?: IsoDateString | null;
+  expiresAt?: IsoDateString | null;
+  backupAvailable?: boolean;
+  relatedRestores?: Array<{
+    key: string;
+    label: string;
+    count: number;
+  }>;
+  notes?: string[];
   restoreSnapshot: Record<string, unknown>;
+};
+
+export type PlannerTrashItem = {
+  entityType: Extract<VersionedEntityType, "athlete" | "team">;
+  entityId: string;
+  versionId: string;
+  name: string;
+  secondaryLabel: string;
+  deletedAt: IsoDateString;
+  deletedByProfileId: string | null;
+  deletedByName: string | null;
+  expiresAt: IsoDateString | null;
+  restoreAvailable: boolean;
+  snapshot: Record<string, unknown>;
 };
 
 export type SyncMetadata = {

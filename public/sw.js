@@ -1,4 +1,5 @@
-const SW_VERSION = "cp-pwa-v4";
+// Bump this whenever the app shell, CSS structure, or icon set changes in production.
+const SW_VERSION = "cp-pwa-v5";
 const STATIC_CACHE = `${SW_VERSION}-static`;
 const PAGE_CACHE = `${SW_VERSION}-pages`;
 const IMAGE_CACHE = `${SW_VERSION}-images`;
@@ -112,6 +113,10 @@ self.addEventListener("fetch", (event) => {
   }
 
   const url = new URL(request.url);
+
+  if (url.pathname.startsWith("/_next/") && !url.pathname.startsWith("/_next/static/")) {
+    return;
+  }
 
   if (url.pathname.startsWith("/api/")) {
     return;

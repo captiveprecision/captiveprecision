@@ -814,6 +814,30 @@ begin
 end;
 $$;
 
+create or replace function public.planner_touch_project_activity(
+  p_project_id text,
+  p_change_set_id uuid
+)
+returns public.planner_projects
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  next_row public.planner_projects;
+begin
+  update public.planner_projects
+  set
+    last_change_set_id = p_change_set_id,
+    updated_at = timezone('utc'::text, now())
+  where id = p_project_id
+  returning *
+  into next_row;
+
+  return next_row;
+end;
+$$;
+
 create or replace function public.planner_raise_conflict(
   p_message text
 )
@@ -1303,6 +1327,7 @@ declare
   next_row public.planner_evaluations;
   athlete_row public.athletes;
   project_row public.planner_projects;
+  touched_project_row public.planner_projects;
   change_set_id uuid;
   version_id uuid;
   change_type text;
@@ -1385,11 +1410,7 @@ begin
     change_type := case when current_row.deleted_at is not null then 'restore' else 'update' end;
   end if;
 
-  update public.planner_projects
-  set
-    last_change_set_id = change_set_id,
-    updated_at = timezone('utc'::text, now())
-  where id = project_row.id;
+  touched_project_row := public.planner_touch_project_activity(project_row.id, change_set_id);
 
   version_id := public.planner_record_entity_version(
     'evaluation',
@@ -1398,17 +1419,6 @@ begin
     next_row.lock_version,
     change_type,
     row_to_json(next_row)::jsonb,
-    p_actor_profile_id,
-    change_set_id
-  );
-
-  perform public.planner_record_entity_version(
-    'planner-project',
-    project_row.id,
-    p_workspace_root_id,
-    project_row.lock_version,
-    'update',
-    row_to_json(project_row)::jsonb,
     p_actor_profile_id,
     change_set_id
   );
@@ -1589,6 +1599,7 @@ set search_path = public
 as $$
 declare
   team_row public.teams;
+  version_id uuid;
   change_set_id uuid;
   athlete_row record;
   assignment_row public.athlete_team_assignments;
@@ -1721,13 +1732,29 @@ begin
   update public.teams
   set
     last_change_set_id = change_set_id,
-    updated_at = timezone('utc'::text, now())
-  where id = p_team_id;
+    updated_at = timezone('utc'::text, now()),
+    lock_version = team_row.lock_version + 1
+  where id = p_team_id
+  returning *
+  into team_row;
+
+  version_id := public.planner_record_entity_version(
+    'team',
+    team_row.id::text,
+    p_workspace_root_id,
+    team_row.lock_version,
+    'update',
+    row_to_json(team_row)::jsonb,
+    p_actor_profile_id,
+    change_set_id
+  );
 
   return jsonb_build_object(
+    'entity', row_to_json(team_row)::jsonb,
+    'lockVersion', team_row.lock_version,
     'changeSetId', change_set_id,
-    'teamId', p_team_id,
-    'assignmentCount', coalesce(array_length(p_athlete_ids, 1), 0)
+    'latestVersionNumber', team_row.lock_version,
+    'versionId', version_id
   );
 end;
 $$;

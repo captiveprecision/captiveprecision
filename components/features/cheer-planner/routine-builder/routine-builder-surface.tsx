@@ -14,6 +14,7 @@ type RoutineBuilderSurfaceProps = {
   cancelRoutineBuilderEdit: () => void;
   updateRoutineBuilderDocument: (document: RoutineDocument) => void;
   saveRoutineBuilderEdit: () => void | Promise<void>;
+  isSavingAction: (actionKey: string) => boolean;
 };
 
 export function RoutineBuilderSurface(props: RoutineBuilderSurfaceProps) {
@@ -23,7 +24,8 @@ export function RoutineBuilderSurface(props: RoutineBuilderSurfaceProps) {
     openRoutineBuilderTeam,
     cancelRoutineBuilderEdit,
     updateRoutineBuilderDocument,
-    saveRoutineBuilderEdit
+    saveRoutineBuilderEdit,
+    isSavingAction
   } = props;
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
 
@@ -78,7 +80,9 @@ export function RoutineBuilderSurface(props: RoutineBuilderSurfaceProps) {
                         </div>
                         {isEditing ? (
                           <>
-                            <Button size="sm" onClick={() => void saveRoutineBuilderEdit()}>Save</Button>
+                            <Button size="sm" onClick={() => void saveRoutineBuilderEdit()} disabled={isSavingAction("routine-plan")}>
+                              {isSavingAction("routine-plan") ? "Saving..." : "Save"}
+                            </Button>
                             <Button variant="secondary" size="sm" onClick={cancelRoutineBuilderEdit}>Cancel</Button>
                           </>
                         ) : (

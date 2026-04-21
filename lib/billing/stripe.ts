@@ -280,6 +280,17 @@ export async function resolveBillingStatus(session: AuthSession): Promise<Billin
   const fallbackRow = eligibleRows[0] ?? null;
   const selectedRow = premiumRow ?? fallbackRow;
 
+  if (!premiumRow && session.role === "admin") {
+    return {
+      tier: "premium",
+      scope: billingGymId ? "gym" : "individual",
+      status: "admin access",
+      currentPeriodEnd: null,
+      cancelAtPeriodEnd: false,
+      customerId: selectedRow?.provider_customer_id ?? null
+    };
+  }
+
   return {
     tier: premiumRow ? "premium" : "free",
     scope: premiumRow ? (premiumRow.gym_id ? "gym" : "individual") : "none",

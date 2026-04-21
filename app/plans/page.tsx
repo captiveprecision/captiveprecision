@@ -17,6 +17,7 @@ export default async function PlansPage() {
   const toolsHref = session?.roles.includes("gym") ? "/gym/tools" : session?.roles.includes("coach") ? "/coach/tools" : "/tools";
   const plannerHref = session?.roles.includes("gym") ? "/gym/cheer-planner" : session?.roles.includes("coach") ? "/coach/cheer-planner" : "/select-workspace";
   const isPremium = status?.tier === "premium";
+  const canManageBilling = Boolean(status?.customerId);
 
   return (
     <main className="workspace-shell page-stack plans-shell">
@@ -30,7 +31,9 @@ export default async function PlansPage() {
       >
         <div className="plans-hero-actions">
           {session ? (
-            isPremium ? <BillingPortalButton /> : <CheckoutButton scope={checkoutScope} gymId={checkoutGymId} label="Upgrade today" />
+            isPremium
+              ? (canManageBilling ? <BillingPortalButton /> : <ButtonLink href={plannerHref as Route} variant="primary">Open Cheer Planner</ButtonLink>)
+              : <CheckoutButton scope={checkoutScope} gymId={checkoutGymId} label="Upgrade today" />
           ) : (
             <ButtonLink href="/" variant="primary">Sign in to upgrade</ButtonLink>
           )}
@@ -98,7 +101,9 @@ export default async function PlansPage() {
             </div>
             <div className="plans-status-actions">
               {session ? (
-                isPremium ? <BillingPortalButton /> : <CheckoutButton scope={checkoutScope} gymId={checkoutGymId} label="Upgrade to Premium" />
+                isPremium
+                  ? (canManageBilling ? <BillingPortalButton /> : <ButtonLink href={plannerHref as Route} variant="primary">Open Cheer Planner</ButtonLink>)
+                  : <CheckoutButton scope={checkoutScope} gymId={checkoutGymId} label="Upgrade to Premium" />
               ) : (
                 <ButtonLink href="/" variant="primary">Sign in</ButtonLink>
               )}

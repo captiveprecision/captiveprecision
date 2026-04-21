@@ -1,5 +1,5 @@
 import { Pencil } from "lucide-react";
-import { Badge, Button, ButtonLink, Card, DetailGrid, PageColumns, PageHero, PageMainColumn, PageSideColumn } from "@/components/ui";
+import { Badge, Button, ButtonLink, Card, CardContent, DetailGrid, PageColumns, PageHero, PageMainColumn, PageSideColumn, SectionHeader } from "@/components/ui";
 
 const notificationItems = [
   {
@@ -50,13 +50,8 @@ export default function SettingsPage() {
           />
 
           <Card radius="panel" className="settings-section">
-            <div className="ui-card__content settings-section">
-              <div className="ui-section-header">
-                <div className="ui-section-header__copy">
-                  <span className="ui-section-header__eyebrow">Notifications</span>
-                  <h2 className="ui-section-header__title">Notification preferences</h2>
-                </div>
-              </div>
+            <CardContent className="settings-section">
+              <SectionHeader eyebrow="Notifications" title="Notification preferences" />
               <div className="settings-toggle-list">
                 {notificationItems.map((item) => (
                   <div className="settings-toggle-row" key={item.title}>
@@ -70,17 +65,12 @@ export default function SettingsPage() {
                   </div>
                 ))}
               </div>
-            </div>
+            </CardContent>
           </Card>
 
           <Card radius="panel" className="settings-section">
-            <div className="ui-card__content settings-section">
-              <div className="ui-section-header">
-                <div className="ui-section-header__copy">
-                  <span className="ui-section-header__eyebrow">Preferences</span>
-                  <h2 className="ui-section-header__title">Workspace defaults</h2>
-                </div>
-              </div>
+            <CardContent className="settings-section">
+              <SectionHeader eyebrow="Preferences" title="Workspace defaults" />
               <div className="settings-preference-grid">
                 <Card variant="subtle" className="settings-preference-card">
                   <div className="settings-preference-card__content">
@@ -107,17 +97,12 @@ export default function SettingsPage() {
                   </div>
                 </Card>
               </div>
-            </div>
+            </CardContent>
           </Card>
 
           <Card radius="panel" className="settings-section">
-            <div className="ui-card__content settings-section">
-              <div className="ui-section-header">
-                <div className="ui-section-header__copy">
-                  <span className="ui-section-header__eyebrow">Coach classification</span>
-                  <h2 className="ui-section-header__title">Membership states</h2>
-                </div>
-              </div>
+            <CardContent className="settings-section">
+              <SectionHeader eyebrow="Coach classification" title="Membership states" />
               <div className="settings-preference-grid settings-preference-grid--compact">
                 <Card variant="subtle" className="settings-preference-card">
                   <div className="settings-preference-card__content">
@@ -138,22 +123,18 @@ export default function SettingsPage() {
                   </div>
                 </Card>
               </div>
-            </div>
+            </CardContent>
           </Card>
         </PageMainColumn>
 
         <PageSideColumn className="settings-side-column">
           <Card radius="panel" className="settings-section">
-            <div className="ui-card__content settings-section">
-              <div className="ui-section-header">
-                <div className="ui-section-header__copy">
-                  <span className="ui-section-header__eyebrow">Membership</span>
-                  <h2 className="ui-section-header__title">Subscription control</h2>
-                </div>
-                <div className="ui-section-header__actions">
-                  <Button variant="secondary">Manage membership</Button>
-                </div>
-              </div>
+            <CardContent className="settings-section">
+              <SectionHeader
+                eyebrow="Membership"
+                title="Subscription control"
+                actions={<Button variant="secondary">Manage membership</Button>}
+              />
               <DetailGrid className="settings-detail-grid">
                 {membershipItems.map((item) => (
                   <div key={item.label} className="settings-detail-item">
@@ -162,17 +143,12 @@ export default function SettingsPage() {
                   </div>
                 ))}
               </DetailGrid>
-            </div>
+            </CardContent>
           </Card>
 
           <Card radius="panel" className="settings-section">
-            <div className="ui-card__content settings-section">
-              <div className="ui-section-header">
-                <div className="ui-section-header__copy">
-                  <span className="ui-section-header__eyebrow">Security</span>
-                  <h2 className="ui-section-header__title">Access controls</h2>
-                </div>
-              </div>
+            <CardContent className="settings-section">
+              <SectionHeader eyebrow="Security" title="Access controls" />
               <div className="settings-security-list">
                 <div className="settings-security-item">
                   <span className="settings-row-title">Password and login</span>
@@ -183,7 +159,7 @@ export default function SettingsPage() {
                   <p className="settings-row-copy">Future section for billing, Supabase, and platform integrations.</p>
                 </div>
               </div>
-            </div>
+            </CardContent>
           </Card>
         </PageSideColumn>
       </PageColumns>

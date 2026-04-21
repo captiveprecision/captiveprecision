@@ -11,6 +11,7 @@ export default async function GymSettingsPage() {
   const session = await getAuthSession();
   const billingStatus = session ? await resolveBillingStatus(session) : null;
   const isPremium = billingStatus?.tier === "premium";
+  const canManageBilling = Boolean(billingStatus?.customerId);
   const gymId = session?.primaryGymId ?? null;
 
   const gymMembershipItems = [
@@ -72,7 +73,7 @@ export default async function GymSettingsPage() {
               </div>
               <Badge variant={isPremium ? "accent" : "subtle"}>{isPremium ? "Premium active" : "Free plan"}</Badge>
               <div className="settings-inline-actions">
-                {isPremium ? <BillingPortalButton /> : <CheckoutButton scope="gym" gymId={gymId} label="Upgrade gym" />}
+                {isPremium ? (canManageBilling ? <BillingPortalButton /> : null) : <CheckoutButton scope="gym" gymId={gymId} label="Upgrade gym" />}
                 <ButtonLink href="/plans" variant="secondary">View plans</ButtonLink>
               </div>
             </CardContent>

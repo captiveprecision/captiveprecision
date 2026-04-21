@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AthleteParentContact, AthleteRecord } from "@/lib/domain/athlete";
+import type { PlannerTrashItem } from "@/lib/domain/planner-versioning";
 import type { RoutineDocument, TeamRoutinePlan } from "@/lib/domain/routine-plan";
 import type { TeamSeasonPlan } from "@/lib/domain/season-plan";
 import type { TeamSkillCategory, TeamSkillPlan, TeamSkillSelection } from "@/lib/domain/skill-plan";
@@ -9,15 +10,23 @@ import { useScoringSystems } from "@/lib/scoring/use-scoring-systems";
 import { buildMyTeamsTeamSummaries } from "@/lib/services/planner-my-teams";
 import { mergeRemoteFoundationIntoProject, type PlannerRemoteFoundationSnapshot } from "@/lib/services/planner-supabase-foundation";
 import {
+  deletePlannerAthlete,
+  deletePlannerTeam,
+  fetchPlannerRestorePreview,
+  fetchPlannerTrash,
   fetchPlannerFoundation,
+  isPlannerOfflineError,
   isPremiumRequiredError,
   PlannerApiError,
+  restorePlannerEntity,
   savePlannerAthlete,
   savePlannerEvaluation,
   savePlannerProjectConfig,
   savePlannerRoutinePlan,
   savePlannerSeasonPlan,
-  savePlannerSkillPlan
+  savePlannerSkillPlan,
+  savePlannerTeam,
+  savePlannerTeamAssignments
 } from "@/lib/services/planner-remote-client";
 import { isUuidString, type PlannerWorkspaceScope } from "@/lib/services/planner-workspace";
 import { buildRoutineBuilderTeamInputs, buildTeamRoutinePlanDraft } from "@/lib/services/planner-routine-builder";
@@ -43,7 +52,9 @@ import {
   assignAthleteToPlannerTeam,
   buildTeamBuilderCandidates,
   buildTeamBuilderTeamsWithMembers,
+  clearPlannerTeamRoster,
   createPlannerTeamRecord,
+  deletePlannerTeamRecord,
   removeAthleteFromPlannerTeam,
   updateMyTeamsTeamProfile as updateMyTeamsTeamProfileState,
   updatePlannerTeamDefinition,
@@ -56,8 +67,8 @@ import {
   buildCheerPlannerStorageKey,
   CHEER_PLANNER_REMOTE_MIGRATION_VERSION,
   cloneCheerPlannerState,
+  cloneTemplate,
   defaultCheerPlannerState,
-  defaultSkillLibrary,
   defaultTryoutTemplate,
   readCheerPlannerStateFromStorage,
   levelLabels,
@@ -65,6 +76,7 @@ import {
   type PlannerLevelEvaluation,
   type PlannerLevelKey,
   type PlannerLevelLabel,
+  type PlannerTemplateSkill,
   type PlannerTeamRecord,
   type PlannerTryoutEvaluation,
   type PlannerTryoutTemplate,
@@ -145,7 +157,75 @@ type PremiumAccessState = {
   cancelAtPeriodEnd: boolean;
 };
 
+export type SaveState = "idle" | "saving" | "saved" | "offline_pending" | "error";
+
+export type PendingPlannerWrite = {
+  id: string;
+  command: "project-save" | "athlete-save" | "evaluation-save" | "team-save" | "team-assignments-set" | "skill-plan-save" | "routine-plan-save" | "season-plan-save";
+  scope: "coach" | "gym";
+  workspaceRootId: string | null;
+  payload: Record<string, unknown>;
+  createdAt: string;
+  retryCount: number;
+};
+
 const PREMIUM_REQUIRED_MESSAGE = "Esta es una funcion premium. Actualiza tu plan hoy para seguir editando, guardar registros por equipo y desbloquear Cheer Planner completo.";
+const PENDING_WRITES_STORAGE_KEY = "cp-planner-pending-writes";
+
+type PendingPlannerCommand = PendingPlannerWrite["command"];
+
+type PendingProjectSavePayload = {
+  workspaceId: string;
+  workspaceRootId: string | null;
+  lockVersion: number | null;
+  name: string;
+  status: CheerPlannerState["status"];
+  pipelineStage: CheerPlannerState["pipelineStage"];
+  template: PlannerTryoutTemplate;
+  qualificationRules: CheerPlannerState["qualificationRules"];
+};
+
+type PendingAthleteSavePayload = {
+  workspaceId: string;
+  athleteId?: string | null;
+  workspaceRootId?: string | null;
+  expectedLockVersion?: number | null;
+  firstName: string;
+  lastName: string;
+  dateOfBirth: string;
+  registrationNumber: string;
+  notes: string;
+  parentContacts: AthleteRecord["parentContacts"];
+};
+
+type PendingEvaluationSavePayload = {
+  athlete: PendingAthleteSavePayload;
+  evaluation: PlannerTryoutEvaluation;
+};
+
+type PendingTeamSavePayload = {
+  workspaceId: string;
+  workspaceRootId?: string | null;
+  expectedLockVersion?: number | null;
+  teamId?: string | null;
+  name: string;
+  teamLevel: string;
+  teamType: string;
+  teamDivision: string;
+  trainingDays: string;
+  trainingHours: string;
+  linkedCoachIds: string[];
+  assignedCoachNames: string[];
+  fallbackTeam?: Pick<PlannerTeamRecord, "memberAthleteIds" | "memberRegistrationNumbers" | "status">;
+};
+
+type PendingTeamAssignmentsPayload = {
+  workspaceId: string;
+  workspaceRootId?: string | null;
+  teamId: string;
+  athleteIds: string[];
+  fallbackTeam?: Pick<PlannerTeamRecord, "memberAthleteIds" | "memberRegistrationNumbers" | "status">;
+};
 
 function round(value: number, decimals = 2) {
   const factor = 10 ** decimals;
@@ -160,7 +240,28 @@ export function formatPlannerScore(value: number) {
 }
 
 function buildLevelEvaluations(template: PlannerTryoutTemplate): PlannerLevelEvaluation[] {
-  return buildTryoutLevelEvaluations(template, LEVEL_KEYS, defaultSkillLibrary);
+  return buildTryoutLevelEvaluations(template, LEVEL_KEYS);
+}
+
+function clampTemplateSkillCounts(skillLibrary: PlannerTryoutTemplate["skillLibrary"]) {
+  return Object.fromEntries(
+    LEVEL_KEYS.map((levelKey) => [levelKey, Math.max((skillLibrary[levelKey] ?? []).length, 0)])
+  ) as Record<PlannerLevelKey, number>;
+}
+
+function buildTemplateSkill(name = ""): PlannerTemplateSkill {
+  return {
+    id: `template-skill-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    name
+  };
+}
+
+function buildTemplateOption() {
+  return {
+    id: `template-option-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    label: "",
+    value: 0
+  };
 }
 
 function buildAthleteName(firstName: string, lastName: string) {
@@ -172,6 +273,85 @@ function upsertAthleteRecord(athletes: AthleteRecord[], athlete: AthleteRecord) 
     ...athletes.filter((currentAthlete) => currentAthlete.id !== athlete.id),
     athlete
   ].sort((left, right) => left.name.localeCompare(right.name));
+}
+
+function upsertRecordById<T extends { id: string }>(records: T[], nextRecord: T) {
+  const recordIndex = records.findIndex((record) => record.id === nextRecord.id);
+
+  if (recordIndex < 0) {
+    return [...records, nextRecord];
+  }
+
+  return records.map((record, index) => index === recordIndex ? nextRecord : record);
+}
+
+function upsertTeamScopedRecord<T extends { teamId: string }>(records: T[], nextRecord: T) {
+  const recordIndex = records.findIndex((record) => record.teamId === nextRecord.teamId);
+
+  if (recordIndex < 0) {
+    return [...records, nextRecord];
+  }
+
+  return records.map((record, index) => index === recordIndex ? nextRecord : record);
+}
+
+function removeTeamScopedRecords<T extends { teamId: string }>(records: T[], teamId: string) {
+  return records.filter((record) => record.teamId !== teamId);
+}
+
+type PlannerSyncSource = Partial<Pick<
+  CheerPlannerState,
+  "workspaceRootId" | "lockVersion" | "lastChangeSetId" | "archivedAt" | "deletedAt" | "restoredFromVersionId" | "updatedAt"
+>>;
+
+type PlannerProjectSyncState = Pick<
+  CheerPlannerState,
+  "name" | "status" | "pipelineStage" | "template" | "qualificationRules" | "updatedAt"
+> & PlannerSyncSource;
+
+function applyProjectSyncMetadata(
+  project: CheerPlannerState,
+  syncSource?: PlannerSyncSource | null,
+  updatedAtFallback?: string
+) {
+  const nextProject: CheerPlannerState = {
+    ...project,
+    updatedAt: updatedAtFallback ?? project.updatedAt
+  };
+
+  if (!syncSource) {
+    return nextProject;
+  }
+
+  if ("workspaceRootId" in syncSource) {
+    nextProject.workspaceRootId = syncSource.workspaceRootId;
+  }
+
+  if ("lockVersion" in syncSource && typeof syncSource.lockVersion === "number") {
+    nextProject.lockVersion = syncSource.lockVersion;
+  }
+
+  if ("lastChangeSetId" in syncSource) {
+    nextProject.lastChangeSetId = syncSource.lastChangeSetId ?? null;
+  }
+
+  if ("archivedAt" in syncSource) {
+    nextProject.archivedAt = syncSource.archivedAt ?? null;
+  }
+
+  if ("deletedAt" in syncSource) {
+    nextProject.deletedAt = syncSource.deletedAt ?? null;
+  }
+
+  if ("restoredFromVersionId" in syncSource) {
+    nextProject.restoredFromVersionId = syncSource.restoredFromVersionId ?? null;
+  }
+
+  if ("updatedAt" in syncSource && syncSource.updatedAt) {
+    nextProject.updatedAt = syncSource.updatedAt;
+  }
+
+  return nextProject;
 }
 
 function buildEmptyParentContact(index = 0): AthleteParentContact {
@@ -194,6 +374,81 @@ function buildEmptyAthleteDraft(): AthleteDraftState {
     dateOfBirth: "",
     notes: "",
     parentContacts: [buildEmptyParentContact()]
+  };
+}
+
+function buildPendingWritesStorageKey(scope: PlannerWorkspaceScope) {
+  return `${PENDING_WRITES_STORAGE_KEY}:${scope}`;
+}
+
+function readPendingWritesFromStorage(scope: PlannerWorkspaceScope): PendingPlannerWrite[] {
+  if (typeof window === "undefined") {
+    return [];
+  }
+
+  try {
+    const raw = window.localStorage.getItem(buildPendingWritesStorageKey(scope));
+
+    if (!raw) {
+      return [];
+    }
+
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed)
+      ? parsed.filter((item): item is PendingPlannerWrite => Boolean(
+          item
+          && typeof item === "object"
+          && typeof (item as PendingPlannerWrite).id === "string"
+          && typeof (item as PendingPlannerWrite).command === "string"
+        ))
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function writePendingWritesToStorage(scope: PlannerWorkspaceScope, pendingWrites: PendingPlannerWrite[]) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.localStorage.setItem(buildPendingWritesStorageKey(scope), JSON.stringify(pendingWrites));
+}
+
+function buildPendingWriteIdentity(command: PendingPlannerWrite["command"], payload: Record<string, unknown>) {
+  switch (command) {
+    case "project-save":
+      return `${command}:${typeof payload.workspaceRootId === "string" ? payload.workspaceRootId : "workspace"}`;
+    case "athlete-save":
+      return `${command}:${typeof payload.athleteId === "string" && payload.athleteId ? payload.athleteId : typeof payload.registrationNumber === "string" ? payload.registrationNumber : "new-athlete"}`;
+    case "team-save":
+      return `${command}:${typeof payload.teamId === "string" && payload.teamId ? payload.teamId : typeof payload.name === "string" ? payload.name : "new-team"}`;
+    case "skill-plan-save":
+    case "routine-plan-save":
+    case "season-plan-save":
+    case "team-assignments-set":
+      return `${command}:${typeof payload.teamId === "string" ? payload.teamId : "team"}`;
+    case "evaluation-save":
+    default:
+      return `${command}:${typeof payload.evaluationId === "string" && payload.evaluationId ? payload.evaluationId : typeof payload.athleteId === "string" && payload.athleteId ? payload.athleteId : typeof payload.registrationNumber === "string" ? payload.registrationNumber : "evaluation"}`;
+  }
+}
+
+function buildPendingWrite(
+  scope: PlannerWorkspaceScope,
+  command: PendingPlannerCommand,
+  workspaceRootId: string | null,
+  payload: Record<string, unknown>,
+  retryCount = 0
+): PendingPlannerWrite {
+  return {
+    id: `pending-write-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    command,
+    scope,
+    workspaceRootId,
+    payload,
+    createdAt: new Date().toISOString(),
+    retryCount
   };
 }
 
@@ -327,6 +582,7 @@ async function fetchRemoteFoundation(scope: PlannerWorkspaceScope) {
 
 async function syncRemotePlannerConfig(scope: PlannerWorkspaceScope, project: CheerPlannerState) {
   return savePlannerProjectConfig(scope, {
+    workspaceId: project.workspaceId,
     name: project.name,
     status: project.status,
     pipelineStage: project.pipelineStage,
@@ -339,6 +595,7 @@ async function syncRemotePlannerConfig(scope: PlannerWorkspaceScope, project: Ch
 
 async function syncRemoteAthleteRecord(scope: PlannerWorkspaceScope, athlete: AthleteRecord) {
   return savePlannerAthlete(scope, {
+    workspaceId: athlete.workspaceId,
     athleteId: isUuidString(athlete.id) ? athlete.id : null,
     workspaceRootId: athlete.workspaceRootId ?? null,
     expectedLockVersion: athlete.lockVersion ?? null,
@@ -362,77 +619,97 @@ async function syncRemoteSkillPlan(scope: PlannerWorkspaceScope, plan: TeamSkill
   });
 }
 
-async function syncRemoteRoster(scope: PlannerWorkspaceScope, action: "assign" | "remove" | "clear", teamId: string, athleteId?: string) {
-  const response = await fetch("/api/coach/teams/roster", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
-    credentials: "include",
-    body: JSON.stringify({ scope, action, teamId, athleteId })
+async function syncRemoteRoster(
+  scope: PlannerWorkspaceScope,
+  workspaceId: string,
+  team: Pick<PlannerTeamRecord, "id" | "remoteTeamId" | "memberRegistrationNumbers" | "status">,
+  athleteIds: string[],
+  workspaceRootId?: string | null
+) {
+  return savePlannerTeamAssignments(scope, {
+    workspaceId,
+    workspaceRootId: workspaceRootId ?? null,
+    teamId: team.remoteTeamId || team.id,
+    athleteIds,
+    fallbackTeam: {
+      memberAthleteIds: athleteIds,
+      memberRegistrationNumbers: team.memberRegistrationNumbers ?? [],
+      status: team.status
+    }
   });
-  const result = await response.json().catch(() => null) as { error?: string; code?: string } | null;
-
-  if (!response.ok) {
-    throw new PlannerApiError(result?.error ?? "Unable to update Supabase roster.", result?.code);
-  }
 }
 
-async function createRemoteTeamRecord(scope: PlannerWorkspaceScope, draft: TeamBuilderTeamDraftInput): Promise<{
+async function createRemoteTeamRecord(
+  scope: PlannerWorkspaceScope,
+  workspaceId: string,
+  workspaceRootId: string | null | undefined,
+  draft: TeamBuilderTeamDraftInput
+): Promise<{
   teamId: string;
+  team: PlannerTeamRecord | null;
   assignedCoachNames: string[];
   linkedCoachIds: string[];
+  lockVersion: number | null;
+  lastChangeSetId: string | null;
 }> {
-  const response = await fetch("/api/coach/teams", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
-    credentials: "include",
-    body: JSON.stringify({
-      name: draft.name,
-      teamLevel: draft.teamLevel,
-      teamType: draft.teamType,
-      teamDivision: draft.teamDivision || "Elite",
-      trainingDays: draft.trainingDays || "",
-      trainingHours: draft.trainingHours || "",
-      scope,
-      coachAssignments: (draft.linkedCoachIds ?? []).map((coachId) => ({ selectedCoachId: coachId }))
-    })
+  const result = await savePlannerTeam(scope, {
+    workspaceId,
+    workspaceRootId: workspaceRootId ?? null,
+    name: draft.name,
+    teamLevel: draft.teamLevel,
+    teamType: draft.teamType,
+    teamDivision: draft.teamDivision || "Elite",
+    trainingDays: draft.trainingDays || "",
+    trainingHours: draft.trainingHours || "",
+    linkedCoachIds: draft.linkedCoachIds ?? [],
+    assignedCoachNames: draft.assignedCoachNames ?? [],
+    fallbackTeam: {
+      memberAthleteIds: [],
+      memberRegistrationNumbers: [],
+      status: "draft"
+    }
   });
-  const result = await response.json().catch(() => null) as {
-    teamId?: string;
-    assignedCoachNames?: string[];
-    linkedCoachIds?: string[];
-    error?: string;
-    code?: string;
-  } | null;
-
-  if (!response.ok || !result?.teamId) {
-    throw new PlannerApiError(result?.error ?? "Unable to create the team in Supabase.", result?.code);
-  }
 
   return {
-    teamId: result.teamId,
-    assignedCoachNames: result.assignedCoachNames ?? [],
-    linkedCoachIds: result.linkedCoachIds ?? []
+    teamId: result.team.id,
+    team: result.team,
+    assignedCoachNames: result.team.assignedCoachNames ?? [],
+    linkedCoachIds: result.team.linkedCoachIds ?? [],
+    lockVersion: typeof result.lockVersion === "number" ? result.lockVersion : null,
+    lastChangeSetId: result.changeSetId ?? null
   };
 }
 
-async function deleteRemoteTeamRecord(scope: PlannerWorkspaceScope, teamId: string) {
-  const response = await fetch("/api/coach/teams", {
-    method: "DELETE",
-    headers: {
-      "Content-Type": "application/json"
-    },
-    credentials: "include",
-    body: JSON.stringify({ scope, teamId })
-  });
-  const result = await response.json().catch(() => null) as { error?: string; code?: string } | null;
-
-  if (!response.ok) {
-    throw new PlannerApiError(result?.error ?? "Unable to delete Supabase team.", result?.code);
+async function deleteRemoteAthleteRecord(
+  scope: PlannerWorkspaceScope,
+  payload: {
+    athleteId: string;
+    workspaceRootId?: string | null;
+    expectedLockVersion?: number | null;
   }
+) {
+  const result = await deletePlannerAthlete(scope, payload);
+
+  return {
+    lockVersion: typeof result.lockVersion === "number" ? result.lockVersion : null,
+    lastChangeSetId: result.changeSetId ?? null
+  };
+}
+
+async function deleteRemoteTeamRecord(
+  scope: PlannerWorkspaceScope,
+  payload: {
+    teamId: string;
+    workspaceRootId?: string | null;
+    expectedLockVersion?: number | null;
+  }
+) {
+  const result = await deletePlannerTeam(scope, payload);
+
+  return {
+    lockVersion: typeof result.lockVersion === "number" ? result.lockVersion : null,
+    lastChangeSetId: result.changeSetId ?? null
+  };
 }
 
 async function syncRemoteRoutinePlan(scope: PlannerWorkspaceScope, plan: TeamRoutinePlan, remoteTeamId: string) {
@@ -490,7 +767,11 @@ async function migratePlannerStateToSupabase(
       continue;
     }
 
-    const createdTeam = await createRemoteTeamRecord(scope, {
+    const createdTeam = await createRemoteTeamRecord(
+      scope,
+      currentSnapshot.plannerProject.workspaceId,
+      currentSnapshot.plannerProject.workspaceRootId ?? null,
+      {
       name: team.name,
       teamLevel: team.teamLevel,
       teamType: team.teamType,
@@ -499,7 +780,8 @@ async function migratePlannerStateToSupabase(
       trainingHours: team.trainingHours,
       assignedCoachNames: team.assignedCoachNames,
       linkedCoachIds: team.linkedCoachIds
-    });
+      }
+    );
 
     teamIdMap.set(team.id, createdTeam.teamId);
   }
@@ -515,12 +797,22 @@ async function migratePlannerStateToSupabase(
       continue;
     }
 
-    for (const athleteId of team.memberAthleteIds) {
-      const remoteAthleteId = athleteIdMap.get(athleteId) || (isUuidString(athleteId) ? athleteId : null);
-      if (remoteAthleteId) {
-        await syncRemoteRoster(scope, "assign", remoteTeamId, remoteAthleteId);
-      }
-    }
+    const remoteAthleteIds = team.memberAthleteIds
+      .map((athleteId) => athleteIdMap.get(athleteId) || (isUuidString(athleteId) ? athleteId : null))
+      .filter((athleteId): athleteId is string => Boolean(athleteId));
+
+    await syncRemoteRoster(
+      scope,
+      currentSnapshot.plannerProject.workspaceId,
+      {
+        id: team.id,
+        remoteTeamId,
+        memberRegistrationNumbers: team.memberRegistrationNumbers ?? [],
+        status: team.status
+      },
+      remoteAthleteIds,
+      currentSnapshot.plannerProject.workspaceRootId ?? null
+    );
   }
 
   const remoteEvaluationMap = new Map(currentSnapshot.evaluations.map((evaluation) => [evaluation.id, evaluation] as const));
@@ -627,6 +919,7 @@ async function migratePlannerStateToSupabase(
 
 export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach") {
   const [plannerState, setPlannerState] = useState<CheerPlannerState>(cloneCheerPlannerState(defaultCheerPlannerState));
+  const [templateDraft, setTemplateDraft] = useState<PlannerTryoutTemplate>(() => cloneTemplate(defaultTryoutTemplate));
   const [activeSport, setActiveSport] = useState<PlannerSportTab>("tumbling");
   const [athleteDraft, setAthleteDraft] = useState<AthleteDraftState>(buildEmptyAthleteDraft());
   const [levelsDraft, setLevelsDraft] = useState<PlannerLevelEvaluation[]>(() => buildLevelEvaluations(defaultTryoutTemplate));
@@ -651,7 +944,13 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
   const [skillPlannerDraft, setSkillPlannerDraft] = useState<SkillPlannerDraftState>(null);
   const [routineBuilderDraft, setRoutineBuilderDraft] = useState<RoutineBuilderDraftState>(null);
   const [seasonPlannerDraft, setSeasonPlannerDraft] = useState<SeasonPlannerDraftState>(null);
+  const [qualificationRulesDraft, setQualificationRulesDraft] = useState(() => ({ ...defaultCheerPlannerState.qualificationRules }));
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [trashItems, setTrashItems] = useState<PlannerTrashItem[]>([]);
+  const [trashLoading, setTrashLoading] = useState(false);
+  const [savingActions, setSavingActions] = useState<Record<string, boolean>>({});
+  const [saveStates, setSaveStates] = useState<Record<string, SaveState>>({});
+  const [pendingWrites, setPendingWrites] = useState<PendingPlannerWrite[]>(() => readPendingWritesFromStorage(scope));
   const [premiumPromptOpen, setPremiumPromptOpen] = useState(false);
   const [premiumAccess, setPremiumAccess] = useState<PremiumAccessState>({
     tier: "loading",
@@ -660,11 +959,42 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
     currentPeriodEnd: null,
     cancelAtPeriodEnd: false
   });
+  const plannerStateRef = useRef(plannerState);
+  const saveStatesRef = useRef(saveStates);
+  const pendingWritesRef = useRef(pendingWrites);
+  const isFlushingPendingWritesRef = useRef(false);
   const { config: scoringConfig, isReady: isScoringReady } = useScoringSystems();
 
   useEffect(() => {
+    plannerStateRef.current = plannerState;
+  }, [plannerState]);
+
+  useEffect(() => {
+    saveStatesRef.current = saveStates;
+  }, [saveStates]);
+
+  useEffect(() => {
+    pendingWritesRef.current = pendingWrites;
+    writePendingWritesToStorage(scope, pendingWrites);
+  }, [pendingWrites, scope]);
+
+  useEffect(() => {
+    if (!settingsOpen) {
+      setTemplateDraft(cloneTemplate(plannerState.template));
+    }
+  }, [plannerState.template, settingsOpen]);
+
+  useEffect(() => {
+    if (!qualificationOpen) {
+      setQualificationRulesDraft({ ...plannerState.qualificationRules });
+    }
+  }, [plannerState.qualificationRules, qualificationOpen]);
+
+  useEffect(() => {
     const state = readPlannerProject(scope);
+    setPendingWrites(readPendingWritesFromStorage(scope));
     setPlannerState(state);
+    setTemplateDraft(cloneTemplate(state.template));
     setLevelsDraft(buildLevelEvaluations(state.template));
     let cancelled = false;
 
@@ -683,10 +1013,24 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
         }
 
         setPlannerState(nextState);
+        setTemplateDraft(cloneTemplate(nextState.template));
         setLevelsDraft(buildLevelEvaluations(nextState.template));
         writePlannerProject(nextState, scope);
+        setSaveState("foundation", "saved");
+
+        try {
+          const trashResult = await fetchPlannerTrash(scope, {
+            workspaceRootId: snapshot.workspaceRoot.id
+          });
+          setTrashItems(trashResult.items);
+        } catch {
+          setTrashItems([]);
+        }
       } catch {
-        // Keep scoped cache when Supabase data is temporarily unavailable.
+        if (!cancelled) {
+          setSaveMessage("Working from local session data while sync is unavailable.");
+          setSaveState("foundation", "error");
+        }
       }
     })();
 
@@ -719,10 +1063,110 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
     };
   }, []);
 
-  const requestPremiumAccess = () => {
+  const requestPremiumAccess = useCallback(() => {
     setPremiumPromptOpen(true);
     setSaveMessage(PREMIUM_REQUIRED_MESSAGE);
+  }, []);
+
+  const setSaveState = (actionKey: string, state: SaveState) => {
+    setSaveStates((current) => ({
+      ...current,
+      [actionKey]: state
+    }));
   };
+
+  const getSaveState = (actionKey: string): SaveState => saveStates[actionKey] ?? "idle";
+
+  const setSavingAction = (actionKey: string, isSaving: boolean) => {
+    setSavingActions((current) => ({
+      ...current,
+      [actionKey]: isSaving
+    }));
+  };
+
+  const runSavingAction = async <T>(actionKey: string, callback: () => Promise<T>) => {
+    setSaveState(actionKey, "saving");
+    setSavingAction(actionKey, true);
+
+    try {
+      return await callback();
+    } finally {
+      setSavingAction(actionKey, false);
+    }
+  };
+
+  const isSavingAction = (actionKey: string) => Boolean(savingActions[actionKey]);
+
+  const enqueuePendingWrite = useCallback((pendingWrite: PendingPlannerWrite) => {
+    setPendingWrites((current) => {
+      const identity = buildPendingWriteIdentity(pendingWrite.command, pendingWrite.payload);
+      const nextWithoutMatch = current.filter((item) => buildPendingWriteIdentity(item.command, item.payload) !== identity);
+      return [...nextWithoutMatch, pendingWrite];
+    });
+  }, []);
+
+  const removePendingWrite = useCallback((writeId: string) => {
+    setPendingWrites((current) => current.filter((item) => item.id !== writeId));
+  }, []);
+
+  const replacePendingWrite = useCallback((writeId: string, nextWrite: PendingPlannerWrite) => {
+    setPendingWrites((current) => current.map((item) => item.id === writeId ? nextWrite : item));
+  }, []);
+
+  const queueOfflineWrite = useCallback((actionKey: string, pendingWrite: PendingPlannerWrite) => {
+    enqueuePendingWrite(pendingWrite);
+    setSaveState(actionKey, "offline_pending");
+    setSaveMessage("You are offline. We will retry when connection returns.");
+  }, [enqueuePendingWrite]);
+
+  function commitRemoteProject(remoteProject: PlannerProjectSyncState) {
+    patchPlannerState((current) => ({
+      ...current,
+      name: remoteProject.name,
+      status: remoteProject.status,
+      pipelineStage: remoteProject.pipelineStage,
+      template: remoteProject.template,
+      qualificationRules: remoteProject.qualificationRules
+    }), remoteProject, remoteProject.updatedAt);
+  }
+
+  const refreshRemoteFoundation = useCallback(async () => {
+    const snapshot = await fetchRemoteFoundation(scope);
+    const nextState = applyProjectSyncMetadata(
+      mergeRemoteFoundationIntoProject(plannerStateRef.current, snapshot),
+      snapshot.plannerProject,
+      snapshot.plannerProject.updatedAt
+    );
+
+    plannerStateRef.current = nextState;
+    setPlannerState(nextState);
+    writePlannerProject(nextState, scope);
+    setSaveState("foundation", "saved");
+
+    return snapshot;
+  }, [scope]);
+
+  const loadTrash = useCallback(async (
+    options?: {
+      entityType?: "athlete" | "team" | null;
+      search?: string | null;
+    }
+  ) => {
+    setTrashLoading(true);
+
+    try {
+      const result = await fetchPlannerTrash(scope, {
+        workspaceRootId: plannerStateRef.current.workspaceRootId ?? null,
+        entityType: options?.entityType ?? null,
+        search: options?.search ?? null,
+        limit: 200
+      });
+      setTrashItems(result.items);
+      return result.items;
+    } finally {
+      setTrashLoading(false);
+    }
+  }, [scope]);
 
   const canUsePremiumAction = () => {
     if (premiumAccess.tier === "free") {
@@ -733,14 +1177,144 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
     return true;
   };
 
-  const handlePremiumWriteError = (error: unknown, fallback: string) => {
+  const handlePremiumWriteError = useCallback((error: unknown, fallback: string) => {
     if (isPremiumRequiredError(error)) {
       requestPremiumAccess();
       return;
     }
 
+    if (error instanceof PlannerApiError && error.code === "PLANNER_CONFLICT") {
+      void refreshRemoteFoundation().catch(() => undefined);
+    }
+
     setSaveMessage(error instanceof Error ? error.message : fallback);
-  };
+  }, [requestPremiumAccess, refreshRemoteFoundation]);
+
+  const handleWriteFailure = useCallback((
+    actionKey: string,
+    error: unknown,
+    fallback: string,
+    pendingWrite?: PendingPlannerWrite | null
+  ) => {
+    if (isPlannerOfflineError(error) && pendingWrite) {
+      queueOfflineWrite(actionKey, pendingWrite);
+      return;
+    }
+
+    setSaveState(actionKey, "error");
+    handlePremiumWriteError(error, fallback);
+  }, [handlePremiumWriteError, queueOfflineWrite]);
+
+  const replayPendingWrite = useCallback(async (pendingWrite: PendingPlannerWrite) => {
+    switch (pendingWrite.command) {
+      case "project-save": {
+        const payload = pendingWrite.payload as PendingProjectSavePayload;
+        await savePlannerProjectConfig(scope, {
+          ...payload,
+          workspaceRootId: payload.workspaceRootId ?? undefined,
+          lockVersion: payload.lockVersion ?? undefined
+        });
+        return;
+      }
+      case "athlete-save":
+        await savePlannerAthlete(scope, pendingWrite.payload as PendingAthleteSavePayload);
+        return;
+      case "evaluation-save": {
+        const payload = pendingWrite.payload as PendingEvaluationSavePayload;
+        const remoteAthlete = await savePlannerAthlete(scope, payload.athlete);
+        await savePlannerEvaluation(scope, {
+          ...payload.evaluation,
+          athleteId: remoteAthlete.id,
+          athleteSnapshot: payload.evaluation.athleteSnapshot
+            ? {
+                ...payload.evaluation.athleteSnapshot,
+                athleteId: remoteAthlete.id,
+                registrationNumber: remoteAthlete.registrationNumber,
+                firstName: remoteAthlete.firstName,
+                lastName: remoteAthlete.lastName,
+                dateOfBirth: remoteAthlete.dateOfBirth,
+                notes: remoteAthlete.notes,
+                athleteNotes: remoteAthlete.notes,
+                parentContacts: remoteAthlete.parentContacts
+              }
+            : payload.evaluation.athleteSnapshot
+        });
+        return;
+      }
+      case "team-save":
+        await savePlannerTeam(scope, pendingWrite.payload as PendingTeamSavePayload);
+        return;
+      case "team-assignments-set": {
+        const payload = pendingWrite.payload as PendingTeamAssignmentsPayload;
+        await savePlannerTeamAssignments(scope, {
+          ...payload,
+          workspaceId: payload.workspaceId || plannerStateRef.current.workspaceId
+        });
+        return;
+      }
+      case "skill-plan-save":
+        await savePlannerSkillPlan(scope, pendingWrite.payload as TeamSkillPlan);
+        return;
+      case "routine-plan-save": {
+        const plan = pendingWrite.payload as TeamRoutinePlan;
+        await savePlannerRoutinePlan(scope, plan, plan.teamId);
+        return;
+      }
+      case "season-plan-save":
+        await savePlannerSeasonPlan(scope, pendingWrite.payload as TeamSeasonPlan);
+        return;
+      default:
+        return;
+    }
+  }, [scope]);
+
+  const flushPendingWrites = useCallback(async () => {
+    if (isFlushingPendingWritesRef.current || !pendingWritesRef.current.length) {
+      return;
+    }
+
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      return;
+    }
+
+    isFlushingPendingWritesRef.current = true;
+    let didReplay = false;
+
+    try {
+      for (const pendingWrite of [...pendingWritesRef.current]) {
+        try {
+          await replayPendingWrite(pendingWrite);
+          removePendingWrite(pendingWrite.id);
+          didReplay = true;
+        } catch (error) {
+          if (isPlannerOfflineError(error)) {
+            replacePendingWrite(pendingWrite.id, {
+              ...pendingWrite,
+              retryCount: pendingWrite.retryCount + 1
+            });
+            break;
+          }
+
+          removePendingWrite(pendingWrite.id);
+          setSaveState(pendingWrite.command, "error");
+          setSaveStates((current) => Object.fromEntries(
+            Object.entries(current).map(([key, value]) => [key, value === "offline_pending" ? "error" : value])
+          ));
+          handlePremiumWriteError(error, "Unable to replay a pending planner change.");
+        }
+      }
+
+      if (didReplay) {
+        await refreshRemoteFoundation();
+        setSaveStates((current) => Object.fromEntries(
+          Object.entries(current).map(([key, value]) => [key, value === "offline_pending" ? "saved" : value])
+        ));
+        setSaveMessage("Pending planner changes synced.");
+      }
+    } finally {
+      isFlushingPendingWritesRef.current = false;
+    }
+  }, [handlePremiumWriteError, refreshRemoteFoundation, removePendingWrite, replacePendingWrite, replayPendingWrite]);
 
   useEffect(() => {
     if (!saveMessage) {
@@ -750,6 +1324,33 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
     const timeout = window.setTimeout(() => setSaveMessage(null), 2600);
     return () => window.clearTimeout(timeout);
   }, [saveMessage]);
+
+  useEffect(() => {
+    void flushPendingWrites();
+
+    const handleOnline = () => {
+      void flushPendingWrites();
+    };
+
+    window.addEventListener("online", handleOnline);
+    return () => window.removeEventListener("online", handleOnline);
+  }, [flushPendingWrites]);
+
+  const syncStatusLabel = useMemo(() => {
+    if (Object.values(savingActions).some(Boolean)) {
+      return "Saving...";
+    }
+
+    if (pendingWrites.length || Object.values(saveStates).includes("offline_pending")) {
+      return "Offline sync pending";
+    }
+
+    if (Object.values(saveStates).includes("error")) {
+      return "Sync issue";
+    }
+
+    return null;
+  }, [pendingWrites.length, saveStates, savingActions]);
 
   const activeScoringSystem = useMemo(
     () => getSystemById(scoringConfig, scoringConfig.activeSystemId),
@@ -831,39 +1432,33 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
     [teamsWithMembers]
   );
 
-  const persistState = (updater: (current: CheerPlannerState) => CheerPlannerState) => {
-    setPlannerState((current) => {
-      const next = {
-        ...updater(current),
-        updatedAt: new Date().toISOString()
-      };
-      writePlannerProject(next, scope);
-      return next;
-    });
-  };
+  function patchPlannerState(
+    updater: (current: CheerPlannerState) => CheerPlannerState,
+    syncSource?: PlannerSyncSource | null,
+    updatedAtFallback?: string
+  ) {
+    const nextState = applyProjectSyncMetadata(updater(plannerStateRef.current), syncSource, updatedAtFallback);
 
-  const refreshRemoteFoundation = async () => {
-    const snapshot = await fetchRemoteFoundation(scope);
-
-    setPlannerState((current) => {
-      const next = mergeRemoteFoundationIntoProject(current, snapshot);
-      writePlannerProject(next, scope);
-      return next;
-    });
-
-    return snapshot;
-  };
-
-  const persistProjectConfigState = (updater: (current: CheerPlannerState) => CheerPlannerState) => {
-    const nextState = {
-      ...updater(plannerState),
-      updatedAt: new Date().toISOString()
-    };
-
+    plannerStateRef.current = nextState;
     setPlannerState(nextState);
     writePlannerProject(nextState, scope);
     return nextState;
-  };
+  }
+
+  function persistState(updater: (current: CheerPlannerState) => CheerPlannerState) {
+    return patchPlannerState((current) => ({
+      ...updater(current),
+      updatedAt: new Date().toISOString()
+    }));
+  }
+
+  function buildProjectConfigSnapshot(updater: (current: CheerPlannerState) => CheerPlannerState) {
+    const updatedAt = new Date().toISOString();
+    return {
+      ...updater(plannerStateRef.current),
+      updatedAt
+    };
+  }
 
   const updateAthleteDraft = (field: keyof AthleteDraftState, value: string) => {
     setAthleteDraft((current) => ({ ...current, [field]: value }));
@@ -934,12 +1529,9 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
   };
 
   const updateTemplateOption = (index: number, field: "label" | "value", value: string) => {
-    setPlannerState((current) => {
-      const next = {
-        ...current,
-        template: {
-          ...current.template,
-          options: current.template.options.map((option, optionIndex) => {
+    setTemplateDraft((current) => ({
+      ...current,
+      options: current.options.map((option, optionIndex) => {
             if (optionIndex !== index) {
               return option;
             }
@@ -949,29 +1541,111 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
               [field]: field === "value" ? Number(value) || 0 : value
             };
           })
-        }
-      };
-      writePlannerProject(next, scope);
-      return next;
-    });
+    }));
   };
 
   const updateSkillCount = (levelKey: PlannerLevelKey, value: string) => {
     const nextCount = Math.max(1, Math.min(20, Number(value) || 1));
-    setPlannerState((current) => {
-      const next = {
-        ...current,
-        template: {
-          ...current.template,
-          defaultSkillCounts: {
-            ...current.template.defaultSkillCounts,
-            [levelKey]: nextCount
-          }
-        }
+    setTemplateDraft((current) => ({
+      ...current,
+      defaultSkillCounts: {
+        ...current.defaultSkillCounts,
+        [levelKey]: nextCount
+      }
+    }));
+  };
+
+  const removeTemplateOption = (optionId: string) => {
+    setTemplateDraft((current) => ({
+      ...current,
+      options: current.options.filter((option) => option.id !== optionId)
+    }));
+  };
+
+  const addTemplateOption = () => {
+    setTemplateDraft((current) => ({
+      ...current,
+      options: [...current.options, buildTemplateOption()]
+    }));
+  };
+
+  const updateTemplateSkill = (levelKey: PlannerLevelKey, skillId: string, value: string) => {
+    setTemplateDraft((current) => {
+      const nextSkillLibrary = {
+        ...current.skillLibrary,
+        [levelKey]: (current.skillLibrary[levelKey] ?? []).map((skill) => (
+          skill.id === skillId ? { ...skill, name: value } : skill
+        ))
       };
-      writePlannerProject(next, scope);
-      return next;
+
+      return {
+        ...current,
+        skillLibrary: nextSkillLibrary,
+        defaultSkillCounts: clampTemplateSkillCounts(nextSkillLibrary)
+      };
     });
+  };
+
+  const moveTemplateSkill = (levelKey: PlannerLevelKey, skillId: string, nextLevelKey: PlannerLevelKey) => {
+    if (levelKey === nextLevelKey) {
+      return;
+    }
+
+    setTemplateDraft((current) => {
+      const currentSkill = (current.skillLibrary[levelKey] ?? []).find((skill) => skill.id === skillId);
+
+      if (!currentSkill) {
+        return current;
+      }
+
+      const nextSkillLibrary = {
+        ...current.skillLibrary,
+        [levelKey]: (current.skillLibrary[levelKey] ?? []).filter((skill) => skill.id !== skillId),
+        [nextLevelKey]: [...(current.skillLibrary[nextLevelKey] ?? []), currentSkill]
+      };
+
+      return {
+        ...current,
+        skillLibrary: nextSkillLibrary,
+        defaultSkillCounts: clampTemplateSkillCounts(nextSkillLibrary)
+      };
+    });
+  };
+
+  const addTemplateSkill = (levelKey: PlannerLevelKey) => {
+    setTemplateDraft((current) => {
+      const nextSkillLibrary = {
+        ...current.skillLibrary,
+        [levelKey]: [...(current.skillLibrary[levelKey] ?? []), buildTemplateSkill("")]
+      };
+
+      return {
+        ...current,
+        skillLibrary: nextSkillLibrary,
+        defaultSkillCounts: clampTemplateSkillCounts(nextSkillLibrary)
+      };
+    });
+  };
+
+  const removeTemplateSkill = (levelKey: PlannerLevelKey, skillId: string) => {
+    setTemplateDraft((current) => {
+      const nextSkillLibrary = {
+        ...current.skillLibrary,
+        [levelKey]: (current.skillLibrary[levelKey] ?? []).filter((skill) => skill.id !== skillId)
+      };
+
+      return {
+        ...current,
+        skillLibrary: nextSkillLibrary,
+        defaultSkillCounts: clampTemplateSkillCounts(nextSkillLibrary)
+      };
+    });
+  };
+
+  const cancelTemplateChanges = () => {
+    setTemplateDraft(cloneTemplate(plannerStateRef.current.template));
+    setSettingsOpen(false);
+    setSaveMessage("Template changes discarded.");
   };
 
   const saveTemplate = async () => {
@@ -979,48 +1653,48 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
       return;
     }
 
-    const nextTemplate = {
-      ...plannerState.template,
-      updatedAt: new Date().toISOString()
-    };
-    const nextState = persistProjectConfigState((current) => ({
-      ...current,
-      template: nextTemplate
-    }));
+    await runSavingAction("template", async () => {
+      const nextTemplate = cloneTemplate({
+        ...templateDraft,
+        updatedAt: new Date().toISOString()
+      });
+      const nextState = buildProjectConfigSnapshot((current) => ({
+        ...current,
+        template: nextTemplate
+      }));
 
-    setLevelsDraft(buildLevelEvaluations(nextTemplate));
-    setOpenLevels([]);
-
-    try {
-      await syncRemotePlannerConfig(scope, nextState);
-      await refreshRemoteFoundation();
-      setSaveMessage("Template saved.");
-    } catch (error) {
-      handlePremiumWriteError(error, "Unable to save the template to Supabase.");
-    }
+      try {
+        const remoteProject = await syncRemotePlannerConfig(scope, nextState);
+        commitRemoteProject(remoteProject);
+        setTemplateDraft(cloneTemplate(remoteProject.template));
+        setLevelsDraft(buildLevelEvaluations(remoteProject.template));
+        setOpenLevels([]);
+        setSaveState("template", "saved");
+        setSaveMessage("Template saved.");
+      } catch (error) {
+        handleWriteFailure(
+          "template",
+          error,
+          "Unable to save the template to Supabase.",
+          buildPendingWrite(scope, "project-save", nextState.workspaceRootId ?? null, {
+            workspaceId: nextState.workspaceId,
+            workspaceRootId: nextState.workspaceRootId ?? null,
+            lockVersion: nextState.lockVersion ?? null,
+            name: nextState.name,
+            status: nextState.status,
+            pipelineStage: nextState.pipelineStage,
+            template: nextState.template,
+            qualificationRules: nextState.qualificationRules
+          })
+        );
+      }
+    });
   };
 
-  const resetTemplate = async () => {
-    if (!canUsePremiumAction()) {
-      return;
-    }
-
-    const nextTemplate = cloneCheerPlannerState(defaultCheerPlannerState).template;
-    const nextState = persistProjectConfigState((current) => ({
-      ...current,
-      template: nextTemplate
-    }));
-
-    setLevelsDraft(buildLevelEvaluations(nextTemplate));
-    setOpenLevels([]);
-
-    try {
-      await syncRemotePlannerConfig(scope, nextState);
-      await refreshRemoteFoundation();
-      setSaveMessage("Template reset.");
-    } catch (error) {
-      handlePremiumWriteError(error, "Unable to reset the template in Supabase.");
-    }
+  const resetTemplate = () => {
+    const nextTemplate = cloneTemplate(cloneCheerPlannerState(defaultCheerPlannerState).template);
+    setTemplateDraft(nextTemplate);
+    setSaveMessage("Template draft reset. Save Template to apply it.");
   };
 
   const toggleLevel = (levelKey: PlannerLevelKey) => {
@@ -1085,42 +1759,52 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
       return false;
     }
 
-    try {
-      const remoteAthlete = await savePlannerAthlete(scope, {
-        athleteId: athleteDraft.athleteId,
-        workspaceRootId: athleteDraft.workspaceRootId ?? plannerState.workspaceRootId ?? null,
-        expectedLockVersion: athleteDraft.lockVersion ?? null,
-        firstName: athleteDraft.firstName.trim(),
-        lastName: athleteDraft.lastName.trim(),
-        dateOfBirth: athleteDraft.dateOfBirth,
-        registrationNumber: athleteDraft.registrationNumber,
-        notes: athleteDraft.notes.trim(),
-        parentContacts: athleteDraft.parentContacts
-      });
-      persistState((current) => ({
-        ...current,
-        athletes: upsertAthleteRecord(current.athletes, remoteAthlete)
-      }));
-      setAthleteDraft((current) => ({
-        ...current,
-        athleteId: remoteAthlete.id,
-        workspaceRootId: remoteAthlete.workspaceRootId,
-        lockVersion: remoteAthlete.lockVersion,
-        registrationNumber: remoteAthlete.registrationNumber
-      }));
+    const athletePayload: PendingAthleteSavePayload = {
+      workspaceId: plannerState.workspaceId,
+      athleteId: athleteDraft.athleteId,
+      workspaceRootId: athleteDraft.workspaceRootId ?? plannerState.workspaceRootId ?? null,
+      expectedLockVersion: athleteDraft.lockVersion ?? null,
+      firstName: athleteDraft.firstName.trim(),
+      lastName: athleteDraft.lastName.trim(),
+      dateOfBirth: athleteDraft.dateOfBirth,
+      registrationNumber: athleteDraft.registrationNumber,
+      notes: athleteDraft.notes.trim(),
+      parentContacts: athleteDraft.parentContacts
+    };
 
+    return runSavingAction("athlete-profile", async () => {
       try {
-        await refreshRemoteFoundation();
-      } catch {
-        // Keep the locally-updated athlete visible even if the remote refresh lags.
-      }
+        const remoteAthlete = await savePlannerAthlete(scope, athletePayload);
+        patchPlannerState((current) => ({
+          ...current,
+          athletes: upsertAthleteRecord(current.athletes, remoteAthlete)
+        }), remoteAthlete, remoteAthlete.updatedAt);
+        setAthleteDraft((current) => ({
+          ...current,
+          athleteId: remoteAthlete.id,
+          workspaceRootId: remoteAthlete.workspaceRootId,
+          lockVersion: remoteAthlete.lockVersion,
+          registrationNumber: remoteAthlete.registrationNumber
+        }));
 
-      setSaveMessage(`Saved athlete ${remoteAthlete.name}. Registration ${remoteAthlete.registrationNumber}.`);
-      return true;
-    } catch (error) {
-      handlePremiumWriteError(error, "Unable to save athlete to Supabase.");
-      return false;
-    }
+        setSaveState("athlete-profile", "saved");
+        setSaveMessage(`Saved athlete ${remoteAthlete.name}. Registration ${remoteAthlete.registrationNumber}.`);
+        return true;
+      } catch (error) {
+        handleWriteFailure(
+          "athlete-profile",
+          error,
+          "Unable to save athlete to Supabase.",
+          buildPendingWrite(
+            scope,
+            "athlete-save",
+            athletePayload.workspaceRootId ?? null,
+            athletePayload
+          )
+        );
+        return false;
+      }
+    });
   };
 
   const saveEvaluation = async () => {
@@ -1140,49 +1824,109 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
       return;
     }
 
-    const occurredAt = new Date().toISOString();
-
-    try {
-      const remoteAthlete = await savePlannerAthlete(scope, {
+    await runSavingAction("evaluation", async () => {
+      const occurredAt = new Date().toISOString();
+      const athletePayload: PendingAthleteSavePayload = {
+        workspaceId: plannerState.workspaceId,
         athleteId: athleteDraft.athleteId,
+        workspaceRootId: athleteDraft.workspaceRootId ?? plannerState.workspaceRootId ?? null,
+        expectedLockVersion: athleteDraft.lockVersion ?? null,
         firstName: athleteDraft.firstName.trim(),
         lastName: athleteDraft.lastName.trim(),
         dateOfBirth: athleteDraft.dateOfBirth,
         registrationNumber: athleteDraft.registrationNumber,
         notes: athleteDraft.notes.trim(),
         parentContacts: athleteDraft.parentContacts
-      });
-      const nextEvaluation = buildTryoutEvaluationRecord({
-        project: plannerState,
-        athlete: remoteAthlete,
-        sport: "tumbling",
-        levels: levelsDraft,
-        resultSummary: summary,
-        scoringContext: {
-          scoringSystemId: activeScoringSystem.id,
-          scoringSystemVersionId: activeScoringVersion.id,
-          createdById: null
-        },
-        occurredAt
-      });
+      };
 
-      await syncRemoteEvaluationRecord(scope, nextEvaluation);
-      await refreshRemoteFoundation();
-      setAthleteDraft((current) => ({
-        ...current,
-        athleteId: remoteAthlete.id,
-        registrationNumber: remoteAthlete.registrationNumber
-      }));
-      setSaveMessage(`Saved evaluation for ${remoteAthlete.name}. Registration ${remoteAthlete.registrationNumber}.`);
-    } catch (error) {
-      handlePremiumWriteError(error, "Unable to save the evaluation to Supabase.");
-    }
+      try {
+        const remoteAthlete = await savePlannerAthlete(scope, athletePayload);
+        const nextEvaluation = buildTryoutEvaluationRecord({
+          project: plannerState,
+          athlete: remoteAthlete,
+          sport: "tumbling",
+          levels: levelsDraft,
+          resultSummary: summary,
+          scoringContext: {
+            scoringSystemId: activeScoringSystem.id,
+            scoringSystemVersionId: activeScoringVersion.id,
+            createdById: null
+          },
+          occurredAt
+        });
+
+        const remoteEvaluation = await syncRemoteEvaluationRecord(scope, nextEvaluation);
+        patchPlannerState((current) => ({
+          ...current,
+          athletes: upsertAthleteRecord(current.athletes, remoteAthlete),
+          evaluations: upsertRecordById(current.evaluations, remoteEvaluation)
+        }), remoteEvaluation, remoteEvaluation.updatedAt);
+        setAthleteDraft((current) => ({
+          ...current,
+          athleteId: remoteAthlete.id,
+          workspaceRootId: remoteAthlete.workspaceRootId,
+          lockVersion: remoteAthlete.lockVersion,
+          registrationNumber: remoteAthlete.registrationNumber
+        }));
+        setSaveState("evaluation", "saved");
+        setSaveMessage(`Saved evaluation for ${remoteAthlete.name}. Registration ${remoteAthlete.registrationNumber}.`);
+      } catch (error) {
+        const offlineEvaluation = buildTryoutEvaluationRecord({
+          project: plannerState,
+          athlete: {
+            id: athleteDraft.athleteId ?? `offline-athlete-${athleteDraft.registrationNumber || Date.now()}`,
+            workspaceId: plannerState.workspaceId,
+            workspaceRootId: athleteDraft.workspaceRootId ?? plannerState.workspaceRootId ?? undefined,
+            firstName: athletePayload.firstName,
+            lastName: athletePayload.lastName,
+            name: trimmedName,
+            registrationNumber: athletePayload.registrationNumber,
+            dateOfBirth: athletePayload.dateOfBirth,
+            notes: athletePayload.notes,
+            parentContacts: athletePayload.parentContacts,
+            status: "active",
+            createdAt: occurredAt,
+            updatedAt: occurredAt,
+            lockVersion: athletePayload.expectedLockVersion ?? 0,
+            lastChangeSetId: null,
+            archivedAt: null,
+            deletedAt: null,
+            restoredFromVersionId: null
+          },
+          sport: "tumbling",
+          levels: levelsDraft,
+          resultSummary: summary,
+          scoringContext: {
+            scoringSystemId: activeScoringSystem.id,
+            scoringSystemVersionId: activeScoringVersion.id,
+            createdById: null
+          },
+          occurredAt
+        });
+
+        handleWriteFailure(
+          "evaluation",
+          error,
+          "Unable to save the evaluation to Supabase.",
+          buildPendingWrite(scope, "evaluation-save", athletePayload.workspaceRootId ?? null, {
+            athlete: athletePayload,
+            evaluation: offlineEvaluation,
+            athleteId: athletePayload.athleteId ?? null,
+            registrationNumber: athletePayload.registrationNumber,
+            evaluationId: offlineEvaluation.id
+          })
+        );
+      }
+    });
   };
 
-  const loadEvaluation = (evaluation: PlannerTryoutEvaluation) => {
+  const loadEvaluation = (evaluation: PlannerTryoutEvaluation, options?: { expandLevels?: boolean }) => {
+    const athlete = plannerState.athletes.find((item) => item.id === evaluation.athleteId) ?? null;
     setActiveSport("tumbling");
     setAthleteDraft({
       athleteId: evaluation.athleteId,
+      workspaceRootId: athlete?.workspaceRootId,
+      lockVersion: athlete?.lockVersion,
       registrationNumber: evaluation.athleteSnapshot?.registrationNumber ?? "",
       firstName: evaluation.athleteSnapshot?.firstName ?? "",
       lastName: evaluation.athleteSnapshot?.lastName ?? "",
@@ -1196,23 +1940,22 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
       ...level,
       skills: level.skills.map((skill) => ({ ...skill }))
     })));
-    setOpenLevels(evaluation.rawData.levels.map((level) => level.levelKey));
+    setOpenLevels(options?.expandLevels === false ? [] : evaluation.rawData.levels.map((level) => level.levelKey));
     setSaveMessage(`Loaded ${getRecentAthleteLabel(evaluation)}.`);
   };
 
   const updateQualificationRule = (levelLabel: PlannerLevelLabel, value: string) => {
     const nextValue = Math.max(0, Math.min(6, Number(value) || 0));
-    setPlannerState((current) => {
-      const next = {
-        ...current,
-        qualificationRules: {
-          ...current.qualificationRules,
-          [levelLabel]: nextValue
-        }
-      };
-      writePlannerProject(next, scope);
-      return next;
-    });
+    setQualificationRulesDraft((current) => ({
+      ...current,
+      [levelLabel]: nextValue
+    }));
+  };
+
+  const cancelQualificationRules = () => {
+    setQualificationRulesDraft({ ...plannerStateRef.current.qualificationRules });
+    setQualificationOpen(false);
+    setSaveMessage("Qualification changes discarded.");
   };
 
   const saveQualificationRules = async () => {
@@ -1220,16 +1963,37 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
       return;
     }
 
-    const nextState = persistProjectConfigState((current) => current);
+    await runSavingAction("qualification-rules", async () => {
+      const nextState = buildProjectConfigSnapshot((current) => ({
+        ...current,
+        qualificationRules: { ...qualificationRulesDraft }
+      }));
 
-    try {
-      await syncRemotePlannerConfig(scope, nextState);
-      await refreshRemoteFoundation();
-      setQualificationOpen(false);
-      setSaveMessage("Qualification rules saved.");
-    } catch (error) {
-      handlePremiumWriteError(error, "Unable to save qualification rules to Supabase.");
-    }
+      try {
+        const remoteProject = await syncRemotePlannerConfig(scope, nextState);
+        commitRemoteProject(remoteProject);
+        setQualificationRulesDraft({ ...remoteProject.qualificationRules });
+        setQualificationOpen(false);
+        setSaveState("qualification-rules", "saved");
+        setSaveMessage("Qualification rules saved.");
+      } catch (error) {
+        handleWriteFailure(
+          "qualification-rules",
+          error,
+          "Unable to save qualification rules to Supabase.",
+          buildPendingWrite(scope, "project-save", nextState.workspaceRootId ?? null, {
+            workspaceId: nextState.workspaceId,
+            workspaceRootId: nextState.workspaceRootId ?? null,
+            lockVersion: nextState.lockVersion ?? null,
+            name: nextState.name,
+            status: nextState.status,
+            pipelineStage: nextState.pipelineStage,
+            template: nextState.template,
+            qualificationRules: nextState.qualificationRules
+          })
+        );
+      }
+    });
   };
 
   const setPipelineStage = async (pipelineStage: CheerPlannerState["pipelineStage"]) => {
@@ -1237,16 +2001,31 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
       return;
     }
 
-    const nextState = persistProjectConfigState((current) => ({
+    const nextState = buildProjectConfigSnapshot((current) => ({
       ...current,
       pipelineStage
     }));
 
     try {
-      await syncRemotePlannerConfig(scope, nextState);
-      await refreshRemoteFoundation();
+      const remoteProject = await syncRemotePlannerConfig(scope, nextState);
+      commitRemoteProject(remoteProject);
+      setSaveState("pipeline-stage", "saved");
     } catch (error) {
-      setSaveMessage(error instanceof Error ? error.message : "Unable to sync the planner stage to Supabase.");
+      handleWriteFailure(
+        "pipeline-stage",
+        error,
+        "Unable to sync the planner stage to Supabase.",
+        buildPendingWrite(scope, "project-save", nextState.workspaceRootId ?? null, {
+          workspaceId: nextState.workspaceId,
+          workspaceRootId: nextState.workspaceRootId ?? null,
+          lockVersion: nextState.lockVersion ?? null,
+          name: nextState.name,
+          status: nextState.status,
+          pipelineStage: nextState.pipelineStage,
+          template: nextState.template,
+          qualificationRules: nextState.qualificationRules
+        })
+      );
     }
   };
 
@@ -1262,53 +2041,72 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
       return;
     }
 
-    try {
-      const response = await fetch("/api/coach/teams", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        credentials: "include",
-        body: JSON.stringify({
-          name: teamDraft.name,
-          teamLevel: teamDraft.teamLevel,
-          teamType: normalizedTeamType,
-          teamDivision: "Elite",
-          trainingDays: "",
-          trainingHours: "",
-          scope,
-          coachAssignments: []
-        })
-      });
-      const result = await response.json().catch(() => null) as { teamId?: string; assignedCoachNames?: string[]; linkedCoachIds?: string[]; error?: string } | null;
-
-      if (!response.ok || !result?.teamId) {
-        setSaveMessage(result?.error ?? "Unable to create the team in Supabase.");
-        return;
-      }
-
-      const now = new Date().toISOString();
-      const nextTeam = createPlannerTeamRecord(plannerState, {
+    await runSavingAction("create-team", async () => {
+      const teamPayload: PendingTeamSavePayload = {
+        workspaceId: plannerState.workspaceId,
+        workspaceRootId: plannerState.workspaceRootId ?? null,
         name: teamDraft.name,
         teamLevel: teamDraft.teamLevel,
         teamType: normalizedTeamType,
         teamDivision: "Elite",
-        assignedCoachNames: result.assignedCoachNames ?? [],
-        linkedCoachIds: result.linkedCoachIds ?? [],
-        remoteTeamId: result.teamId
-      }, now);
+        trainingDays: "",
+        trainingHours: "",
+        linkedCoachIds: [],
+        assignedCoachNames: [],
+        fallbackTeam: {
+          memberAthleteIds: [],
+          memberRegistrationNumbers: [],
+          status: "draft"
+        }
+      };
 
-      persistState((current) => ({
-        ...current,
-        teams: [...current.teams, nextTeam]
-      }));
-      await refreshRemoteFoundation();
-      setCreateTeamOpen(false);
-      setTeamDraft({ name: "", teamLevel: "Beginner", teamType: "Youth", trainingSchedule: "", assignedCoachNames: [""] });
-      setSaveMessage(`Created ${nextTeam.name}.`);
-    } catch (error) {
-      handlePremiumWriteError(error, "Unable to create the team in Supabase.");
-    }
+      try {
+        const result = await createRemoteTeamRecord(
+          scope,
+          plannerState.workspaceId,
+          plannerState.workspaceRootId ?? null,
+          {
+            name: teamDraft.name,
+            teamLevel: teamDraft.teamLevel,
+            teamType: normalizedTeamType,
+            teamDivision: "Elite",
+            assignedCoachNames: [],
+            linkedCoachIds: []
+          }
+        );
+        const now = new Date().toISOString();
+        const nextTeam = result.team ?? createPlannerTeamRecord(plannerState, {
+          name: teamDraft.name,
+          teamLevel: teamDraft.teamLevel,
+          teamType: normalizedTeamType,
+          teamDivision: "Elite",
+          assignedCoachNames: result.assignedCoachNames,
+          linkedCoachIds: result.linkedCoachIds,
+          remoteTeamId: result.teamId
+        }, now);
+
+        patchPlannerState((current) => ({
+          ...current,
+          teams: upsertRecordById(current.teams, nextTeam)
+        }), {
+          workspaceRootId: nextTeam.workspaceRootId ?? plannerState.workspaceRootId,
+          lockVersion: result.lockVersion ?? nextTeam.lockVersion,
+          lastChangeSetId: result.lastChangeSetId ?? nextTeam.lastChangeSetId ?? null,
+          updatedAt: nextTeam.updatedAt
+        }, nextTeam.updatedAt);
+        setCreateTeamOpen(false);
+        setTeamDraft({ name: "", teamLevel: "Beginner", teamType: "Youth", trainingSchedule: "", assignedCoachNames: [""] });
+        setSaveState("create-team", "saved");
+        setSaveMessage(`Created ${nextTeam.name}.`);
+      } catch (error) {
+        handleWriteFailure(
+          "create-team",
+          error,
+          "Unable to create the team in Supabase.",
+          buildPendingWrite(scope, "team-save", teamPayload.workspaceRootId ?? null, teamPayload)
+        );
+      }
+    });
   };
 
   const startNewMyTeamsTeamDraft = () => {
@@ -1345,9 +2143,8 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
 
     persistState((current) => ({
       ...current,
-      teams: [...current.teams, nextTeam]
+      teams: upsertRecordById(current.teams, nextTeam)
     }));
-    void refreshRemoteFoundation().catch(() => undefined);
     setSaveMessage(`Created ${nextTeam.name}.`);
     return nextTeam.id;
   };
@@ -1357,7 +2154,6 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
       teamId,
       ...draft
     }, new Date().toISOString()));
-    void refreshRemoteFoundation().catch(() => undefined);
     setSaveMessage(`Updated ${draft.name.trim() || "team"}.`);
   };
 
@@ -1383,11 +2179,42 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
 
     try {
       const remoteAthlete = await syncRemoteAthleteRecord(scope, athlete);
-      await syncRemoteRoster(scope, "assign", team.remoteTeamId || team.id, remoteAthlete.id);
-      await refreshRemoteFoundation();
+      const occurredAt = new Date().toISOString();
+      const nextAthleteIds = Array.from(new Set([...(team.memberAthleteIds ?? []), remoteAthlete.id]));
+      const rosterSync = await syncRemoteRoster(
+        scope,
+        plannerState.workspaceId,
+        team,
+        nextAthleteIds,
+        plannerState.workspaceRootId ?? null
+      );
+      patchPlannerState((current) => assignAthleteToPlannerTeam({
+        ...current,
+        athletes: upsertAthleteRecord(current.athletes, remoteAthlete)
+      }, remoteAthlete, team.id, occurredAt), {
+        workspaceRootId: remoteAthlete.workspaceRootId,
+        lockVersion: rosterSync.team.lockVersion,
+        lastChangeSetId: rosterSync.changeSetId ?? remoteAthlete.lastChangeSetId ?? null,
+        updatedAt: occurredAt
+      }, occurredAt);
       setSaveMessage(`Assigned ${remoteAthlete.name} to ${team.name}.`);
     } catch (error) {
-      handlePremiumWriteError(error, "Unable to save the roster assignment to Supabase.");
+      handleWriteFailure(
+        "team-assignments",
+        error,
+        "Unable to save the roster assignment to Supabase.",
+        buildPendingWrite(scope, "team-assignments-set", plannerState.workspaceRootId ?? null, {
+          workspaceId: plannerState.workspaceId,
+          workspaceRootId: plannerState.workspaceRootId ?? null,
+          teamId: team.remoteTeamId || team.id,
+          athleteIds: Array.from(new Set([...(team.memberAthleteIds ?? []), athlete.id])),
+          fallbackTeam: {
+            memberAthleteIds: Array.from(new Set([...(team.memberAthleteIds ?? []), athlete.id])),
+            memberRegistrationNumbers: Array.from(new Set([...(team.memberRegistrationNumbers ?? []), athlete.registrationNumber])),
+            status: team.status
+          }
+        })
+      );
     }
   };
 
@@ -1405,11 +2232,38 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
     }
 
     try {
-      await syncRemoteRoster(scope, "remove", team.remoteTeamId || team.id, athlete.id);
-      await refreshRemoteFoundation();
+      const occurredAt = new Date().toISOString();
+      const nextAthleteIds = (team.memberAthleteIds ?? []).filter((currentAthleteId) => currentAthleteId !== athlete.id);
+      const rosterSync = await syncRemoteRoster(
+        scope,
+        plannerState.workspaceId,
+        team,
+        nextAthleteIds,
+        plannerState.workspaceRootId ?? null
+      );
+      patchPlannerState((current) => removeAthleteFromPlannerTeam(current, athlete, team.id, occurredAt), {
+        lockVersion: rosterSync.team.lockVersion,
+        lastChangeSetId: rosterSync.changeSetId ?? null,
+        updatedAt: occurredAt
+      }, occurredAt);
       setSaveMessage(`Removed ${athlete.name} from ${team.name}.`);
     } catch (error) {
-      handlePremiumWriteError(error, "Unable to update the roster in Supabase.");
+      handleWriteFailure(
+        "team-assignments",
+        error,
+        "Unable to update the roster in Supabase.",
+        buildPendingWrite(scope, "team-assignments-set", plannerState.workspaceRootId ?? null, {
+          workspaceId: plannerState.workspaceId,
+          workspaceRootId: plannerState.workspaceRootId ?? null,
+          teamId: team.remoteTeamId || team.id,
+          athleteIds: (team.memberAthleteIds ?? []).filter((currentAthleteId) => currentAthleteId !== athlete.id),
+          fallbackTeam: {
+            memberAthleteIds: (team.memberAthleteIds ?? []).filter((currentAthleteId) => currentAthleteId !== athlete.id),
+            memberRegistrationNumbers: (team.memberRegistrationNumbers ?? []).filter((registrationNumber) => registrationNumber !== athlete.registrationNumber),
+            status: team.status
+          }
+        })
+      );
     }
   };
 
@@ -1426,35 +2280,184 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
     }
 
     try {
-      await syncRemoteRoster(scope, "clear", team.remoteTeamId || team.id);
-      await refreshRemoteFoundation();
+      const occurredAt = new Date().toISOString();
+      const rosterSync = await syncRemoteRoster(scope, plannerState.workspaceId, team, [], plannerState.workspaceRootId ?? null);
+      patchPlannerState((current) => clearPlannerTeamRoster(current, team.id, occurredAt), {
+        lockVersion: rosterSync.team.lockVersion,
+        lastChangeSetId: rosterSync.changeSetId ?? null,
+        updatedAt: occurredAt
+      }, occurredAt);
       setSaveMessage(`Cleared ${team.name} roster.`);
     } catch (error) {
-      handlePremiumWriteError(error, "Unable to clear the roster in Supabase.");
+      handleWriteFailure(
+        "team-assignments",
+        error,
+        "Unable to clear the roster in Supabase.",
+        buildPendingWrite(scope, "team-assignments-set", plannerState.workspaceRootId ?? null, {
+          workspaceId: plannerState.workspaceId,
+          workspaceRootId: plannerState.workspaceRootId ?? null,
+          teamId: team.remoteTeamId || team.id,
+          athleteIds: [],
+          fallbackTeam: {
+            memberAthleteIds: [],
+            memberRegistrationNumbers: [],
+            status: team.status
+          }
+        })
+      );
     }
+  };
+
+  const deleteAthleteProfile = async (athleteId: string) => {
+    if (!canUsePremiumAction()) {
+      return false;
+    }
+
+    const athlete = athleteMapById.get(athleteId);
+
+    if (!athlete) {
+      setSaveMessage("Athlete record was not found.");
+      return false;
+    }
+
+    return runSavingAction("athlete-delete", async () => {
+      try {
+        const occurredAt = new Date().toISOString();
+
+        if (isUuidString(athlete.id)) {
+          await deleteRemoteAthleteRecord(scope, {
+            athleteId: athlete.id,
+            workspaceRootId: athlete.workspaceRootId ?? plannerState.workspaceRootId ?? null,
+            expectedLockVersion: athlete.lockVersion ?? null
+          });
+
+          patchPlannerState((current) => ({
+            ...current,
+            athletes: current.athletes.filter((item) => item.id !== athlete.id),
+            evaluations: current.evaluations.filter((item) => item.athleteId !== athlete.id),
+            teams: current.teams.map((team) => ({
+              ...team,
+              memberAthleteIds: team.memberAthleteIds.filter((memberId) => memberId !== athlete.id),
+              memberRegistrationNumbers: (team.memberRegistrationNumbers ?? []).filter((registrationNumber) => registrationNumber !== athlete.registrationNumber)
+            }))
+          }), null, occurredAt);
+        } else {
+          patchPlannerState((current) => ({
+            ...current,
+            athletes: current.athletes.filter((item) => item.id !== athlete.id),
+            evaluations: current.evaluations.filter((item) => item.athleteId !== athlete.id),
+            teams: current.teams.map((team) => ({
+              ...team,
+              memberAthleteIds: team.memberAthleteIds.filter((memberId) => memberId !== athlete.id),
+              memberRegistrationNumbers: (team.memberRegistrationNumbers ?? []).filter((registrationNumber) => registrationNumber !== athlete.registrationNumber)
+            }))
+          }), null, occurredAt);
+        }
+
+        await loadTrash().catch(() => undefined);
+
+        setSaveState("athlete-delete", "saved");
+        setSaveMessage(`Deleted ${athlete.name}. You can restore it from Trash for 90 days.`);
+        return true;
+      } catch (error) {
+        handlePremiumWriteError(error, "Unable to delete the athlete in Supabase.");
+        return false;
+      }
+    });
   };
 
   const deleteTeam = async (teamId: string) => {
     if (!canUsePremiumAction()) {
-      return;
+      return false;
     }
 
     const team = teamMap.get(teamId);
 
     if (!team) {
       setSaveMessage("Team record was not found.");
-      return;
+      return false;
     }
 
-    try {
-      if (team.remoteTeamId || isUuidString(team.id)) {
-        await deleteRemoteTeamRecord(scope, team.remoteTeamId || team.id);
+    return runSavingAction("team-delete", async () => {
+      try {
+        const occurredAt = new Date().toISOString();
+
+        if (team.remoteTeamId || isUuidString(team.id)) {
+          await deleteRemoteTeamRecord(scope, {
+            teamId: team.remoteTeamId || team.id,
+            workspaceRootId: team.workspaceRootId ?? plannerState.workspaceRootId ?? null,
+            expectedLockVersion: team.lockVersion ?? null
+          });
+
+          patchPlannerState((current) => {
+            const nextProject = deletePlannerTeamRecord(current, team.id);
+            return {
+              ...nextProject,
+              skillPlans: removeTeamScopedRecords(nextProject.skillPlans, team.id),
+              routinePlans: removeTeamScopedRecords(nextProject.routinePlans, team.id),
+              seasonPlans: removeTeamScopedRecords(nextProject.seasonPlans, team.id)
+            };
+          }, null, occurredAt);
+        } else {
+          patchPlannerState((current) => {
+            const nextProject = deletePlannerTeamRecord(current, team.id);
+            return {
+              ...nextProject,
+              skillPlans: removeTeamScopedRecords(nextProject.skillPlans, team.id),
+              routinePlans: removeTeamScopedRecords(nextProject.routinePlans, team.id),
+              seasonPlans: removeTeamScopedRecords(nextProject.seasonPlans, team.id)
+            };
+          }, null, occurredAt);
+        }
+
+        await loadTrash().catch(() => undefined);
+
+        setSaveState("team-delete", "saved");
+        setSaveMessage(`Deleted ${team.name}. You can restore it from Trash for 90 days.`);
+        return true;
+      } catch (error) {
+        handlePremiumWriteError(error, "Unable to delete the team in Supabase.");
+        return false;
       }
-      await refreshRemoteFoundation();
-      setSaveMessage(`Deleted ${team.name}.`);
-    } catch (error) {
-      handlePremiumWriteError(error, "Unable to delete the team in Supabase.");
+    });
+  };
+
+  const getTrashRestorePreview = async (item: Pick<PlannerTrashItem, "entityType" | "versionId">) => {
+    if (!canUsePremiumAction()) {
+      return null;
     }
+
+    const result = await fetchPlannerRestorePreview(scope, {
+      workspaceRootId: plannerState.workspaceRootId ?? null,
+      entityType: item.entityType,
+      versionId: item.versionId
+    });
+
+    return result.preview;
+  };
+
+  const restoreTrashItem = async (item: Pick<PlannerTrashItem, "entityType" | "versionId" | "name">) => {
+    if (!canUsePremiumAction()) {
+      return false;
+    }
+
+    return runSavingAction("trash-restore", async () => {
+      try {
+        await restorePlannerEntity(scope, {
+          workspaceRootId: plannerState.workspaceRootId ?? null,
+          entityType: item.entityType,
+          versionId: item.versionId
+        });
+        await refreshRemoteFoundation();
+        await loadTrash();
+        setSaveState("trash-restore", "saved");
+        setSaveMessage(`Restored ${item.name}.`);
+        return true;
+      } catch (error) {
+        handlePremiumWriteError(error, "Unable to restore this item right now.");
+        return false;
+      }
+    });
   };
 
   const openTeamEdit = (team: PlannerTeamRecord) => {
@@ -1496,39 +2499,71 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
       return;
     }
 
-    try {
-      if (currentTeam.remoteTeamId || isUuidString(currentTeam.id)) {
-        const response = await fetch("/api/coach/teams", {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          credentials: "include",
-          body: JSON.stringify({
-            teamId: currentTeam.remoteTeamId || currentTeam.id,
+    await runSavingAction("team-edit", async () => {
+      const occurredAt = new Date().toISOString();
+      const teamPayload: PendingTeamSavePayload = {
+        workspaceId: plannerState.workspaceId,
+        workspaceRootId: currentTeam.workspaceRootId ?? plannerState.workspaceRootId ?? null,
+        expectedLockVersion: currentTeam.lockVersion ?? null,
+        teamId: currentTeam.remoteTeamId || currentTeam.id,
+        name: teamEdit.name,
+        teamLevel: teamEdit.teamLevel,
+        teamType: teamEdit.teamType,
+        teamDivision: currentTeam.teamDivision || "Elite",
+        trainingDays: currentTeam.trainingDays || "",
+        trainingHours: currentTeam.trainingHours || "",
+        linkedCoachIds: currentTeam.linkedCoachIds ?? [],
+        assignedCoachNames: currentTeam.assignedCoachNames ?? [],
+        fallbackTeam: {
+          memberAthleteIds: currentTeam.memberAthleteIds ?? [],
+          memberRegistrationNumbers: currentTeam.memberRegistrationNumbers ?? [],
+          status: currentTeam.status
+        }
+      };
+
+      try {
+        if (currentTeam.remoteTeamId || isUuidString(currentTeam.id)) {
+          const result = await savePlannerTeam(scope, teamPayload);
+          const nextTeam = result.team ?? updatePlannerTeamDefinition({
+            ...plannerState,
+            teams: [currentTeam]
+          }, {
+            teamId: currentTeam.id,
             name: teamEdit.name,
             teamLevel: teamEdit.teamLevel,
-            teamType: teamEdit.teamType,
-            teamDivision: currentTeam.teamDivision || "Elite",
-            trainingDays: currentTeam.trainingDays || "",
-            trainingHours: currentTeam.trainingHours || "",
-            scope,
-            coachAssignments: (currentTeam.linkedCoachIds ?? []).map((coachId) => ({ selectedCoachId: coachId }))
-          })
-        });
-        const result = await response.json().catch(() => null) as { error?: string; code?: string } | null;
+            teamType: teamEdit.teamType
+          }, occurredAt).teams[0];
 
-        if (!response.ok) {
-          throw new Error(result?.error ?? "Unable to update the team in Supabase.");
+          patchPlannerState((current) => ({
+            ...current,
+            teams: upsertRecordById(current.teams, nextTeam)
+          }), {
+            workspaceRootId: nextTeam.workspaceRootId ?? currentTeam.workspaceRootId,
+            lockVersion: typeof result.lockVersion === "number" ? result.lockVersion : nextTeam.lockVersion,
+            lastChangeSetId: result.changeSetId ?? nextTeam.lastChangeSetId ?? null,
+            updatedAt: nextTeam.updatedAt || occurredAt
+          }, nextTeam.updatedAt || occurredAt);
+        } else {
+          patchPlannerState((current) => updatePlannerTeamDefinition(current, {
+            teamId: currentTeam.id,
+            name: teamEdit.name,
+            teamLevel: teamEdit.teamLevel,
+            teamType: teamEdit.teamType
+          }, occurredAt), null, occurredAt);
         }
-      }
 
-      await refreshRemoteFoundation();
-      setSaveMessage(`Updated ${teamEdit.name.trim() || currentTeam.name}.`);
-      setTeamEdit(null);
-    } catch (error) {
-      handlePremiumWriteError(error, "Unable to update the team in Supabase.");
-    }
+        setSaveState("team-edit", "saved");
+        setSaveMessage(`Updated ${teamEdit.name.trim() || currentTeam.name}.`);
+        setTeamEdit(null);
+      } catch (error) {
+        handleWriteFailure(
+          "team-edit",
+          error,
+          "Unable to update the team in Supabase.",
+          buildPendingWrite(scope, "team-save", teamPayload.workspaceRootId ?? null, teamPayload)
+        );
+      }
+    });
   };
 
   const openSkillPlannerTeam = (teamId: string) => {
@@ -1650,20 +2685,34 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
       return;
     }
 
-    try {
-      const remoteTeamId = teamMap.get(skillPlannerEditingTeam.teamId)?.remoteTeamId || (isUuidString(skillPlannerEditingTeam.teamId) ? skillPlannerEditingTeam.teamId : undefined);
+    await runSavingAction("skill-plan", async () => {
+      try {
+        const remoteTeamId = teamMap.get(skillPlannerEditingTeam.teamId)?.remoteTeamId || (isUuidString(skillPlannerEditingTeam.teamId) ? skillPlannerEditingTeam.teamId : undefined);
 
-      if (!remoteTeamId) {
-        throw new Error("This team does not have a linked Supabase id yet, so the skill plan cannot be saved remotely.");
+        if (!remoteTeamId) {
+          throw new Error("This team does not have a linked Supabase id yet, so the skill plan cannot be saved remotely.");
+        }
+
+        const remotePlan = await syncRemoteSkillPlan(scope, nextPlan, remoteTeamId);
+        patchPlannerState((current) => ({
+          ...current,
+          skillPlans: upsertTeamScopedRecord(current.skillPlans, remotePlan)
+        }), remotePlan, remotePlan.updatedAt);
+        setSkillPlannerDraft(null);
+        setSaveState("skill-plan", "saved");
+        setSaveMessage(`Saved Skill Planner selections for ${skillPlannerEditingTeam.teamName}.`);
+      } catch (error) {
+        handleWriteFailure(
+          "skill-plan",
+          error,
+          "Unable to save the Skill Planner selections to Supabase.",
+          buildPendingWrite(scope, "skill-plan-save", nextPlan.workspaceRootId ?? null, {
+            ...nextPlan,
+            teamId: teamMap.get(skillPlannerEditingTeam.teamId)?.remoteTeamId || nextPlan.teamId
+          })
+        );
       }
-
-      await syncRemoteSkillPlan(scope, nextPlan, remoteTeamId);
-      await refreshRemoteFoundation();
-      setSkillPlannerDraft(null);
-      setSaveMessage(`Saved Skill Planner selections for ${skillPlannerEditingTeam.teamName}.`);
-    } catch (error) {
-      handlePremiumWriteError(error, "Unable to save the Skill Planner selections to Supabase.");
-    }
+    });
   };
 
   const openRoutineBuilderTeam = async (teamId: string) => {
@@ -1697,8 +2746,11 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
     }
 
     try {
-      await syncRemoteRoutinePlan(scope, nextPlan, remoteTeamId);
-      await refreshRemoteFoundation();
+      const remotePlan = await syncRemoteRoutinePlan(scope, nextPlan, remoteTeamId);
+      patchPlannerState((current) => ({
+        ...current,
+        routinePlans: upsertTeamScopedRecord(current.routinePlans, remotePlan)
+      }), remotePlan, remotePlan.updatedAt);
       setSaveMessage(`Migrated ${team.teamName} routine plan.`);
     } catch (error) {
       handlePremiumWriteError(error, "Unable to migrate the routine plan to Supabase.");
@@ -1744,18 +2796,32 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
 
     const remoteTeamId = routineBuilderEditingTeam.remoteTeamId || (isUuidString(routineBuilderEditingTeam.teamId) ? routineBuilderEditingTeam.teamId : null);
 
-    try {
-      if (!remoteTeamId) {
-        throw new Error("This team does not have a linked Supabase id yet, so the routine plan cannot be saved remotely.");
-      }
+    await runSavingAction("routine-plan", async () => {
+      try {
+        if (!remoteTeamId) {
+          throw new Error("This team does not have a linked Supabase id yet, so the routine plan cannot be saved remotely.");
+        }
 
-      await syncRemoteRoutinePlan(scope, draftPlan, remoteTeamId);
-      await refreshRemoteFoundation();
-      setRoutineBuilderDraft(null);
-      setSaveMessage(`Saved Routine Builder plan for ${routineBuilderEditingTeam.teamName}.`);
-    } catch (error) {
-      handlePremiumWriteError(error, "Unable to save the routine plan to Supabase.");
-    }
+        const remotePlan = await syncRemoteRoutinePlan(scope, draftPlan, remoteTeamId);
+        patchPlannerState((current) => ({
+          ...current,
+          routinePlans: upsertTeamScopedRecord(current.routinePlans, remotePlan)
+        }), remotePlan, remotePlan.updatedAt);
+        setRoutineBuilderDraft(null);
+        setSaveState("routine-plan", "saved");
+        setSaveMessage(`Saved Routine Builder plan for ${routineBuilderEditingTeam.teamName}.`);
+      } catch (error) {
+        handleWriteFailure(
+          "routine-plan",
+          error,
+          "Unable to save the routine plan to Supabase.",
+          buildPendingWrite(scope, "routine-plan-save", draftPlan.workspaceRootId ?? null, {
+            ...draftPlan,
+            teamId: remoteTeamId ?? draftPlan.teamId
+          })
+        );
+      }
+    });
   };
 
   const openSeasonPlannerTeam = (teamId: string) => {
@@ -1817,31 +2883,51 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
       return;
     }
 
-    try {
-      const remoteTeamId = teamMap.get(seasonPlannerEditingTeam.teamId)?.remoteTeamId || (isUuidString(seasonPlannerEditingTeam.teamId) ? seasonPlannerEditingTeam.teamId : undefined);
+    await runSavingAction("season-plan", async () => {
+      try {
+        const remoteTeamId = teamMap.get(seasonPlannerEditingTeam.teamId)?.remoteTeamId || (isUuidString(seasonPlannerEditingTeam.teamId) ? seasonPlannerEditingTeam.teamId : undefined);
 
-      if (!remoteTeamId) {
-        throw new Error("This team does not have a linked Supabase id yet, so the season plan cannot be saved remotely.");
+        if (!remoteTeamId) {
+          throw new Error("This team does not have a linked Supabase id yet, so the season plan cannot be saved remotely.");
+        }
+
+        const remotePlan = await syncRemoteSeasonPlan(scope, nextPlan, remoteTeamId);
+        patchPlannerState((current) => ({
+          ...current,
+          seasonPlans: upsertTeamScopedRecord(current.seasonPlans, remotePlan)
+        }), remotePlan, remotePlan.updatedAt);
+        setSeasonPlannerDraft(null);
+        setSaveState("season-plan", "saved");
+        setSaveMessage(`Saved Season Planner checkpoints for ${seasonPlannerEditingTeam.teamName}.`);
+      } catch (error) {
+        handleWriteFailure(
+          "season-plan",
+          error,
+          "Unable to save the season plan to Supabase.",
+          buildPendingWrite(scope, "season-plan-save", nextPlan.workspaceRootId ?? null, {
+            ...nextPlan,
+            teamId: teamMap.get(seasonPlannerEditingTeam.teamId)?.remoteTeamId || nextPlan.teamId
+          })
+        );
       }
-
-      await syncRemoteSeasonPlan(scope, nextPlan, remoteTeamId);
-      await refreshRemoteFoundation();
-      setSeasonPlannerDraft(null);
-      setSaveMessage(`Saved Season Planner checkpoints for ${seasonPlannerEditingTeam.teamName}.`);
-    } catch (error) {
-      handlePremiumWriteError(error, "Unable to save the season plan to Supabase.");
-    }
+    });
   };
 
   return {
     plannerState,
     athletePool,
+    trashItems,
+    trashLoading,
     saveMessage,
+    syncStatusLabel,
+    isSavingAction,
+    getSaveState,
     premiumAccess,
     premiumPromptOpen,
     setPremiumPromptOpen,
     activeSport,
     setActiveSport,
+    templateDraft,
     athleteDraft,
     updateAthleteDraft,
     updateParentContact,
@@ -1857,6 +2943,7 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
     summary,
     recentEvaluations,
     saveAthleteProfile,
+    deleteAthleteProfile,
     resetAthleteDraft,
     startNewMyTeamsTeamDraft,
     updateAssignedCoachName,
@@ -1867,9 +2954,16 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
     saveEvaluation,
     loadEvaluation,
     updateTemplateOption,
+    removeTemplateOption,
+    addTemplateOption,
+    updateTemplateSkill,
+    moveTemplateSkill,
+    addTemplateSkill,
+    removeTemplateSkill,
     updateSkillCount,
     saveTemplate,
     resetTemplate,
+    cancelTemplateChanges,
     setPipelineStage,
     updateSkillName,
     updateSkillOption,
@@ -1877,7 +2971,9 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
     addExtraSkill,
     qualificationOpen,
     setQualificationOpen,
+    qualificationRulesDraft,
     updateQualificationRule,
+    cancelQualificationRules,
     saveQualificationRules,
     filters,
     setFilters,
@@ -1916,6 +3012,9 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
     removeFromTeam,
     clearTeam,
     deleteTeam,
+    loadTrash,
+    getTrashRestorePreview,
+    restoreTrashItem,
     teamEdit,
     setTeamEdit,
     openTeamEdit,

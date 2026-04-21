@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
 
 import { PwaOfflineNotice, PwaProvider } from "@/components/pwa/pwa-provider";
+import "./styles/settings.css";
+import "./styles/planner.css";
 import "./globals.css";
 
 export const metadata: Metadata = {

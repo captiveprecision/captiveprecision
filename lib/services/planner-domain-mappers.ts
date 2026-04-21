@@ -11,9 +11,34 @@ import { isPlannerProject } from "@/lib/validation/planner-domain";
 const PROJECT_ID = "default-cheer-planner-project";
 const PROJECT_NAME = "Cheer Planner";
 const DEFAULT_WORKSPACE_ID = "local-workspace";
+const DEFAULT_QUALIFICATION_RULES: PlannerQualificationRules = {
+  "Beginner": 5,
+  "Level 1": 5,
+  "Level 2": 5,
+  "Level 3": 5,
+  "Level 4": 5,
+  "Level 5": 5,
+  "Level 6": 5,
+  "Level 7": 5
+};
 
 function normalizeSkillCounts(defaultSkillCounts: PlannerTryoutTemplate["defaultSkillCounts"]) {
   return Object.fromEntries(LEVEL_KEYS.map((levelKey) => [levelKey, Number(defaultSkillCounts[levelKey] ?? 0)])) as Record<PlannerLevelKey, number>;
+}
+
+function normalizeTemplateSkillLibrary(
+  skillLibrary: Partial<Record<PlannerLevelKey, Array<{ id?: string; name?: string }>>> | undefined,
+  fallbackSkillLibrary: PlannerTryoutTemplate["skillLibrary"]
+) {
+  return Object.fromEntries(
+    LEVEL_KEYS.map((levelKey) => {
+      const source = Array.isArray(skillLibrary?.[levelKey]) ? skillLibrary?.[levelKey] : fallbackSkillLibrary[levelKey];
+      return [levelKey, (source ?? []).map((skill, index) => ({
+        id: skill.id ?? `${levelKey}-skill-${index + 1}`,
+        name: skill.name ?? ""
+      }))];
+    })
+  ) as PlannerTryoutTemplate["skillLibrary"];
 }
 
 function normalizeTemplateOptionLabel(option: PlannerTryoutTemplate["options"][number]) {
@@ -346,12 +371,14 @@ export function normalizePlannerProject(raw: Partial<PlannerProject>, fallbackTe
           ...fallbackTemplate,
           ...raw.template,
           options: (Array.isArray(raw.template.options) ? raw.template.options : fallbackTemplate.options).map((option) => normalizeTemplateOptionLabel({ ...option })),
-          defaultSkillCounts: normalizeSkillCounts({ ...fallbackTemplate.defaultSkillCounts, ...raw.template.defaultSkillCounts })
+          defaultSkillCounts: normalizeSkillCounts({ ...fallbackTemplate.defaultSkillCounts, ...raw.template.defaultSkillCounts }),
+          skillLibrary: normalizeTemplateSkillLibrary(raw.template.skillLibrary, fallbackTemplate.skillLibrary)
         }
       : {
-          ...fallbackTemplate,
-          options: fallbackTemplate.options.map((option) => normalizeTemplateOptionLabel({ ...option }))
-        },
+        ...fallbackTemplate,
+        options: fallbackTemplate.options.map((option) => normalizeTemplateOptionLabel({ ...option })),
+        skillLibrary: normalizeTemplateSkillLibrary(undefined, fallbackTemplate.skillLibrary)
+      },
     athletes: Array.isArray(raw.athletes) ? raw.athletes.map((athlete) => normalizePlannerAthlete(athlete)) : [],
     evaluations: Array.isArray(raw.evaluations)
       ? raw.evaluations.map((evaluation) => normalizePlannerEvaluation(evaluation as Parameters<typeof normalizePlannerEvaluation>[0]))
@@ -381,7 +408,8 @@ export function normalizePlannerProject(raw: Partial<PlannerProject>, fallbackTe
     pipelineStage: "tryouts",
     template: {
       ...fallbackTemplate,
-      defaultSkillCounts: normalizeSkillCounts(fallbackTemplate.defaultSkillCounts)
+      defaultSkillCounts: normalizeSkillCounts(fallbackTemplate.defaultSkillCounts),
+      skillLibrary: normalizeTemplateSkillLibrary(undefined, fallbackTemplate.skillLibrary)
     },
     athletes: [],
     evaluations: [],
@@ -427,11 +455,18 @@ export function getHighestQualifiedLevelFromEvaluation(
     return "Unqualified";
   }
 
-  const qualified = Object.keys(qualificationRules)
-    .filter((levelLabel): levelLabel is PlannerLevelLabel => levelLabel in qualificationRules)
+  const effectiveQualificationRules = qualificationRules && typeof qualificationRules === "object"
+    ? qualificationRules
+    : DEFAULT_QUALIFICATION_RULES;
+  const levelScores = Array.isArray(evaluation.resultSummary?.levelScores)
+    ? evaluation.resultSummary.levelScores
+    : [];
+
+  const qualified = Object.keys(effectiveQualificationRules)
+    .filter((levelLabel): levelLabel is PlannerLevelLabel => levelLabel in effectiveQualificationRules)
     .filter((levelLabel) => {
-      const levelScore = evaluation.resultSummary.levelScores.find((item) => item.levelLabel === levelLabel);
-      return levelScore ? levelScore.baseScore >= qualificationRules[levelLabel] : false;
+      const levelScore = levelScores.find((item) => item.levelLabel === levelLabel);
+      return levelScore ? levelScore.baseScore >= effectiveQualificationRules[levelLabel] : false;
     });
 
   return qualified.length ? qualified[qualified.length - 1] : "Unqualified";

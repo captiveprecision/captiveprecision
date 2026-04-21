@@ -18,6 +18,7 @@ import {
 import { deriveRoutineItemsFromDocument, normalizeRoutineDocument } from "@/lib/services/planner-routine-builder";
 import {
   buildDefaultPlannerProject,
+  isUuidString,
   parsePlannerWorkspaceScope,
   type PlannerScopeContext,
   type PlannerWorkspaceScope
@@ -381,7 +382,11 @@ function mergeRemoteTeams(project: PlannerProject, remoteTeams: TeamRecord[]) {
   const mergedRemoteIds = new Set(mergedRemoteTeams.map((team) => team.remoteTeamId || team.id));
   const localOnlyTeams = project.teams.filter((team) => {
     const lookupId = team.remoteTeamId || team.id;
-    return !mergedRemoteIds.has(lookupId);
+    return (
+      !mergedRemoteIds.has(lookupId)
+      && !team.remoteTeamId
+      && !isUuidString(team.id)
+    );
   });
 
   return [...mergedRemoteTeams, ...localOnlyTeams];
@@ -391,7 +396,9 @@ function mergeRemoteAthletes(project: PlannerProject, remoteAthletes: AthleteRec
   const remoteIds = new Set(remoteAthletes.map((athlete) => athlete.id));
   const remoteRegistrations = new Set(remoteAthletes.map((athlete) => athlete.registrationNumber));
   const localOnlyAthletes = project.athletes.filter((athlete) => (
-    !remoteIds.has(athlete.id) && !remoteRegistrations.has(athlete.registrationNumber)
+    !remoteIds.has(athlete.id)
+    && !remoteRegistrations.has(athlete.registrationNumber)
+    && !isUuidString(athlete.id)
   ));
 
   return [...remoteAthletes, ...localOnlyAthletes];
@@ -421,14 +428,17 @@ function mergeTeamScopedPlans<T extends { teamId: string }>(
     teamId: teamIdMap.get(plan.teamId) ?? plan.teamId
   }));
   const remoteTeamIds = new Set(mappedRemotePlans.map((plan) => plan.teamId));
-  const localOnlyPlans = localPlans.filter((plan) => !remoteTeamIds.has(plan.teamId));
+  const validMergedTeamIds = new Set(mergedTeams.map((team) => team.id));
+  const localOnlyPlans = localPlans.filter((plan) => (
+    !remoteTeamIds.has(plan.teamId) && validMergedTeamIds.has(plan.teamId)
+  ));
 
   return [...mappedRemotePlans, ...localOnlyPlans];
 }
 
 function mergeEntityList<T extends { id: string }>(localItems: T[], remoteItems: T[]) {
   const remoteIds = new Set(remoteItems.map((item) => item.id));
-  const localOnlyItems = localItems.filter((item) => !remoteIds.has(item.id));
+  const localOnlyItems = localItems.filter((item) => !remoteIds.has(item.id) && !isUuidString(item.id));
   return [...remoteItems, ...localOnlyItems];
 }
 

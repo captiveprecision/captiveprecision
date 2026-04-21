@@ -8,6 +8,11 @@ export type PlannerTryoutOption = {
   value: number;
 };
 
+export type PlannerTemplateSkill = {
+  id: string;
+  name: string;
+};
+
 export type PlannerTryoutTemplate = {
   id: string;
   name: string;
@@ -15,6 +20,7 @@ export type PlannerTryoutTemplate = {
   activeSport: PlannerSportKey;
   options: PlannerTryoutOption[];
   defaultSkillCounts: Record<PlannerLevelKey, number>;
+  skillLibrary: Record<PlannerLevelKey, PlannerTemplateSkill[]>;
   updatedAt: string;
 };
 

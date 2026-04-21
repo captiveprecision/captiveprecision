@@ -3,6 +3,7 @@ import type {
   EvaluationRecord as PlannerTryoutEvaluation,
   PlannerLevelEvaluation,
   PlannerSkillEvaluation,
+  PlannerTemplateSkill,
   PlannerTopLevel,
   PlannerTryoutOption,
   PlannerTryoutSummary,
@@ -67,19 +68,20 @@ export type {
   PlannerTopLevel,
   PlannerTryoutEvaluation,
   PlannerTryoutOption,
+  PlannerTemplateSkill,
   PlannerTryoutSummary,
   PlannerTryoutTemplate
 };
 
-export const defaultSkillLibrary: Record<PlannerLevelKey, string[]> = {
-  beginner: ["Forward Roll", "Handstand", "Bridge"],
-  "1": ["Forward Roll", "Cartwheel", "Back Walkover"],
-  "2": ["Round Off", "Back Handspring", "Front Walkover"],
-  "3": ["Round Off Back Handspring", "Standing Back Handspring", "Front Handspring"],
-  "4": ["Tuck", "Round Off Back Handspring Tuck", "Standing Tuck"],
-  "5": ["Layouts", "Full Twisting Layout", "Jump to Back Handspring"],
-  "6": ["Double Full", "Arabian", "Specialty Pass"],
-  "7": ["Double Full to Double", "Whip to Double", "Elite Specialty Pass"]
+export const defaultSkillLibrary: Record<PlannerLevelKey, PlannerTemplateSkill[]> = {
+  beginner: ["Forward Roll", "Handstand", "Bridge"].map((name, index) => ({ id: `beginner-skill-${index + 1}`, name })),
+  "1": ["Forward Roll", "Cartwheel", "Back Walkover"].map((name, index) => ({ id: `1-skill-${index + 1}`, name })),
+  "2": ["Round Off", "Back Handspring", "Front Walkover"].map((name, index) => ({ id: `2-skill-${index + 1}`, name })),
+  "3": ["Round Off Back Handspring", "Standing Back Handspring", "Front Handspring"].map((name, index) => ({ id: `3-skill-${index + 1}`, name })),
+  "4": ["Tuck", "Round Off Back Handspring Tuck", "Standing Tuck"].map((name, index) => ({ id: `4-skill-${index + 1}`, name })),
+  "5": ["Layouts", "Full Twisting Layout", "Jump to Back Handspring"].map((name, index) => ({ id: `5-skill-${index + 1}`, name })),
+  "6": ["Double Full", "Arabian", "Specialty Pass"].map((name, index) => ({ id: `6-skill-${index + 1}`, name })),
+  "7": ["Double Full to Double", "Whip to Double", "Elite Specialty Pass"].map((name, index) => ({ id: `7-skill-${index + 1}`, name }))
 };
 
 export const defaultTryoutTemplate: PlannerTryoutTemplate = {
@@ -102,6 +104,7 @@ export const defaultTryoutTemplate: PlannerTryoutTemplate = {
     "6": 3,
     "7": 3
   },
+  skillLibrary: defaultSkillLibrary,
   updatedAt: new Date("2026-03-17T00:00:00.000Z").toISOString()
 };
 
@@ -140,7 +143,10 @@ export function cloneTemplate(template: PlannerTryoutTemplate): PlannerTryoutTem
   return {
     ...template,
     options: template.options.map((option) => ({ ...option })),
-    defaultSkillCounts: { ...template.defaultSkillCounts }
+    defaultSkillCounts: { ...template.defaultSkillCounts },
+    skillLibrary: Object.fromEntries(
+      LEVEL_KEYS.map((levelKey) => [levelKey, (template.skillLibrary[levelKey] ?? []).map((skill) => ({ ...skill }))])
+    ) as Record<PlannerLevelKey, PlannerTemplateSkill[]>
   };
 }
 

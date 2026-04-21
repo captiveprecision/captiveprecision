@@ -12,6 +12,7 @@ type SeasonPlannerSurfaceProps = {
   cancelSeasonPlannerEdit: () => void;
   toggleSeasonPlannerCheckpoint: (checkpointId: string) => void;
   saveSeasonPlannerEdit: () => void;
+  isSavingAction: (actionKey: string) => boolean;
 };
 
 export function SeasonPlannerSurface(props: SeasonPlannerSurfaceProps) {
@@ -21,7 +22,8 @@ export function SeasonPlannerSurface(props: SeasonPlannerSurfaceProps) {
     openSeasonPlannerTeam,
     cancelSeasonPlannerEdit,
     toggleSeasonPlannerCheckpoint,
-    saveSeasonPlannerEdit
+    saveSeasonPlannerEdit,
+    isSavingAction
   } = props;
 
   const selectedCheckpointIds = new Set(seasonPlannerDraft?.checkpointIds ?? []);
@@ -57,7 +59,9 @@ export function SeasonPlannerSurface(props: SeasonPlannerSurfaceProps) {
                         </div>
                         {isEditing ? (
                           <>
-                            <Button size="sm" onClick={saveSeasonPlannerEdit}>Save</Button>
+                            <Button size="sm" onClick={saveSeasonPlannerEdit} disabled={isSavingAction("season-plan")}>
+                              {isSavingAction("season-plan") ? "Saving..." : "Save"}
+                            </Button>
                             <Button variant="secondary" size="sm" onClick={cancelSeasonPlannerEdit}>Cancel</Button>
                           </>
                         ) : team.availableCheckpoints.length ? (

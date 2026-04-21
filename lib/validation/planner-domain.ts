@@ -149,6 +149,14 @@ export function isPlannerTryoutTemplate(value: unknown): value is PlannerTryoutT
     && !!record.defaultSkillCounts
     && typeof record.defaultSkillCounts === "object"
     && LEVEL_KEYS.every((levelKey) => typeof (record.defaultSkillCounts as Record<string, unknown>)[levelKey] === "number")
+    && (
+      record.skillLibrary === undefined
+      || (
+        typeof record.skillLibrary === "object"
+        && !!record.skillLibrary
+        && LEVEL_KEYS.every((levelKey) => Array.isArray((record.skillLibrary as Record<string, unknown>)[levelKey]))
+      )
+    )
     && isIsoDateString(record.updatedAt);
 }
 

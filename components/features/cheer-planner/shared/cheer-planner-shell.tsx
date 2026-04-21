@@ -51,6 +51,7 @@ export function CheerPlannerShell({ integration }: CheerPlannerShellProps) {
                   ariaLabel="Cheer Planner Workspace"
                 />
                 {integration.saveMessage ? <Badge variant="accent">{integration.saveMessage}</Badge> : null}
+                {!integration.saveMessage && integration.syncStatusLabel ? <Badge variant="accent">{integration.syncStatusLabel}</Badge> : null}
               </div>
             }
           />
@@ -70,27 +71,33 @@ export function CheerPlannerShell({ integration }: CheerPlannerShellProps) {
           activeSport={integration.activeSport}
           setActiveSport={integration.setActiveSport}
           template={integration.plannerState.template}
+          templateEditor={integration.templateDraft}
           settingsOpen={integration.settingsOpen}
           setSettingsOpen={integration.setSettingsOpen}
           updateTemplateOption={integration.updateTemplateOption}
+          removeTemplateOption={integration.removeTemplateOption}
+          addTemplateOption={integration.addTemplateOption}
           levelKeys={integration.levelKeys}
           levelLabels={integration.levelLabels}
-          updateSkillCount={integration.updateSkillCount}
+          updateTemplateSkill={integration.updateTemplateSkill}
+          addTemplateSkill={integration.addTemplateSkill}
+          removeTemplateSkill={integration.removeTemplateSkill}
           saveTemplate={integration.saveTemplate}
           resetTemplate={integration.resetTemplate}
+          cancelTemplateChanges={integration.cancelTemplateChanges}
+          isSavingAction={integration.isSavingAction}
           levelsDraft={integration.levelsDraft}
           openLevels={integration.openLevels}
           toggleLevel={integration.toggleLevel}
           summary={integration.summary}
           updateSkillName={integration.updateSkillName}
           updateSkillOption={integration.updateSkillOption}
-          removeSkill={integration.removeSkill}
           addExtraSkill={integration.addExtraSkill}
           saveEvaluation={integration.saveEvaluation}
           recentEvaluations={integration.recentEvaluations}
-          loadEvaluation={(evaluation) => {
+          loadEvaluation={(evaluation, options) => {
             void integration.setPipelineStage("tryouts");
-            integration.loadEvaluation(evaluation);
+            integration.loadEvaluation(evaluation, options);
           }}
           getRecentAthleteLabel={integration.getRecentAthleteLabel}
           getEvaluationDate={integration.getEvaluationDate}
@@ -103,10 +110,12 @@ export function CheerPlannerShell({ integration }: CheerPlannerShellProps) {
           stats={integration.stats}
           qualificationOpen={integration.qualificationOpen}
           setQualificationOpen={integration.setQualificationOpen}
-          qualificationRules={integration.plannerState.qualificationRules}
+          qualificationRules={integration.qualificationRulesDraft}
           levelLabelsList={integration.levelLabelsList}
           updateQualificationRule={integration.updateQualificationRule}
           saveQualificationRules={integration.saveQualificationRules}
+          cancelQualificationRules={integration.cancelQualificationRules}
+          isSavingAction={integration.isSavingAction}
           createTeamOpen={integration.createTeamOpen}
           setCreateTeamOpen={integration.setCreateTeamOpen}
           teamDraft={integration.teamDraft}
@@ -140,6 +149,7 @@ export function CheerPlannerShell({ integration }: CheerPlannerShellProps) {
           addSkillPlannerSelection={integration.addSkillPlannerSelection}
           removeSkillPlannerSelection={integration.removeSkillPlannerSelection}
           saveSkillPlannerEdit={integration.saveSkillPlannerEdit}
+          isSavingAction={integration.isSavingAction}
         />
       ) : null}
       {workspaceTab === "routine-builder" ? (
@@ -150,6 +160,7 @@ export function CheerPlannerShell({ integration }: CheerPlannerShellProps) {
           cancelRoutineBuilderEdit={integration.cancelRoutineBuilderEdit}
           updateRoutineBuilderDocument={integration.updateRoutineBuilderDocument}
           saveRoutineBuilderEdit={integration.saveRoutineBuilderEdit}
+          isSavingAction={integration.isSavingAction}
         />
       ) : null}
       {workspaceTab === "season-planner" ? (
@@ -160,6 +171,7 @@ export function CheerPlannerShell({ integration }: CheerPlannerShellProps) {
           cancelSeasonPlannerEdit={integration.cancelSeasonPlannerEdit}
           toggleSeasonPlannerCheckpoint={integration.toggleSeasonPlannerCheckpoint}
           saveSeasonPlannerEdit={integration.saveSeasonPlannerEdit}
+          isSavingAction={integration.isSavingAction}
         />
       ) : null}
 

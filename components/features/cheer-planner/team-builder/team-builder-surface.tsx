@@ -17,10 +17,12 @@ type TeamBuilderSurfaceProps = {
   stats: PlannerStatItem[];
   qualificationOpen: boolean;
   setQualificationOpen: Dispatch<SetStateAction<boolean>>;
-  qualificationRules: CheerPlannerIntegration["plannerState"]["qualificationRules"];
+  qualificationRules: CheerPlannerIntegration["qualificationRulesDraft"];
   levelLabelsList: readonly PlannerLevelLabel[];
   updateQualificationRule: (levelLabel: PlannerLevelLabel, value: string) => void;
   saveQualificationRules: () => void;
+  cancelQualificationRules: () => void;
+  isSavingAction: (actionKey: string) => boolean;
   createTeamOpen: boolean;
   setCreateTeamOpen: Dispatch<SetStateAction<boolean>>;
   teamDraft: TeamDraftState;
@@ -55,6 +57,8 @@ export function TeamBuilderSurface(props: TeamBuilderSurfaceProps) {
     levelLabelsList,
     updateQualificationRule,
     saveQualificationRules,
+    cancelQualificationRules,
+    isSavingAction,
     createTeamOpen,
     setCreateTeamOpen,
     teamDraft,
@@ -117,7 +121,12 @@ export function TeamBuilderSurface(props: TeamBuilderSurfaceProps) {
                     ))}
                   </div>
                   <div className="planner-inline-actions">
-                    <Button onClick={saveQualificationRules}>Save Changes</Button>
+                    <Button onClick={saveQualificationRules} disabled={isSavingAction("qualification-rules")}>
+                      {isSavingAction("qualification-rules") ? "Saving..." : "Save Changes"}
+                    </Button>
+                    <Button variant="secondary" onClick={cancelQualificationRules} disabled={isSavingAction("qualification-rules")}>
+                      Cancel
+                    </Button>
                   </div>
                 </div>
               ) : null}
@@ -160,7 +169,9 @@ export function TeamBuilderSurface(props: TeamBuilderSurfaceProps) {
                       value={teamDraft.teamType}
                       onChange={(event) => setTeamDraft((current) => ({ ...current, teamType: event.target.value }))}
                     />
-                    <Button onClick={createTeam}>Save Team</Button>
+                    <Button onClick={createTeam} disabled={isSavingAction("create-team")}>
+                      {isSavingAction("create-team") ? "Saving..." : "Save Team"}
+                    </Button>
                   </CardContent>
                 </Card>
               ) : null}
@@ -299,7 +310,9 @@ export function TeamBuilderSurface(props: TeamBuilderSurfaceProps) {
                       onChange={(event) => setTeamEdit((current) => (current ? { ...current, teamType: event.target.value } : current))}
                     />
                     <div className="planner-inline-actions">
-                      <Button onClick={confirmTeamEdit}>Save Changes</Button>
+                      <Button onClick={confirmTeamEdit} disabled={isSavingAction("team-edit")}>
+                        {isSavingAction("team-edit") ? "Saving..." : "Save Changes"}
+                      </Button>
                       <Button variant="secondary" onClick={() => setTeamEdit(null)}>
                         Cancel
                       </Button>

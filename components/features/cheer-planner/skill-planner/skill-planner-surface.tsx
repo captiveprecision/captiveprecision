@@ -19,6 +19,7 @@ type SkillPlannerSurfaceProps = {
   addSkillPlannerSelection: (category: TeamSkillCategory, groupIndex?: number | null) => void;
   removeSkillPlannerSelection: (selectionId: string) => void;
   saveSkillPlannerEdit: () => void;
+  isSavingAction: (actionKey: string) => boolean;
 };
 
 function groupSelectionsByCategory(selections: TeamSkillSelection[]) {
@@ -72,7 +73,8 @@ export function SkillPlannerSurface(props: SkillPlannerSurfaceProps) {
     updateSkillPlannerSelection,
     addSkillPlannerSelection,
     removeSkillPlannerSelection,
-    saveSkillPlannerEdit
+    saveSkillPlannerEdit,
+    isSavingAction
   } = props;
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
 
@@ -127,7 +129,9 @@ export function SkillPlannerSurface(props: SkillPlannerSurfaceProps) {
                         {statusBadge}
                         {isEditing ? (
                           <>
-                            <Button size="sm" onClick={saveSkillPlannerEdit}>Save Changes</Button>
+                            <Button size="sm" onClick={saveSkillPlannerEdit} disabled={isSavingAction("skill-plan")}>
+                              {isSavingAction("skill-plan") ? "Saving..." : "Save Changes"}
+                            </Button>
                             <Button variant="secondary" size="sm" onClick={cancelSkillPlannerEdit}>Cancel</Button>
                           </>
                         ) : (

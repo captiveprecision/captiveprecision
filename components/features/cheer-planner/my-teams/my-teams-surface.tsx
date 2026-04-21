@@ -1,7 +1,7 @@
 ﻿"use client";
 
-import { Pencil, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { Eye, Pencil, Plus, Trash2 } from "lucide-react";
+import { useEffect, useState } from "react";
 
 import { Badge, Button, Card, CardContent, EmptyState, Input, SectionHeader, Select } from "@/components/ui";
 import type { TeamBuilderTeamDraftInput } from "@/lib/services/planner-team-builder";
@@ -39,6 +39,8 @@ type MyTeamsSurfaceProps = {
   coachOptions: LinkedCoachOption[];
   saveMyTeamsTeamProfile: (draft: TeamBuilderTeamDraftInput) => string;
   updateMyTeamsTeamProfile: (teamId: string, draft: TeamBuilderTeamDraftInput) => void;
+  requestDeleteTeam: (teamId: string) => void;
+  deletingTeamId?: string | null;
 };
 
 function buildEmptyCoachAssignment(): CoachAssignmentDraft {
@@ -121,13 +123,33 @@ function buildDraftFromTeam(team: MyTeamsSurfaceProps["teams"][number], coachOpt
   };
 }
 
-export function MyTeamsSurface({ teams, coachOptions, saveMyTeamsTeamProfile, updateMyTeamsTeamProfile }: MyTeamsSurfaceProps) {
+export function MyTeamsSurface({
+  teams,
+  coachOptions,
+  saveMyTeamsTeamProfile,
+  updateMyTeamsTeamProfile,
+  requestDeleteTeam,
+  deletingTeamId
+}: MyTeamsSurfaceProps) {
   const [createTeamOpen, setCreateTeamOpen] = useState(false);
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const [editingTeamId, setEditingTeamId] = useState<string | null>(null);
   const [teamDraft, setTeamDraft] = useState<MyTeamsTeamDraft>(buildEmptyTeamDraft());
   const [isSaving, setIsSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (selectedTeamId && !teams.some((team) => team.teamId === selectedTeamId)) {
+      setSelectedTeamId(null);
+    }
+
+    if (editingTeamId && !teams.some((team) => team.teamId === editingTeamId)) {
+      setCreateTeamOpen(false);
+      setEditingTeamId(null);
+      setFormError(null);
+      setTeamDraft(buildEmptyTeamDraft());
+    }
+  }, [editingTeamId, selectedTeamId, teams]);
 
   const toggleSelectedTeam = (teamId: string) => {
     setSelectedTeamId((current) => current === teamId ? null : teamId);
@@ -251,11 +273,11 @@ export function MyTeamsSurface({ teams, coachOptions, saveMyTeamsTeamProfile, up
       <Card radius="panel" className="planner-panel-stack">
         <CardContent className="planner-panel-stack">
           <SectionHeader
-            eyebrow="My Teams"
-            title="Manage Team Records"
+            className="myteams-header"
+            title="Manage Teams"
             description="Open a team to review details, roster, and planner status. Use Edit Team only when profile changes are needed."
             actions={
-              <Button type="button" onClick={openCreateTeam}>
+              <Button type="button" onClick={openCreateTeam} leadingIcon={<Plus size={16} />}>
                 Add Team
               </Button>
             }
@@ -408,31 +430,54 @@ export function MyTeamsSurface({ teams, coachOptions, saveMyTeamsTeamProfile, up
                   }}
                 >
                   <CardContent className="planner-panel-stack">
-                    <div className="planner-team-card-head">
-                      <div className="planner-team-card-head__copy">
+                    <div className="planner-team-card-head myteams-team-card-head">
+                      <div className="planner-team-card-head__copy myteams-team-card-head__copy">
                         <strong>{team.teamName}</strong>
                         <p>{[team.teamLevel, team.teamDivision, team.teamType].filter(Boolean).join(" / ")}</p>
+                        <div className="myteams-team-summary-compact">
+                          <span className="myteams-team-summary-compact__eyebrow">Team Summary</span>
+                          <span>{team.memberCount} Athletes / {team.assignedCoachNames.length} Coaches Assigned</span>
+                        </div>
                       </div>
-                      <div className="planner-team-card-actions">
-                        <Badge variant="subtle">{isSelected ? "Details Open" : "Open Details"}</Badge>
+                      <div className="planner-team-card-actions myteams-team-card-actions">
                         <Button
                           type="button"
                           variant="ghost"
                           size="sm"
-                          leadingIcon={<Pencil />}
+                          leadingIcon={<Eye size={16} />}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            toggleSelectedTeam(team.teamId);
+                          }}
+                        >
+                          Details
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          leadingIcon={<Pencil size={16} />}
                           onClick={(event) => {
                             event.stopPropagation();
                             openEditTeam(team);
                           }}
                         >
-                          Edit Team
+                          Edit
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          leadingIcon={<Trash2 size={16} />}
+                          disabled={deletingTeamId === team.teamId}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            requestDeleteTeam(team.teamId);
+                          }}
+                        >
+                          {deletingTeamId === team.teamId ? "Deleting..." : "Delete"}
                         </Button>
                       </div>
-                    </div>
-
-                    <div className="planner-summary-row">
-                      <strong>Team Summary</strong>
-                      <span>{team.memberCount} Athletes / {team.assignedCoachNames.length} Coaches Assigned</span>
                     </div>
 
                     {isSelected ? (

@@ -1,7 +1,7 @@
 ﻿import { Pencil } from "lucide-react";
 
 import { BillingPortalButton, CheckoutButton } from "@/components/billing/checkout-button";
-import { Badge, Button, ButtonLink, Card, DetailGrid, PageColumns, PageHero, PageMainColumn, PageSideColumn } from "@/components/ui";
+import { Badge, Button, ButtonLink, Card, CardContent, DetailGrid, PageColumns, PageHero, PageMainColumn, PageSideColumn, SectionHeader } from "@/components/ui";
 import { getAuthSession } from "@/lib/auth/session";
 import { resolveBillingStatus } from "@/lib/billing/stripe";
 
@@ -31,6 +31,7 @@ export default async function CoachSettingsPage() {
   const session = await getAuthSession();
   const billingStatus = session ? await resolveBillingStatus(session) : null;
   const isPremium = billingStatus?.tier === "premium";
+  const canManageBilling = Boolean(billingStatus?.customerId);
 
   const membershipItems = [
     { label: "Plan", value: isPremium ? "Premium" : "Free" },
@@ -62,13 +63,8 @@ export default async function CoachSettingsPage() {
           />
 
           <Card radius="panel" className="settings-section">
-            <div className="ui-card__content settings-section">
-              <div className="ui-section-header">
-                <div className="ui-section-header__copy">
-                  <span className="ui-section-header__eyebrow">Notifications</span>
-                  <h2 className="ui-section-header__title">Notification preferences</h2>
-                </div>
-              </div>
+            <CardContent className="settings-section">
+              <SectionHeader eyebrow="Notifications" title="Notification preferences" />
               <div className="settings-toggle-list">
                 {notificationItems.map((item) => (
                   <div key={item.title} className="settings-toggle-row">
@@ -82,19 +78,14 @@ export default async function CoachSettingsPage() {
                   </div>
                 ))}
               </div>
-            </div>
+            </CardContent>
           </Card>
         </PageMainColumn>
 
         <PageSideColumn className="settings-side-column">
           <Card radius="panel" className="settings-section">
-            <div className="ui-card__content settings-section">
-              <div className="ui-section-header">
-                <div className="ui-section-header__copy">
-                  <span className="ui-section-header__eyebrow">Membership</span>
-                  <h2 className="ui-section-header__title">Current plan</h2>
-                </div>
-              </div>
+            <CardContent className="settings-section">
+              <SectionHeader eyebrow="Membership" title="Current plan" />
               <DetailGrid>
                 {membershipItems.map((item) => (
                   <div key={item.label} className="settings-detail-row">
@@ -105,10 +96,10 @@ export default async function CoachSettingsPage() {
               </DetailGrid>
               <Badge variant={isPremium ? "accent" : "subtle"}>{isPremium ? "Premium member" : "Free plan"}</Badge>
               <div className="settings-inline-actions">
-                {isPremium ? <BillingPortalButton /> : <CheckoutButton scope="coach" label="Upgrade to Premium" />}
+                {isPremium ? (canManageBilling ? <BillingPortalButton /> : null) : <CheckoutButton scope="coach" label="Upgrade to Premium" />}
                 <ButtonLink href="/plans" variant="secondary">View plans</ButtonLink>
               </div>
-            </div>
+            </CardContent>
           </Card>
         </PageSideColumn>
       </PageColumns>

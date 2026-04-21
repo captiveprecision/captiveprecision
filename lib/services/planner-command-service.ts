@@ -5,7 +5,7 @@ import type { TeamRoutinePlan } from "@/lib/domain/routine-plan";
 import type { TeamSeasonPlan } from "@/lib/domain/season-plan";
 import type { TeamSkillPlan } from "@/lib/domain/skill-plan";
 import type { TeamRecord } from "@/lib/domain/team";
-import type { ChangeSet, EntityVersion, RestorePreview, SyncMetadata, VersionedEntityType, WorkspaceBackup, WorkspaceRoot } from "@/lib/domain/planner-versioning";
+import type { ChangeSet, EntityVersion, PlannerTrashItem, RestorePreview, SyncMetadata, VersionedEntityType, WorkspaceBackup, WorkspaceRoot } from "@/lib/domain/planner-versioning";
 import type { AuthSession } from "@/lib/auth/session";
 import type { PlannerWorkspaceScope } from "@/lib/services/planner-workspace";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -18,6 +18,7 @@ type CommandEnvelope<T extends PlannerCommandEntity = PlannerCommandEntity> = {
   changeSetId: string;
   latestVersionNumber: number;
   versionId?: string;
+  restoredRelations?: Record<string, number>;
 };
 
 type WorkspaceRootRow = {
@@ -98,7 +99,62 @@ function normalizeCommandResult<T extends PlannerCommandEntity>(value: unknown):
     lockVersion: typeof record.lockVersion === "number" ? record.lockVersion : Number(record.lockVersion ?? 0),
     changeSetId: typeof record.changeSetId === "string" ? record.changeSetId : "",
     latestVersionNumber: typeof record.latestVersionNumber === "number" ? record.latestVersionNumber : Number(record.latestVersionNumber ?? 0),
-    versionId: typeof record.versionId === "string" ? record.versionId : undefined
+    versionId: typeof record.versionId === "string" ? record.versionId : undefined,
+    restoredRelations: record.restoredRelations && typeof record.restoredRelations === "object" && !Array.isArray(record.restoredRelations)
+      ? Object.fromEntries(
+          Object.entries(record.restoredRelations as Record<string, unknown>).flatMap(([key, item]) => {
+            const count = typeof item === "number" ? item : Number(item ?? 0);
+            return Number.isFinite(count) ? [[key, count]] as const : [];
+          })
+        )
+      : undefined
+  };
+}
+
+function buildRestoreWindow(deletedAt: string | null) {
+  if (!deletedAt) {
+    return null;
+  }
+
+  const base = new Date(deletedAt);
+
+  if (Number.isNaN(base.getTime())) {
+    return null;
+  }
+
+  return new Date(base.getTime() + 90 * 24 * 60 * 60 * 1000).toISOString();
+}
+
+function buildRestoreDisplay(entityType: string, snapshot: Record<string, unknown>, fallbackCreatedAt?: string | null) {
+  const firstName = typeof snapshot.first_name === "string" ? snapshot.first_name.trim() : "";
+  const lastName = typeof snapshot.last_name === "string" ? snapshot.last_name.trim() : "";
+  const metadata = snapshot.metadata && typeof snapshot.metadata === "object" && !Array.isArray(snapshot.metadata)
+    ? snapshot.metadata as Record<string, unknown>
+    : {};
+  const deletedAt = typeof snapshot.deleted_at === "string" ? snapshot.deleted_at : fallbackCreatedAt ?? null;
+
+  if (entityType === "athlete") {
+    return {
+      displayName: [firstName, lastName].filter(Boolean).join(" ").trim() || "Untitled athlete",
+      secondaryLabel: (
+        (typeof snapshot.registration_number === "string" && snapshot.registration_number.trim())
+        || (typeof metadata.registrationNumber === "string" && metadata.registrationNumber.trim())
+        || null
+      ),
+      deletedAt,
+      expiresAt: buildRestoreWindow(deletedAt)
+    };
+  }
+
+  const division = typeof snapshot.division === "string" ? snapshot.division.trim() : "";
+  const teamLevel = typeof metadata.teamLevel === "string" ? metadata.teamLevel.trim() : "";
+  const ageCategory = typeof metadata.ageCategory === "string" ? metadata.ageCategory.trim() : "";
+
+  return {
+    displayName: (typeof snapshot.name === "string" ? snapshot.name.trim() : "") || "Untitled team",
+    secondaryLabel: [division, teamLevel, ageCategory].filter(Boolean).join(" / ") || null,
+    deletedAt,
+    expiresAt: buildRestoreWindow(deletedAt)
   };
 }
 
@@ -134,6 +190,17 @@ function normalizeRpcError(error: unknown) {
 
   if (message.includes("GYM_WORKSPACE_REQUIRED")) {
     return { message: "A gym workspace is required for this action.", code: "GYM_WORKSPACE_REQUIRED" };
+  }
+
+  if (message.includes("ATHLETE_NOT_FOUND")) {
+    return { message: "The athlete could not be found in this workspace. Reload the athlete record and try again.", code: "ATHLETE_NOT_FOUND" };
+  }
+
+  if (
+    message.includes("planner_project_versions_entity_id_version_number_key")
+    || message.includes("duplicate key value violates unique constraint")
+  ) {
+    return { message: "Planner history is out of sync. Reload and try again.", code: "PLANNER_INTEGRITY_ERROR" };
   }
 
   return { message, code: null };
@@ -272,7 +339,7 @@ export async function setPlannerTeamAssignmentsCommand(
 ) {
   const workspaceRoot = await resolveWorkspaceRoot(session, scope, payload.workspaceRootId);
 
-  return executePlannerCommand<Record<string, unknown>>("planner_command_team_assignments_set", {
+  return executePlannerCommand<TeamRecord>("planner_command_team_assignments_set", {
     p_actor_profile_id: session.userId,
     p_workspace_root_id: workspaceRoot.id,
     p_team_id: payload.teamId,
@@ -412,6 +479,25 @@ export async function softDeletePlannerTeamCommand(
   });
 }
 
+export async function softDeletePlannerAthleteCommand(
+  session: AuthSession,
+  scope: PlannerWorkspaceScope,
+  payload: {
+    workspaceRootId?: string | null;
+    athleteId: string;
+    expectedLockVersion?: number | null;
+  }
+) {
+  const workspaceRoot = await resolveWorkspaceRoot(session, scope, payload.workspaceRootId);
+
+  return executePlannerCommand<AthleteRecord>("planner_soft_delete_athlete", {
+    p_actor_profile_id: session.userId,
+    p_workspace_root_id: workspaceRoot.id,
+    p_athlete_id: payload.athleteId,
+    p_expected_lock_version: payload.expectedLockVersion ?? null
+  });
+}
+
 export async function listPlannerHistory(
   session: AuthSession,
   scope: PlannerWorkspaceScope,
@@ -520,6 +606,59 @@ export async function listPlannerBackups(
   };
 }
 
+export async function listPlannerTrash(
+  session: AuthSession,
+  scope: PlannerWorkspaceScope,
+  payload: {
+    workspaceRootId?: string | null;
+    entityType?: "athlete" | "team" | null;
+    search?: string | null;
+    limit?: number;
+  }
+) {
+  const workspaceRoot = await resolveWorkspaceRoot(session, scope, payload.workspaceRootId);
+  const admin = createAdminClient();
+  const { data, error } = await admin.rpc("planner_list_workspace_trash" as never, {
+    p_workspace_root_id: workspaceRoot.id,
+    p_search: payload.search ?? null,
+    p_entity_type: payload.entityType ?? null,
+    p_limit: payload.limit ?? 100
+  } as never);
+
+  if (error) {
+    throw error;
+  }
+
+  return {
+    workspaceRoot,
+    items: ((data ?? []) as Array<{
+      entity_type: "athlete" | "team";
+      entity_id: string;
+      version_id: string;
+      name: string;
+      secondary_label: string | null;
+      deleted_at: string;
+      deleted_by_profile_id: string | null;
+      deleted_by_name: string | null;
+      expires_at: string | null;
+      restore_available: boolean;
+      snapshot: Record<string, unknown>;
+    }>).map((row) => ({
+      entityType: row.entity_type,
+      entityId: row.entity_id,
+      versionId: row.version_id,
+      name: row.name,
+      secondaryLabel: row.secondary_label ?? "",
+      deletedAt: row.deleted_at,
+      deletedByProfileId: row.deleted_by_profile_id,
+      deletedByName: row.deleted_by_name,
+      expiresAt: row.expires_at,
+      restoreAvailable: row.restore_available,
+      snapshot: row.snapshot
+    })) as PlannerTrashItem[]
+  };
+}
+
 export async function getPlannerRestorePreview(
   session: AuthSession,
   scope: PlannerWorkspaceScope,
@@ -549,6 +688,7 @@ export async function getPlannerRestorePreview(
     entity_id: string;
     version_number: number;
     snapshot: Record<string, unknown>;
+    created_at: string;
   };
 
   const currentTableMap = {
@@ -575,6 +715,141 @@ export async function getPlannerRestorePreview(
     currentLockVersion = (currentData as { lock_version: number } | null)?.lock_version ?? null;
   }
 
+  const relatedRestores: RestorePreview["relatedRestores"] = [];
+  const entityId = row.entity_id;
+
+  if (payload.entityType === "athlete") {
+    const [assignmentResult, evaluationResult, backupResult] = await Promise.all([
+      admin
+        .from("athlete_team_assignments" as never)
+        .select("id" as never, { count: "exact", head: true })
+        .eq("workspace_root_id", workspaceRoot.id as never)
+        .eq("athlete_id", entityId as never)
+        .not("deleted_at" as never, "is" as never, null as never),
+      admin
+        .from("planner_evaluations" as never)
+        .select("id" as never, { count: "exact", head: true })
+        .eq("workspace_root_id", workspaceRoot.id as never)
+        .eq("athlete_id", entityId as never)
+        .not("deleted_at" as never, "is" as never, null as never),
+      admin
+        .from("workspace_backups" as never)
+        .select("id" as never, { count: "exact", head: true })
+        .eq("workspace_root_id", workspaceRoot.id as never)
+        .eq("backup_type" as never, "pre-destructive" as never)
+        .contains("metadata" as never, { entityType: "athlete", entityId } as never)
+    ]);
+
+    if ((assignmentResult.count ?? 0) > 0) {
+      relatedRestores.push({ key: "assignments", label: "Roster links", count: assignmentResult.count ?? 0 });
+    }
+
+    if ((evaluationResult.count ?? 0) > 0) {
+      relatedRestores.push({ key: "evaluations", label: "Evaluations", count: evaluationResult.count ?? 0 });
+    }
+
+    const display = buildRestoreDisplay(payload.entityType, row.snapshot, row.created_at);
+
+    return {
+      workspaceRoot,
+      preview: {
+        entityType: row.entity_type as VersionedEntityType,
+        entityId: row.entity_id,
+        versionId: row.id,
+        versionNumber: row.version_number,
+        currentLockVersion,
+        displayName: display.displayName,
+        secondaryLabel: display.secondaryLabel,
+        deletedAt: display.deletedAt,
+        expiresAt: display.expiresAt,
+        backupAvailable: (backupResult.count ?? 0) > 0,
+        relatedRestores,
+        notes: [
+          relatedRestores.length ? "Restoring this athlete will also bring back any related records still in Trash." : "This restore will bring back the athlete record only.",
+          (backupResult.count ?? 0) > 0 ? "A pre-destructive backup is available if you need deeper recovery support." : null
+        ].filter((note): note is string => Boolean(note)),
+        restoreSnapshot: row.snapshot
+      } satisfies RestorePreview
+    };
+  }
+
+  if (payload.entityType === "team") {
+    const [assignmentResult, skillPlanResult, routinePlanResult, seasonPlanResult, backupResult] = await Promise.all([
+      admin
+        .from("athlete_team_assignments" as never)
+        .select("id" as never, { count: "exact", head: true })
+        .eq("workspace_root_id", workspaceRoot.id as never)
+        .eq("team_id", entityId as never)
+        .not("deleted_at" as never, "is" as never, null as never),
+      admin
+        .from("team_skill_plans" as never)
+        .select("id" as never, { count: "exact", head: true })
+        .eq("workspace_root_id", workspaceRoot.id as never)
+        .eq("team_id", entityId as never)
+        .not("deleted_at" as never, "is" as never, null as never),
+      admin
+        .from("team_routine_plans" as never)
+        .select("id" as never, { count: "exact", head: true })
+        .eq("workspace_root_id", workspaceRoot.id as never)
+        .eq("team_id", entityId as never)
+        .not("deleted_at" as never, "is" as never, null as never),
+      admin
+        .from("team_season_plans" as never)
+        .select("id" as never, { count: "exact", head: true })
+        .eq("workspace_root_id", workspaceRoot.id as never)
+        .eq("team_id", entityId as never)
+        .not("deleted_at" as never, "is" as never, null as never),
+      admin
+        .from("workspace_backups" as never)
+        .select("id" as never, { count: "exact", head: true })
+        .eq("workspace_root_id", workspaceRoot.id as never)
+        .eq("backup_type" as never, "pre-destructive" as never)
+        .contains("metadata" as never, { entityType: "team", entityId } as never)
+    ]);
+
+    if ((assignmentResult.count ?? 0) > 0) {
+      relatedRestores.push({ key: "assignments", label: "Roster links", count: assignmentResult.count ?? 0 });
+    }
+
+    if ((skillPlanResult.count ?? 0) > 0) {
+      relatedRestores.push({ key: "skillPlans", label: "Skill plans", count: skillPlanResult.count ?? 0 });
+    }
+
+    if ((routinePlanResult.count ?? 0) > 0) {
+      relatedRestores.push({ key: "routinePlans", label: "Routine plans", count: routinePlanResult.count ?? 0 });
+    }
+
+    if ((seasonPlanResult.count ?? 0) > 0) {
+      relatedRestores.push({ key: "seasonPlans", label: "Season plans", count: seasonPlanResult.count ?? 0 });
+    }
+
+    const display = buildRestoreDisplay(payload.entityType, row.snapshot, row.created_at);
+
+    return {
+      workspaceRoot,
+      preview: {
+        entityType: row.entity_type as VersionedEntityType,
+        entityId: row.entity_id,
+        versionId: row.id,
+        versionNumber: row.version_number,
+        currentLockVersion,
+        displayName: display.displayName,
+        secondaryLabel: display.secondaryLabel,
+        deletedAt: display.deletedAt,
+        expiresAt: display.expiresAt,
+        backupAvailable: (backupResult.count ?? 0) > 0,
+        relatedRestores,
+        notes: [
+          relatedRestores.length ? "Restoring this team will also bring back related planner records still in Trash." : "This restore will bring back the team record only.",
+          (backupResult.count ?? 0) > 0 ? "A pre-destructive backup is available if you need deeper recovery support." : null
+        ].filter((note): note is string => Boolean(note)),
+        restoreSnapshot: row.snapshot
+      } satisfies RestorePreview
+    };
+  }
+
+  const display = buildRestoreDisplay(payload.entityType, row.snapshot, row.created_at);
+
   return {
     workspaceRoot,
     preview: {
@@ -583,6 +858,13 @@ export async function getPlannerRestorePreview(
       versionId: row.id,
       versionNumber: row.version_number,
       currentLockVersion,
+      displayName: display.displayName,
+      secondaryLabel: display.secondaryLabel,
+      deletedAt: display.deletedAt,
+      expiresAt: display.expiresAt,
+      backupAvailable: false,
+      relatedRestores,
+      notes: [],
       restoreSnapshot: row.snapshot
     } satisfies RestorePreview
   };

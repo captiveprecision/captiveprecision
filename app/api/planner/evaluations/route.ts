@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getPlannerScopeContext, requirePlannerSession } from "@/lib/services/planner-api-access";
 import { requireCheerPlannerPremium } from "@/lib/access/membership";
 import { getPlannerCommandError, savePlannerEvaluationCommand } from "@/lib/services/planner-command-service";
+import { normalizePlannerEvaluation } from "@/lib/services/planner-domain-mappers";
 import { isUuidString } from "@/lib/services/planner-workspace";
 
 function asObject(value: unknown) {
@@ -13,6 +14,15 @@ function asObject(value: unknown) {
 
 function asString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function asNullableString(value: unknown) {
+  const normalized = asString(value);
+  return normalized || null;
+}
+
+function asOptionalString(value: unknown) {
+  return asNullableString(value) ?? undefined;
 }
 
 export async function POST(request: NextRequest) {
@@ -46,8 +56,27 @@ export async function POST(request: NextRequest) {
       record: evaluation
     });
 
+    const entity = (result.entity ?? {}) as Record<string, unknown>;
+    const record = asObject(entity.record) ?? {};
+    const normalizedEvaluation = normalizePlannerEvaluation({
+      ...(record as Record<string, unknown>),
+      id: asString(entity.id) || evaluationId,
+      athleteId,
+      athleteRegistrationNumber: asNullableString(entity.athlete_registration_number) ?? asNullableString(evaluation.athleteRegistrationNumber),
+      plannerProjectId: asString(entity.planner_project_id),
+      occurredAt: asNullableString(entity.occurred_at) ?? asNullableString(evaluation.occurredAt),
+      createdAt: asString(entity.created_at) || new Date().toISOString(),
+      updatedAt: asString(entity.updated_at) || new Date().toISOString(),
+      workspaceRootId: asOptionalString(entity.workspace_root_id),
+      lockVersion: typeof result.lockVersion === "number" ? result.lockVersion : (typeof entity.lock_version === "number" ? entity.lock_version : undefined),
+      lastChangeSetId: typeof result.changeSetId === "string" ? result.changeSetId : asOptionalString(entity.last_change_set_id),
+      archivedAt: asOptionalString(entity.archived_at),
+      deletedAt: asOptionalString(entity.deleted_at),
+      restoredFromVersionId: asOptionalString(entity.restored_from_version_id)
+    });
+
     return NextResponse.json({
-      evaluation: result.entity,
+      evaluation: normalizedEvaluation,
       lockVersion: result.lockVersion,
       changeSetId: result.changeSetId,
       latestVersionNumber: result.latestVersionNumber
