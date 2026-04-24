@@ -55,7 +55,7 @@ export type Database = {
         };
         Update: Partial<Database["public"]["Tables"]["athletes"]["Insert"]>;
       };
-      planner_evaluations: {
+      planner_tryout_records: {
         Row: {
           athlete_id: string;
           created_at: string;
@@ -74,7 +74,7 @@ export type Database = {
           record?: Json;
           updated_at?: string;
         };
-        Update: Partial<Database["public"]["Tables"]["planner_evaluations"]["Insert"]>;
+        Update: Partial<Database["public"]["Tables"]["planner_tryout_records"]["Insert"]>;
       };
       planner_projects: {
         Row: {

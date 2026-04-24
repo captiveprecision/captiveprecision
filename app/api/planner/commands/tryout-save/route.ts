@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { requireCheerPlannerPremium } from "@/lib/access/membership";
 import { getPlannerScopeContext, requirePlannerSession } from "@/lib/services/planner-api-access";
-import { getPlannerCommandError, savePlannerEvaluationCommand } from "@/lib/services/planner-command-service";
+import { getPlannerCommandError, savePlannerTryoutRecordCommand } from "@/lib/services/planner-command-service";
 
 function asString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
@@ -30,19 +30,19 @@ export async function POST(request: NextRequest) {
       return premiumError;
     }
 
-    const evaluation = asObject(payload?.payload) ?? asObject(payload);
+    const tryoutRecord = asObject(payload?.payload) ?? asObject(payload);
 
-    if (!evaluation) {
-      return NextResponse.json({ error: "A valid evaluation payload is required." }, { status: 400 });
+    if (!tryoutRecord) {
+      return NextResponse.json({ error: "A valid tryout record payload is required." }, { status: 400 });
     }
 
-    const result = await savePlannerEvaluationCommand(session, scope.scope, {
-      workspaceRootId: typeof evaluation.workspaceRootId === "string" ? evaluation.workspaceRootId : null,
-      expectedLockVersion: typeof evaluation.expectedLockVersion === "number" ? evaluation.expectedLockVersion : null,
-      evaluationId: asString(evaluation.evaluationId ?? evaluation.id),
-      athleteId: asString(evaluation.athleteId),
-      occurredAt: asString(evaluation.occurredAt) || null,
-      record: asObject(evaluation.record) ?? evaluation
+    const result = await savePlannerTryoutRecordCommand(session, scope.scope, {
+      workspaceRootId: typeof tryoutRecord.workspaceRootId === "string" ? tryoutRecord.workspaceRootId : null,
+      expectedLockVersion: typeof tryoutRecord.expectedLockVersion === "number" ? tryoutRecord.expectedLockVersion : null,
+      tryoutRecordId: asString(tryoutRecord.tryoutRecordId ?? tryoutRecord.id),
+      athleteId: asString(tryoutRecord.athleteId),
+      occurredAt: asString(tryoutRecord.occurredAt) || null,
+      record: asObject(tryoutRecord.record) ?? tryoutRecord
     });
 
     return NextResponse.json(result);

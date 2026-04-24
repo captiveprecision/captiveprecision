@@ -13,15 +13,33 @@ export type PlannerTemplateSkill = {
   name: string;
 };
 
+export type PlannerTryoutTemplateMode = "levels" | "groups" | "items";
+export type PlannerTryoutBucketKind = "level" | "group" | "item";
+
+export type PlannerTryoutTemplateBucket = {
+  id: string;
+  key: string;
+  label: string;
+  kind: PlannerTryoutBucketKind;
+  skills: PlannerTemplateSkill[];
+  allowsExtra: boolean;
+  levelKey?: PlannerLevelKey | null;
+  levelLabel?: PlannerLevelLabel | null;
+};
+
 export type PlannerTryoutTemplate = {
   id: string;
   name: string;
   stage: "tryouts";
-  activeSport: PlannerSportKey;
+  sport: PlannerSportKey;
+  mode: PlannerTryoutTemplateMode;
   options: PlannerTryoutOption[];
-  defaultSkillCounts: Record<PlannerLevelKey, number>;
-  skillLibrary: Record<PlannerLevelKey, PlannerTemplateSkill[]>;
+  buckets: PlannerTryoutTemplateBucket[];
   updatedAt: string;
+  // Legacy compatibility for old snapshots that only stored tumbling metadata.
+  activeSport?: PlannerSportKey;
+  defaultSkillCounts?: Partial<Record<PlannerLevelKey, number>>;
+  skillLibrary?: Partial<Record<PlannerLevelKey, PlannerTemplateSkill[]>>;
 };
 
 export type PlannerSkillEvaluation = {
@@ -31,6 +49,17 @@ export type PlannerSkillEvaluation = {
   isExtra: boolean;
 };
 
+export type PlannerTryoutBucketEvaluation = {
+  bucketKey: string;
+  bucketLabel: string;
+  bucketKind: PlannerTryoutBucketKind;
+  skills: PlannerSkillEvaluation[];
+  allowsExtra: boolean;
+  levelKey?: PlannerLevelKey | null;
+  levelLabel?: PlannerLevelLabel | null;
+};
+
+// Legacy tumbling/stunts compatibility alias.
 export type PlannerLevelEvaluation = {
   levelKey: PlannerLevelKey;
   skills: PlannerSkillEvaluation[];
@@ -43,35 +72,41 @@ export type PlannerTopLevel = {
   extraScore: number;
 };
 
-export type PlannerTryoutSummary = {
-  // Stable summarized outputs derived from rawData.
+export type PlannerTryoutSummaryBucket = {
+  bucketKey: string;
+  bucketLabel: string;
+  bucketKind: PlannerTryoutBucketKind;
+  baseScore: number;
+  extraScore: number;
+  levelKey?: PlannerLevelKey | null;
+  levelLabel?: PlannerLevelLabel | null;
+};
 
+export type PlannerTryoutSummary = {
   totalBaseScore: number;
   totalExtraScore: number;
-  levelScores: PlannerTopLevel[];
-  topLevels: PlannerTopLevel[];
+  bucketScores: PlannerTryoutSummaryBucket[];
+  highlights: PlannerTryoutSummaryBucket[];
 };
 
 export type PlannerTryoutRawData = {
-  // Reproducible tryout input payload, safe for later ranking/qualification consumers.
-
   sport: PlannerSportKey;
+  mode: PlannerTryoutTemplateMode;
   template: {
     id: string;
     name: string;
     updatedAt: string;
   };
-  levels: PlannerLevelEvaluation[];
+  buckets: PlannerTryoutBucketEvaluation[];
 };
 
-export type EvaluationRecordStatus = Extract<DomainEntityStatus, "active" | "archived">;
-export type EvaluationRecordType = "planner-tryout";
+export type TryoutRecordStatus = Extract<DomainEntityStatus, "active" | "archived">;
+export type TryoutRecordType = "planner-tryout";
 
-export type EvaluationRecord = TimestampedEntity & {
-  // Shared evaluation wrapper entity. Planner-specific references stay optional context, not base identity.
+export type TryoutRecord = TimestampedEntity & {
   workspaceId: string;
-  recordType: EvaluationRecordType;
-  status: EvaluationRecordStatus;
+  recordType: TryoutRecordType;
+  status: TryoutRecordStatus;
   athleteId: string;
   athleteRegistrationNumber: string | null;
   plannerProjectId: string | null;
@@ -79,12 +114,10 @@ export type EvaluationRecord = TimestampedEntity & {
   athleteSnapshot: AthleteSnapshot | null;
   scoringSystemId: string | null;
   scoringSystemVersionId: string | null;
+  season?: string | null;
+  seasonLabel?: string | null;
   occurredAt: string | null;
   rawData: PlannerTryoutRawData;
   resultSummary: PlannerTryoutSummary;
   createdById: string | null;
 };
-
-
-
-

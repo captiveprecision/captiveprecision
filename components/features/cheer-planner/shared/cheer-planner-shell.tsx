@@ -70,18 +70,19 @@ export function CheerPlannerShell({ integration }: CheerPlannerShellProps) {
           loadRegisteredAthlete={integration.loadRegisteredAthlete}
           activeSport={integration.activeSport}
           setActiveSport={integration.setActiveSport}
-          template={integration.plannerState.template}
+          template={integration.plannerState.tryoutTemplates[integration.activeSport]}
           templateEditor={integration.templateDraft}
           settingsOpen={integration.settingsOpen}
           setSettingsOpen={integration.setSettingsOpen}
           updateTemplateOption={integration.updateTemplateOption}
           removeTemplateOption={integration.removeTemplateOption}
           addTemplateOption={integration.addTemplateOption}
-          levelKeys={integration.levelKeys}
-          levelLabels={integration.levelLabels}
+          updateTemplateBucketLabel={integration.updateTemplateBucketLabel}
           updateTemplateSkill={integration.updateTemplateSkill}
           addTemplateSkill={integration.addTemplateSkill}
           removeTemplateSkill={integration.removeTemplateSkill}
+          addTemplateBucket={integration.addTemplateBucket}
+          removeTemplateBucket={integration.removeTemplateBucket}
           saveTemplate={integration.saveTemplate}
           resetTemplate={integration.resetTemplate}
           cancelTemplateChanges={integration.cancelTemplateChanges}
@@ -93,14 +94,14 @@ export function CheerPlannerShell({ integration }: CheerPlannerShellProps) {
           updateSkillName={integration.updateSkillName}
           updateSkillOption={integration.updateSkillOption}
           addExtraSkill={integration.addExtraSkill}
-          saveEvaluation={integration.saveEvaluation}
-          recentEvaluations={integration.recentEvaluations}
-          loadEvaluation={(evaluation, options) => {
+          saveTryoutRecord={integration.saveTryoutRecord}
+          recentTryoutRecords={integration.recentTryoutRecords}
+          loadTryoutRecord={(tryoutRecord, options) => {
             void integration.setPipelineStage("tryouts");
-            integration.loadEvaluation(evaluation, options);
+            integration.loadTryoutRecord(tryoutRecord, options);
           }}
           getRecentAthleteLabel={integration.getRecentAthleteLabel}
-          getEvaluationDate={integration.getEvaluationDate}
+          getTryoutRecordDate={integration.getTryoutRecordDate}
           formatScore={integration.formatScore}
         />
       ) : null}

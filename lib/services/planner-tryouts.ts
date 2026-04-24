@@ -1,6 +1,13 @@
-﻿import type { AthleteRecord } from "@/lib/domain/athlete";
-import type { EvaluationRecord, PlannerLevelEvaluation, PlannerSkillEvaluation, PlannerTryoutSummary, PlannerTryoutTemplate } from "@/lib/domain/evaluation-record";
-import type { PlannerLevelKey, PlannerLevelLabel, PlannerQualifiedLevel, PlannerSportKey } from "@/lib/domain/planner-levels";
+import type { AthleteRecord } from "@/lib/domain/athlete";
+import type {
+  PlannerTryoutSummaryBucket,
+  PlannerTryoutTemplate,
+  PlannerTryoutTemplateBucket,
+  PlannerTryoutBucketEvaluation,
+  PlannerTryoutSummary,
+  TryoutRecord
+} from "@/lib/domain/evaluation-record";
+import type { PlannerLevelLabel, PlannerQualifiedLevel, PlannerSportKey } from "@/lib/domain/planner-levels";
 import type { PlannerProject } from "@/lib/domain/planner-project";
 import { canAssignQualifiedLevelToTeam, getHighestQualifiedLevelFromEvaluation, getNextRegistrationNumber } from "@/lib/services/planner-domain-mappers";
 
@@ -24,6 +31,8 @@ export type TryoutAthleteDraftInput = {
 export type TryoutScoringContext = {
   scoringSystemId: string;
   scoringSystemVersionId: string;
+  season?: string | null;
+  seasonLabel?: string | null;
   createdById: string | null;
 };
 
@@ -35,7 +44,7 @@ export type TryoutAthletePoolItem = AthleteRecord & {
   levelScores: Record<PlannerLevelLabel, { baseScore: number; extraScore: number }>;
   assignedTeamId: string | null;
   assignedTeamName: string;
-  latestEvaluation: EvaluationRecord | null;
+  latestTryoutRecord: TryoutRecord | null;
 };
 
 function round(value: number, decimals = 2) {
@@ -55,7 +64,7 @@ function createTryoutRecordId(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-export function buildTryoutSkillRow(name: string, isExtra = false): PlannerSkillEvaluation {
+export function buildTryoutSkillRow(name: string, isExtra = false) {
   return {
     id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     name,
@@ -64,79 +73,102 @@ export function buildTryoutSkillRow(name: string, isExtra = false): PlannerSkill
   };
 }
 
-export function buildTryoutLevelEvaluations(
-  template: PlannerTryoutTemplate,
-  levelKeys: readonly PlannerLevelKey[]
-): PlannerLevelEvaluation[] {
-  return levelKeys.map((levelKey) => {
-    const defaults = template.skillLibrary[levelKey] ?? [];
-    const desiredCount = Math.max(template.defaultSkillCounts[levelKey] || 0, defaults.length || 0);
+export function buildTryoutBucketEvaluations(template: PlannerTryoutTemplate): PlannerTryoutBucketEvaluation[] {
+  return template.buckets.map((bucket) => ({
+    bucketKey: bucket.key,
+    bucketLabel: bucket.label,
+    bucketKind: bucket.kind,
+    allowsExtra: bucket.allowsExtra,
+    levelKey: bucket.levelKey ?? null,
+    levelLabel: bucket.levelLabel ?? null,
+    skills: bucket.skills.map((skill) => buildTryoutSkillRow(skill.name, false))
+  }));
+}
 
-    return {
-      levelKey,
-      skills: Array.from({ length: desiredCount }, (_, index) => buildTryoutSkillRow(defaults[index]?.name || "", false))
-    };
+function sortSummaryBuckets(
+  sport: PlannerSportKey,
+  buckets: PlannerTryoutSummaryBucket[]
+) {
+  return [...buckets].sort((left, right) => {
+    if (right.baseScore !== left.baseScore) {
+      return right.baseScore - left.baseScore;
+    }
+
+    if (right.extraScore !== left.extraScore) {
+      return right.extraScore - left.extraScore;
+    }
+
+    if (sport === "tumbling" || sport === "stunts") {
+      const leftRank = left.levelKey === "beginner" ? 0 : Number(left.levelKey ?? 0);
+      const rightRank = right.levelKey === "beginner" ? 0 : Number(right.levelKey ?? 0);
+      return rightRank - leftRank;
+    }
+
+    return left.bucketLabel.localeCompare(right.bucketLabel);
   });
 }
 
-export function buildTryoutEvaluationSummary(template: PlannerTryoutTemplate, evaluations: PlannerLevelEvaluation[], levelLabels: Record<PlannerLevelKey, PlannerLevelLabel>): PlannerTryoutSummary {
+export function buildTryoutEvaluationSummary(template: PlannerTryoutTemplate, evaluations: PlannerTryoutBucketEvaluation[]): PlannerTryoutSummary {
   const optionMap = new Map(template.options.map((option) => [option.id, option]));
 
-  const levelScores = evaluations.map((level) => {
-    const baseScore = level.skills
+  const bucketScores = evaluations.map((bucket) => {
+    const baseScore = bucket.skills
       .filter((skill) => !skill.isExtra)
       .reduce((sum, skill) => sum + (skill.optionId ? optionMap.get(skill.optionId)?.value ?? 0 : 0), 0);
 
-    const extraScore = level.skills
-      .filter((skill) => skill.isExtra)
-      .reduce((sum, skill) => sum + (skill.optionId ? optionMap.get(skill.optionId)?.value ?? 0 : 0), 0);
+    const extraScore = bucket.allowsExtra
+      ? bucket.skills
+          .filter((skill) => skill.isExtra)
+          .reduce((sum, skill) => sum + (skill.optionId ? optionMap.get(skill.optionId)?.value ?? 0 : 0), 0)
+      : 0;
 
     return {
-      levelKey: level.levelKey,
-      levelLabel: levelLabels[level.levelKey],
+      bucketKey: bucket.bucketKey,
+      bucketLabel: bucket.bucketLabel,
+      bucketKind: bucket.bucketKind,
       baseScore: round(baseScore),
-      extraScore: round(extraScore)
-    };
+      extraScore: round(extraScore),
+      levelKey: bucket.levelKey ?? null,
+      levelLabel: bucket.levelLabel ?? null
+    } satisfies PlannerTryoutSummaryBucket;
   });
 
-  const evaluatedLevels = new Set(
-    evaluations
-      .filter((level) => level.skills.some((skill) => Boolean(skill.optionId)))
-      .map((level) => level.levelKey)
-  );
-
-  const topLevels = [...levelScores]
-    .filter((level) => evaluatedLevels.has(level.levelKey))
-    .sort((left, right) => {
-      if (right.baseScore !== left.baseScore) {
-        return right.baseScore - left.baseScore;
-      }
-
-      const rightRank = right.levelKey === "beginner" ? 0 : Number(right.levelKey);
-      const leftRank = left.levelKey === "beginner" ? 0 : Number(left.levelKey);
-      return rightRank - leftRank;
-    })
-    .slice(0, 3);
+  const evaluatedBuckets = bucketScores.filter((bucket) => bucket.baseScore > 0 || bucket.extraScore > 0);
 
   return {
-    totalBaseScore: round(levelScores.reduce((sum, item) => sum + item.baseScore, 0)),
-    totalExtraScore: round(levelScores.reduce((sum, item) => sum + item.extraScore, 0)),
-    levelScores,
-    topLevels
+    totalBaseScore: round(bucketScores.reduce((sum, item) => sum + item.baseScore, 0)),
+    totalExtraScore: round(bucketScores.reduce((sum, item) => sum + item.extraScore, 0)),
+    bucketScores,
+    highlights: sortSummaryBuckets(template.sport, evaluatedBuckets).slice(0, 3)
   };
 }
 
-export function getTryoutEvaluationDate(evaluation: EvaluationRecord) {
-  return evaluation.occurredAt ?? evaluation.createdAt;
+export function getTryoutRecordDate(tryoutRecord: TryoutRecord) {
+  return tryoutRecord.occurredAt ?? tryoutRecord.createdAt;
 }
 
-export function getLatestTryoutEvaluations(evaluations: EvaluationRecord[]) {
-  const sorted = [...evaluations].sort((left, right) => new Date(getTryoutEvaluationDate(right)).getTime() - new Date(getTryoutEvaluationDate(left)).getTime());
-  const map = new Map<string, EvaluationRecord>();
+export function getLatestTryoutRecords(tryoutRecords: TryoutRecord[]) {
+  const sorted = [...tryoutRecords].sort((left, right) => new Date(getTryoutRecordDate(right)).getTime() - new Date(getTryoutRecordDate(left)).getTime());
+  const map = new Map<string, TryoutRecord>();
 
-  sorted.forEach((evaluation) => {
-    if (!map.has(evaluation.athleteId)) {
-      map.set(evaluation.athleteId, evaluation);
+  sorted.forEach((tryoutRecord) => {
+    if (!map.has(tryoutRecord.athleteId)) {
+      map.set(tryoutRecord.athleteId, tryoutRecord);
+    }
+  });
+
+  return map;
+}
+
+function getLatestQualifiedTryoutRecords(tryoutRecords: TryoutRecord[]) {
+  const sorted = [...tryoutRecords]
+    .filter((tryoutRecord) => tryoutRecord.rawData.mode === "levels")
+    .sort((left, right) => new Date(getTryoutRecordDate(right)).getTime() - new Date(getTryoutRecordDate(left)).getTime());
+  const map = new Map<string, TryoutRecord>();
+
+  sorted.forEach((tryoutRecord) => {
+    if (!map.has(tryoutRecord.athleteId)) {
+      map.set(tryoutRecord.athleteId, tryoutRecord);
     }
   });
 
@@ -168,28 +200,28 @@ export function buildPlannerTryoutAthletePool(
   project: PlannerProject,
   levelLabelsList: readonly PlannerLevelLabel[]
 ): TryoutAthletePoolItem[] {
-  const latestEvaluations = getLatestTryoutEvaluations(project.evaluations);
+  const latestQualifiedTryoutRecords = getLatestQualifiedTryoutRecords(project.tryoutRecords);
 
   return project.athletes.map((athlete) => {
-    const latestEvaluation = latestEvaluations.get(athlete.id) ?? null;
+    const latestTryoutRecord = latestQualifiedTryoutRecords.get(athlete.id) ?? null;
     const levelScores = Object.fromEntries(
       levelLabelsList.map((levelLabel) => {
-        const match = latestEvaluation?.resultSummary.levelScores.find((item) => item.levelLabel === levelLabel);
+        const match = latestTryoutRecord?.resultSummary.bucketScores.find((item) => item.levelLabel === levelLabel);
         return [levelLabel, {
           baseScore: match?.baseScore ?? 0,
           extraScore: match?.extraScore ?? 0
         }];
       })
     ) as Record<PlannerLevelLabel, { baseScore: number; extraScore: number }>;
-    const displayLevel = getHighestQualifiedLevelFromEvaluation(latestEvaluation, project.qualificationRules);
+    const displayLevel = getHighestQualifiedLevelFromEvaluation(latestTryoutRecord, project.qualificationRules);
     const displayScore = displayLevel === "Unqualified" ? levelScores.Beginner.baseScore : levelScores[displayLevel].baseScore;
     const extraScore = displayLevel === "Unqualified" ? levelScores.Beginner.extraScore : levelScores[displayLevel].extraScore;
     const assignedTeam = project.teams.find((team) => team.memberAthleteIds.includes(athlete.id) || (team.memberRegistrationNumbers ?? []).includes(athlete.registrationNumber)) ?? null;
 
     return {
       ...athlete,
-      age: latestEvaluation
-        ? calculateTryoutAthleteAge(athlete.dateOfBirth, getTryoutEvaluationDate(latestEvaluation))
+      age: latestTryoutRecord
+        ? calculateTryoutAthleteAge(athlete.dateOfBirth, getTryoutRecordDate(latestTryoutRecord))
         : calculateTryoutAthleteAge(athlete.dateOfBirth, new Date().toISOString()),
       displayLevel,
       displayScore,
@@ -197,7 +229,7 @@ export function buildPlannerTryoutAthletePool(
       levelScores,
       assignedTeamId: assignedTeam?.id ?? null,
       assignedTeamName: assignedTeam?.name ?? "No Team",
-      latestEvaluation
+      latestTryoutRecord
     };
   });
 }
@@ -236,19 +268,20 @@ export function buildTryoutAthleteRecord(project: PlannerProject, athleteDraft: 
   };
 }
 
-export function buildTryoutEvaluationRecord(input: {
+export function buildTryoutRecord(input: {
   project: PlannerProject;
   athlete: AthleteRecord;
   sport: PlannerSportKey;
-  levels: PlannerLevelEvaluation[];
+  template: PlannerTryoutTemplate;
+  buckets: PlannerTryoutBucketEvaluation[];
   resultSummary: PlannerTryoutSummary;
   scoringContext: TryoutScoringContext;
   occurredAt: string;
-}): EvaluationRecord {
-  const { athlete, occurredAt, project, levels, resultSummary, scoringContext, sport } = input;
+}): TryoutRecord {
+  const { athlete, occurredAt, project, buckets, resultSummary, scoringContext, sport, template } = input;
 
   return {
-    id: createTryoutRecordId("evaluation"),
+    id: createTryoutRecordId("tryout-record"),
     workspaceId: project.workspaceId,
     workspaceRootId: athlete.workspaceRootId ?? project.workspaceRootId,
     recordType: "planner-tryout",
@@ -271,23 +304,26 @@ export function buildTryoutEvaluationRecord(input: {
     },
     scoringSystemId: scoringContext.scoringSystemId,
     scoringSystemVersionId: scoringContext.scoringSystemVersionId,
+    season: scoringContext.season ?? null,
+    seasonLabel: scoringContext.seasonLabel ?? null,
     occurredAt,
     rawData: {
       sport,
+      mode: template.mode,
       template: {
-        id: project.template.id,
-        name: project.template.name,
-        updatedAt: project.template.updatedAt
+        id: template.id,
+        name: template.name,
+        updatedAt: template.updatedAt
       },
-      levels: levels.map((level) => ({
-        ...level,
-        skills: level.skills.map((skill) => ({ ...skill }))
+      buckets: buckets.map((bucket) => ({
+        ...bucket,
+        skills: bucket.skills.map((skill) => ({ ...skill }))
       }))
     },
     resultSummary: {
       ...resultSummary,
-      levelScores: resultSummary.levelScores.map((item) => ({ ...item })),
-      topLevels: resultSummary.topLevels.map((item) => ({ ...item }))
+      bucketScores: resultSummary.bucketScores.map((item) => ({ ...item })),
+      highlights: resultSummary.highlights.map((item) => ({ ...item }))
     },
     createdById: scoringContext.createdById,
     createdAt: occurredAt,
@@ -295,40 +331,39 @@ export function buildTryoutEvaluationRecord(input: {
   };
 }
 
-export function applyTryoutSaveToPlannerProject(project: PlannerProject, athlete: AthleteRecord, evaluation: EvaluationRecord, maxEvaluations = 200): PlannerProject {
+export function applyTryoutSaveToPlannerProject(project: PlannerProject, athlete: AthleteRecord, tryoutRecord: TryoutRecord, maxTryoutRecords = 200): PlannerProject {
   return {
     ...project,
     athletes: project.athletes.some((currentAthlete) => currentAthlete.id === athlete.id)
       ? project.athletes.map((currentAthlete) => currentAthlete.id === athlete.id ? athlete : currentAthlete)
       : [athlete, ...project.athletes],
-    evaluations: [evaluation, ...project.evaluations].slice(0, maxEvaluations)
+    tryoutRecords: [tryoutRecord, ...project.tryoutRecords].slice(0, maxTryoutRecords)
   };
 }
 
 export function hydrateTryoutScoringContext(project: PlannerProject, scoringContext: Pick<TryoutScoringContext, "scoringSystemId" | "scoringSystemVersionId">) {
   let changed = false;
 
-  const evaluations = project.evaluations.map((evaluation) => {
-    if (evaluation.recordType !== "planner-tryout") {
-      return evaluation;
+  const tryoutRecords = project.tryoutRecords.map((tryoutRecord) => {
+    if (tryoutRecord.recordType !== "planner-tryout") {
+      return tryoutRecord;
     }
 
-    const nextScoringSystemId = evaluation.scoringSystemId ?? scoringContext.scoringSystemId;
-    const nextScoringSystemVersionId = evaluation.scoringSystemVersionId ?? scoringContext.scoringSystemVersionId;
+    const nextScoringSystemId = tryoutRecord.scoringSystemId ?? scoringContext.scoringSystemId;
+    const nextScoringSystemVersionId = tryoutRecord.scoringSystemVersionId ?? scoringContext.scoringSystemVersionId;
 
-    if (nextScoringSystemId === evaluation.scoringSystemId && nextScoringSystemVersionId === evaluation.scoringSystemVersionId) {
-      return evaluation;
+    if (nextScoringSystemId === tryoutRecord.scoringSystemId && nextScoringSystemVersionId === tryoutRecord.scoringSystemVersionId) {
+      return tryoutRecord;
     }
 
     changed = true;
     return {
-      ...evaluation,
+      ...tryoutRecord,
       scoringSystemId: nextScoringSystemId,
       scoringSystemVersionId: nextScoringSystemVersionId,
       updatedAt: new Date().toISOString()
     };
   });
 
-  return changed ? { ...project, evaluations } : project;
+  return changed ? { ...project, tryoutRecords } : project;
 }
-

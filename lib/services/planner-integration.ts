@@ -7,6 +7,11 @@ import type { TeamSkillCategory, TeamSkillPlan, TeamSkillSelection } from "@/lib
 
 import { getSystemById, getVersionById } from "@/lib/scoring/scoring-systems";
 import { useScoringSystems } from "@/lib/scoring/use-scoring-systems";
+import {
+  evaluateFoundationSnapshotDecision,
+  type FoundationRequestContext,
+  type FoundationSnapshotDecision
+} from "@/lib/services/planner-foundation-sync";
 import { buildMyTeamsTeamSummaries } from "@/lib/services/planner-my-teams";
 import { mergeRemoteFoundationIntoProject, type PlannerRemoteFoundationSnapshot } from "@/lib/services/planner-supabase-foundation";
 import {
@@ -20,7 +25,7 @@ import {
   PlannerApiError,
   restorePlannerEntity,
   savePlannerAthlete,
-  savePlannerEvaluation,
+  savePlannerTryoutRecord,
   savePlannerProjectConfig,
   savePlannerRoutinePlan,
   savePlannerSeasonPlan,
@@ -41,25 +46,30 @@ import {
 } from "@/lib/services/planner-integration-adapters";
 import {
   applyTryoutSaveToPlannerProject,
-  buildTryoutEvaluationRecord,
+  buildTryoutBucketEvaluations,
+  buildTryoutRecord,
   buildTryoutEvaluationSummary,
-  buildTryoutLevelEvaluations,
   buildTryoutSkillRow,
-  getTryoutEvaluationDate,
+  getTryoutRecordDate,
   hydrateTryoutScoringContext
 } from "@/lib/services/planner-tryouts";
 import {
   assignAthleteToPlannerTeam,
   buildTeamBuilderCandidates,
+  buildTeamFitSummary,
+  buildTeamSelectionProfileForDraft,
+  buildTeamSelectionWarnings,
   buildTeamBuilderTeamsWithMembers,
   clearPlannerTeamRoster,
   createPlannerTeamRecord,
   deletePlannerTeamRecord,
   removeAthleteFromPlannerTeam,
+  type TeamRemoteSyncSource,
   updateMyTeamsTeamProfile as updateMyTeamsTeamProfileState,
   updatePlannerTeamDefinition,
   type TeamBuilderTeamDraftInput
 } from "@/lib/services/planner-team-builder";
+import { buildDefaultTeamSelectionProfile, type TeamSelectionProfile } from "@/lib/domain/team";
 import {
   LEVEL_KEYS,
   LEVEL_LABELS,
@@ -69,16 +79,15 @@ import {
   cloneCheerPlannerState,
   cloneTemplate,
   defaultCheerPlannerState,
-  defaultTryoutTemplate,
+  defaultTryoutTemplates,
   readCheerPlannerStateFromStorage,
   levelLabels,
   type CheerPlannerState,
-  type PlannerLevelEvaluation,
-  type PlannerLevelKey,
   type PlannerLevelLabel,
   type PlannerTemplateSkill,
   type PlannerTeamRecord,
-  type PlannerTryoutEvaluation,
+  type PlannerTryoutBucketEvaluation,
+  type PlannerTryoutRecord,
   type PlannerTryoutTemplate,
   canAssignQualifiedLevelToTeam,
   writeCheerPlannerStateToStorage
@@ -110,6 +119,7 @@ export type TeamDraftState = {
   teamType: string;
   trainingSchedule: string;
   assignedCoachNames: string[];
+  selectionProfile: TeamSelectionProfile;
 };
 
 export type TeamEditState = {
@@ -117,6 +127,7 @@ export type TeamEditState = {
   name: string;
   teamLevel: PlannerLevelLabel;
   teamType: string;
+  selectionProfile: TeamSelectionProfile;
 } | null;
 
 export type AthleteFilters = {
@@ -161,7 +172,7 @@ export type SaveState = "idle" | "saving" | "saved" | "offline_pending" | "error
 
 export type PendingPlannerWrite = {
   id: string;
-  command: "project-save" | "athlete-save" | "evaluation-save" | "team-save" | "team-assignments-set" | "skill-plan-save" | "routine-plan-save" | "season-plan-save";
+  command: "project-save" | "athlete-save" | "tryout-save" | "team-save" | "team-assignments-set" | "skill-plan-save" | "routine-plan-save" | "season-plan-save";
   scope: "coach" | "gym";
   workspaceRootId: string | null;
   payload: Record<string, unknown>;
@@ -181,7 +192,9 @@ type PendingProjectSavePayload = {
   name: string;
   status: CheerPlannerState["status"];
   pipelineStage: CheerPlannerState["pipelineStage"];
-  template: PlannerTryoutTemplate;
+  template: {
+    tryoutTemplates: CheerPlannerState["tryoutTemplates"];
+  };
   qualificationRules: CheerPlannerState["qualificationRules"];
 };
 
@@ -198,9 +211,9 @@ type PendingAthleteSavePayload = {
   parentContacts: AthleteRecord["parentContacts"];
 };
 
-type PendingEvaluationSavePayload = {
+type PendingTryoutSavePayload = {
   athlete: PendingAthleteSavePayload;
-  evaluation: PlannerTryoutEvaluation;
+  tryoutRecord: PlannerTryoutRecord;
 };
 
 type PendingTeamSavePayload = {
@@ -216,6 +229,7 @@ type PendingTeamSavePayload = {
   trainingHours: string;
   linkedCoachIds: string[];
   assignedCoachNames: string[];
+  selectionProfile: TeamSelectionProfile;
   fallbackTeam?: Pick<PlannerTeamRecord, "memberAthleteIds" | "memberRegistrationNumbers" | "status">;
 };
 
@@ -239,14 +253,12 @@ export function formatPlannerScore(value: number) {
   });
 }
 
-function buildLevelEvaluations(template: PlannerTryoutTemplate): PlannerLevelEvaluation[] {
-  return buildTryoutLevelEvaluations(template, LEVEL_KEYS);
+function buildBucketEvaluations(template: PlannerTryoutTemplate): PlannerTryoutBucketEvaluation[] {
+  return buildTryoutBucketEvaluations(template);
 }
 
-function clampTemplateSkillCounts(skillLibrary: PlannerTryoutTemplate["skillLibrary"]) {
-  return Object.fromEntries(
-    LEVEL_KEYS.map((levelKey) => [levelKey, Math.max((skillLibrary[levelKey] ?? []).length, 0)])
-  ) as Record<PlannerLevelKey, number>;
+function getActiveTryoutTemplate(project: CheerPlannerState, sport: PlannerSportTab) {
+  return project.tryoutTemplates[sport] ?? project.template;
 }
 
 function buildTemplateSkill(name = ""): PlannerTemplateSkill {
@@ -262,6 +274,56 @@ function buildTemplateOption() {
     label: "",
     value: 0
   };
+}
+
+function buildTemplateBucketLabel(label = "New Item") {
+  return label.trim() || "New Item";
+}
+
+function buildTemplateBucketDraft(label = "New Item"): PlannerTryoutTemplate["buckets"][number] {
+  const normalizedLabel = buildTemplateBucketLabel(label);
+
+  return {
+    id: `bucket-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    key: normalizedLabel.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || `item-${Date.now()}`,
+    label: normalizedLabel,
+    kind: "item",
+    allowsExtra: false,
+    levelKey: null,
+    levelLabel: null,
+    skills: [buildTemplateSkill(normalizedLabel)]
+  };
+}
+
+function patchTemplateBucket(
+  template: PlannerTryoutTemplate,
+  bucketKey: string,
+  updater: (bucket: PlannerTryoutTemplate["buckets"][number]) => PlannerTryoutTemplate["buckets"][number]
+) {
+  return {
+    ...template,
+    buckets: template.buckets.map((bucket) => (
+      bucket.key === bucketKey ? updater(bucket) : bucket
+    ))
+  };
+}
+
+function buildEvaluationDraftsBySport(templates: Record<PlannerSportTab, PlannerTryoutTemplate>) {
+  return {
+    tumbling: buildBucketEvaluations(templates.tumbling),
+    stunts: buildBucketEvaluations(templates.stunts),
+    jumps: buildBucketEvaluations(templates.jumps),
+    dance: buildBucketEvaluations(templates.dance)
+  } satisfies Record<PlannerSportTab, PlannerTryoutBucketEvaluation[]>;
+}
+
+function buildTemplateDraftsBySport(templates: Record<PlannerSportTab, PlannerTryoutTemplate>) {
+  return {
+    tumbling: cloneTemplate(templates.tumbling),
+    stunts: cloneTemplate(templates.stunts),
+    jumps: cloneTemplate(templates.jumps),
+    dance: cloneTemplate(templates.dance)
+  } satisfies Record<PlannerSportTab, PlannerTryoutTemplate>;
 }
 
 function buildAthleteName(firstName: string, lastName: string) {
@@ -306,7 +368,7 @@ type PlannerSyncSource = Partial<Pick<
 
 type PlannerProjectSyncState = Pick<
   CheerPlannerState,
-  "name" | "status" | "pipelineStage" | "template" | "qualificationRules" | "updatedAt"
+  "name" | "status" | "pipelineStage" | "template" | "tryoutTemplates" | "qualificationRules" | "updatedAt"
 > & PlannerSyncSource;
 
 function applyProjectSyncMetadata(
@@ -428,9 +490,9 @@ function buildPendingWriteIdentity(command: PendingPlannerWrite["command"], payl
     case "season-plan-save":
     case "team-assignments-set":
       return `${command}:${typeof payload.teamId === "string" ? payload.teamId : "team"}`;
-    case "evaluation-save":
+    case "tryout-save":
     default:
-      return `${command}:${typeof payload.evaluationId === "string" && payload.evaluationId ? payload.evaluationId : typeof payload.athleteId === "string" && payload.athleteId ? payload.athleteId : typeof payload.registrationNumber === "string" ? payload.registrationNumber : "evaluation"}`;
+      return `${command}:${typeof payload.tryoutRecordId === "string" && payload.tryoutRecordId ? payload.tryoutRecordId : typeof payload.athleteId === "string" && payload.athleteId ? payload.athleteId : typeof payload.registrationNumber === "string" ? payload.registrationNumber : "tryout-record"}`;
   }
 }
 
@@ -474,8 +536,8 @@ function sortAthletePool(items: ReturnType<typeof buildTeamBuilderCandidates>, f
   return sorted;
 }
 
-export function getRecentAthleteLabel(evaluation: PlannerTryoutEvaluation) {
-  return evaluation.athleteSnapshot?.name || "Unnamed athlete";
+export function getRecentAthleteLabel(tryoutRecord: PlannerTryoutRecord) {
+  return tryoutRecord.athleteSnapshot?.name || "Unnamed athlete";
 }
 
 export function buildFilteredAthletePool(
@@ -561,6 +623,8 @@ function parseIsoTime(value: string | null | undefined) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+const FOUNDATION_SYNC_DEBUG = process.env.NODE_ENV !== "production";
+
 function isLocalNewer(localUpdatedAt: string | null | undefined, remoteUpdatedAt: string | null | undefined) {
   return parseIsoTime(localUpdatedAt) > parseIsoTime(remoteUpdatedAt);
 }
@@ -586,7 +650,7 @@ async function syncRemotePlannerConfig(scope: PlannerWorkspaceScope, project: Ch
     name: project.name,
     status: project.status,
     pipelineStage: project.pipelineStage,
-    template: project.template,
+    template: { tryoutTemplates: project.tryoutTemplates },
     qualificationRules: project.qualificationRules,
     workspaceRootId: project.workspaceRootId,
     lockVersion: project.lockVersion
@@ -608,8 +672,8 @@ async function syncRemoteAthleteRecord(scope: PlannerWorkspaceScope, athlete: At
   });
 }
 
-async function syncRemoteEvaluationRecord(scope: PlannerWorkspaceScope, evaluation: PlannerTryoutEvaluation) {
-  return savePlannerEvaluation(scope, evaluation);
+async function syncRemoteTryoutRecord(scope: PlannerWorkspaceScope, tryoutRecord: PlannerTryoutRecord) {
+  return savePlannerTryoutRecord(scope, tryoutRecord);
 }
 
 async function syncRemoteSkillPlan(scope: PlannerWorkspaceScope, plan: TeamSkillPlan, remoteTeamId?: string) {
@@ -663,6 +727,7 @@ async function createRemoteTeamRecord(
     trainingHours: draft.trainingHours || "",
     linkedCoachIds: draft.linkedCoachIds ?? [],
     assignedCoachNames: draft.assignedCoachNames ?? [],
+    selectionProfile: draft.selectionProfile ?? buildDefaultTeamSelectionProfile(),
     fallbackTeam: {
       memberAthleteIds: [],
       memberRegistrationNumbers: [],
@@ -815,26 +880,26 @@ async function migratePlannerStateToSupabase(
     );
   }
 
-  const remoteEvaluationMap = new Map(currentSnapshot.evaluations.map((evaluation) => [evaluation.id, evaluation] as const));
-  for (const evaluation of localProject.evaluations) {
-    const remoteAthleteId = athleteIdMap.get(evaluation.athleteId) || (isUuidString(evaluation.athleteId) ? evaluation.athleteId : null);
+  const remoteTryoutRecordMap = new Map(currentSnapshot.tryoutRecords.map((tryoutRecord) => [tryoutRecord.id, tryoutRecord] as const));
+  for (const tryoutRecord of localProject.tryoutRecords) {
+    const remoteAthleteId = athleteIdMap.get(tryoutRecord.athleteId) || (isUuidString(tryoutRecord.athleteId) ? tryoutRecord.athleteId : null);
     if (!remoteAthleteId) {
       continue;
     }
 
-    const nextEvaluation: PlannerTryoutEvaluation = {
-      ...evaluation,
+    const nextTryoutRecord: PlannerTryoutRecord = {
+      ...tryoutRecord,
       workspaceId: currentSnapshot.plannerProject.workspaceId,
       plannerProjectId: currentSnapshot.plannerProject.id,
       athleteId: remoteAthleteId,
-      athleteSnapshot: evaluation.athleteSnapshot
-        ? { ...evaluation.athleteSnapshot, athleteId: remoteAthleteId }
+      athleteSnapshot: tryoutRecord.athleteSnapshot
+        ? { ...tryoutRecord.athleteSnapshot, athleteId: remoteAthleteId }
         : null
     };
 
-    const remoteEvaluation = remoteEvaluationMap.get(evaluation.id);
-    if (!remoteEvaluation || isLocalNewer(evaluation.updatedAt, remoteEvaluation.updatedAt)) {
-      await syncRemoteEvaluationRecord(scope, nextEvaluation);
+    const remoteTryoutRecord = remoteTryoutRecordMap.get(tryoutRecord.id);
+    if (!remoteTryoutRecord || isLocalNewer(tryoutRecord.updatedAt, remoteTryoutRecord.updatedAt)) {
+      await syncRemoteTryoutRecord(scope, nextTryoutRecord);
     }
   }
 
@@ -919,11 +984,16 @@ async function migratePlannerStateToSupabase(
 
 export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach") {
   const [plannerState, setPlannerState] = useState<CheerPlannerState>(cloneCheerPlannerState(defaultCheerPlannerState));
-  const [templateDraft, setTemplateDraft] = useState<PlannerTryoutTemplate>(() => cloneTemplate(defaultTryoutTemplate));
   const [activeSport, setActiveSport] = useState<PlannerSportTab>("tumbling");
   const [athleteDraft, setAthleteDraft] = useState<AthleteDraftState>(buildEmptyAthleteDraft());
-  const [levelsDraft, setLevelsDraft] = useState<PlannerLevelEvaluation[]>(() => buildLevelEvaluations(defaultTryoutTemplate));
-  const [openLevels, setOpenLevels] = useState<PlannerLevelKey[]>([]);
+  const [templateDrafts, setTemplateDrafts] = useState<Record<PlannerSportTab, PlannerTryoutTemplate>>(() => buildTemplateDraftsBySport(defaultTryoutTemplates));
+  const [evaluationDrafts, setEvaluationDrafts] = useState<Record<PlannerSportTab, PlannerTryoutBucketEvaluation[]>>(() => buildEvaluationDraftsBySport(defaultTryoutTemplates));
+  const [openBuckets, setOpenBuckets] = useState<Record<PlannerSportTab, string[]>>({
+    tumbling: [],
+    stunts: [],
+    jumps: [],
+    dance: []
+  });
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [qualificationOpen, setQualificationOpen] = useState(false);
   const [filters, setFilters] = useState<AthleteFilters>({
@@ -938,7 +1008,8 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
     teamLevel: "Beginner",
     teamType: "Youth",
     trainingSchedule: "",
-    assignedCoachNames: [""]
+    assignedCoachNames: [""],
+    selectionProfile: buildDefaultTeamSelectionProfile()
   });
   const [teamEdit, setTeamEdit] = useState<TeamEditState>(null);
   const [skillPlannerDraft, setSkillPlannerDraft] = useState<SkillPlannerDraftState>(null);
@@ -963,7 +1034,124 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
   const saveStatesRef = useRef(saveStates);
   const pendingWritesRef = useRef(pendingWrites);
   const isFlushingPendingWritesRef = useRef(false);
+  const foundationRequestIdRef = useRef(0);
+  const plannerMutationVersionRef = useRef(0);
   const { config: scoringConfig, isReady: isScoringReady } = useScoringSystems();
+
+  const beginFoundationRequest = useCallback((source: string): FoundationRequestContext => {
+    const requestId = foundationRequestIdRef.current + 1;
+    foundationRequestIdRef.current = requestId;
+
+    return {
+      requestId,
+      mutationVersionAtStart: plannerMutationVersionRef.current,
+      startedAt: Date.now(),
+      source
+    };
+  }, []);
+
+  const commitPlannerStateSnapshot = useCallback((
+    nextState: CheerPlannerState,
+    options?: { countAsMutation?: boolean }
+  ) => {
+    if (options?.countAsMutation) {
+      plannerMutationVersionRef.current += 1;
+    }
+
+    plannerStateRef.current = nextState;
+    setPlannerState(nextState);
+    writePlannerProject(nextState, scope);
+    return nextState;
+  }, [scope]);
+
+  const logDiscardedFoundationSnapshot = useCallback((
+    context: FoundationRequestContext,
+    snapshot: PlannerRemoteFoundationSnapshot,
+    reason: NonNullable<FoundationSnapshotDecision["reason"]>
+  ) => {
+    if (!FOUNDATION_SYNC_DEBUG) {
+      return;
+    }
+
+    const localState = plannerStateRef.current;
+    const remoteChangeSetId = snapshot.syncMetadata.lastChangeSetId ?? snapshot.plannerProject.lastChangeSetId ?? null;
+
+    console.info("[planner] Discarded stale foundation snapshot.", {
+      source: context.source,
+      requestId: context.requestId,
+      reason,
+      responseAgeMs: Date.now() - context.startedAt,
+      localUpdatedAt: localState.updatedAt,
+      remoteUpdatedAt: snapshot.plannerProject.updatedAt,
+      localLastChangeSetId: localState.lastChangeSetId ?? null,
+      remoteLastChangeSetId: remoteChangeSetId
+    });
+  }, []);
+
+  const evaluateFoundationSnapshot = useCallback((
+    snapshot: PlannerRemoteFoundationSnapshot,
+    context: FoundationRequestContext
+  ): FoundationSnapshotDecision => evaluateFoundationSnapshotDecision(snapshot, context, {
+    latestRequestId: foundationRequestIdRef.current,
+    currentMutationVersion: plannerMutationVersionRef.current,
+    localState: plannerStateRef.current
+  }), []);
+
+  const applyRemoteFoundationSnapshot = useCallback((
+    snapshot: PlannerRemoteFoundationSnapshot,
+    context: FoundationRequestContext
+  ) => {
+    const decision = evaluateFoundationSnapshot(snapshot, context);
+
+    if (decision.discard) {
+      logDiscardedFoundationSnapshot(context, snapshot, decision.reason!);
+      return {
+        applied: false,
+        shouldRefetch: decision.shouldRefetch ?? false
+      };
+    }
+
+    const nextState = applyProjectSyncMetadata(
+      mergeRemoteFoundationIntoProject(plannerStateRef.current, snapshot),
+      snapshot.plannerProject,
+      snapshot.plannerProject.updatedAt
+    );
+
+    commitPlannerStateSnapshot(nextState);
+    setTemplateDrafts(buildTemplateDraftsBySport(nextState.tryoutTemplates));
+    setEvaluationDrafts(buildEvaluationDraftsBySport(nextState.tryoutTemplates));
+
+    return {
+      applied: true,
+      shouldRefetch: false,
+      nextState
+    };
+  }, [commitPlannerStateSnapshot, evaluateFoundationSnapshot, logDiscardedFoundationSnapshot]);
+
+  const runRemoteFoundationSync = useCallback(async (options?: {
+    source?: string;
+    allowStaleRefetch?: boolean;
+  }) => {
+    const context = beginFoundationRequest(options?.source ?? "foundation-refresh");
+    const snapshot = await fetchRemoteFoundation(scope);
+    const result = applyRemoteFoundationSnapshot(snapshot, context);
+
+    if (!result.applied && result.shouldRefetch && options?.allowStaleRefetch !== false) {
+      return runRemoteFoundationSync({
+        source: `${options?.source ?? "foundation-refresh"}:stale-refetch`,
+        allowStaleRefetch: false
+      });
+    }
+
+    if (result.applied) {
+      setSaveStates((current) => ({
+        ...current,
+        foundation: "saved"
+      }));
+    }
+
+    return snapshot;
+  }, [applyRemoteFoundationSnapshot, beginFoundationRequest, scope]);
 
   useEffect(() => {
     plannerStateRef.current = plannerState;
@@ -980,9 +1168,9 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
 
   useEffect(() => {
     if (!settingsOpen) {
-      setTemplateDraft(cloneTemplate(plannerState.template));
+      setTemplateDrafts(buildTemplateDraftsBySport(plannerState.tryoutTemplates));
     }
-  }, [plannerState.template, settingsOpen]);
+  }, [plannerState.tryoutTemplates, settingsOpen]);
 
   useEffect(() => {
     if (!qualificationOpen) {
@@ -992,13 +1180,18 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
 
   useEffect(() => {
     const state = readPlannerProject(scope);
+    plannerStateRef.current = state;
+    foundationRequestIdRef.current = 0;
+    plannerMutationVersionRef.current = 0;
     setPendingWrites(readPendingWritesFromStorage(scope));
     setPlannerState(state);
-    setTemplateDraft(cloneTemplate(state.template));
-    setLevelsDraft(buildLevelEvaluations(state.template));
+    setTemplateDrafts(buildTemplateDraftsBySport(state.tryoutTemplates));
+    setEvaluationDrafts(buildEvaluationDraftsBySport(state.tryoutTemplates));
     let cancelled = false;
 
     void (async () => {
+      const initialRequestContext = beginFoundationRequest("initial-load");
+
       try {
         let snapshot = await fetchRemoteFoundation(scope);
 
@@ -1006,16 +1199,22 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
           snapshot = await migratePlannerStateToSupabase(scope, state, snapshot);
         }
 
-        const nextState = mergeRemoteFoundationIntoProject(state, snapshot);
-
         if (cancelled) {
           return;
         }
 
-        setPlannerState(nextState);
-        setTemplateDraft(cloneTemplate(nextState.template));
-        setLevelsDraft(buildLevelEvaluations(nextState.template));
-        writePlannerProject(nextState, scope);
+        const applyResult = applyRemoteFoundationSnapshot(snapshot, initialRequestContext);
+
+        if (!applyResult.applied) {
+          if (applyResult.shouldRefetch) {
+            void runRemoteFoundationSync({
+              source: "initial-load:stale-refetch",
+              allowStaleRefetch: false
+            }).catch(() => undefined);
+          }
+          return;
+        }
+
         setSaveState("foundation", "saved");
 
         try {
@@ -1037,7 +1236,7 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
     return () => {
       cancelled = true;
     };
-  }, [scope]);
+  }, [applyRemoteFoundationSnapshot, beginFoundationRequest, runRemoteFoundationSync, scope]);
 
 
   useEffect(() => {
@@ -1126,25 +1325,17 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
       status: remoteProject.status,
       pipelineStage: remoteProject.pipelineStage,
       template: remoteProject.template,
+      tryoutTemplates: remoteProject.tryoutTemplates,
       qualificationRules: remoteProject.qualificationRules
     }), remoteProject, remoteProject.updatedAt);
   }
 
-  const refreshRemoteFoundation = useCallback(async () => {
-    const snapshot = await fetchRemoteFoundation(scope);
-    const nextState = applyProjectSyncMetadata(
-      mergeRemoteFoundationIntoProject(plannerStateRef.current, snapshot),
-      snapshot.plannerProject,
-      snapshot.plannerProject.updatedAt
-    );
-
-    plannerStateRef.current = nextState;
-    setPlannerState(nextState);
-    writePlannerProject(nextState, scope);
-    setSaveState("foundation", "saved");
-
-    return snapshot;
-  }, [scope]);
+  const refreshRemoteFoundation = useCallback(async (
+    options?: {
+      source?: string;
+      allowStaleRefetch?: boolean;
+    }
+  ) => runRemoteFoundationSync(options), [runRemoteFoundationSync]);
 
   const loadTrash = useCallback(async (
     options?: {
@@ -1167,6 +1358,19 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
       setTrashLoading(false);
     }
   }, [scope]);
+
+  const syncAfterTrashMutation = useCallback((successMessage: string, partialSyncMessage: string) => {
+    void Promise.allSettled([
+      refreshRemoteFoundation(),
+      loadTrash()
+    ]).then((results) => {
+      if (results.some((result) => result.status === "rejected")) {
+        setSaveMessage(partialSyncMessage);
+      } else {
+        setSaveMessage(successMessage);
+      }
+    });
+  }, [loadTrash, refreshRemoteFoundation]);
 
   const canUsePremiumAction = () => {
     if (premiumAccess.tier === "free") {
@@ -1219,15 +1423,15 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
       case "athlete-save":
         await savePlannerAthlete(scope, pendingWrite.payload as PendingAthleteSavePayload);
         return;
-      case "evaluation-save": {
-        const payload = pendingWrite.payload as PendingEvaluationSavePayload;
+      case "tryout-save": {
+        const payload = pendingWrite.payload as PendingTryoutSavePayload;
         const remoteAthlete = await savePlannerAthlete(scope, payload.athlete);
-        await savePlannerEvaluation(scope, {
-          ...payload.evaluation,
+        await savePlannerTryoutRecord(scope, {
+          ...payload.tryoutRecord,
           athleteId: remoteAthlete.id,
-          athleteSnapshot: payload.evaluation.athleteSnapshot
+          athleteSnapshot: payload.tryoutRecord.athleteSnapshot
             ? {
-                ...payload.evaluation.athleteSnapshot,
+                ...payload.tryoutRecord.athleteSnapshot,
                 athleteId: remoteAthlete.id,
                 registrationNumber: remoteAthlete.registrationNumber,
                 firstName: remoteAthlete.firstName,
@@ -1237,7 +1441,7 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
                 athleteNotes: remoteAthlete.notes,
                 parentContacts: remoteAthlete.parentContacts
               }
-            : payload.evaluation.athleteSnapshot
+            : payload.tryoutRecord.athleteSnapshot
         });
         return;
       }
@@ -1381,17 +1585,33 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
     });
   }, [activeScoringSystem.id, activeScoringVersion.id, isScoringReady, scope]);
 
+  const activeTemplate = useMemo(
+    () => getActiveTryoutTemplate(plannerState, activeSport),
+    [activeSport, plannerState]
+  );
+  const templateDraft = useMemo(
+    () => templateDrafts[activeSport],
+    [activeSport, templateDrafts]
+  );
+  const levelsDraft = useMemo(
+    () => evaluationDrafts[activeSport],
+    [activeSport, evaluationDrafts]
+  );
+  const openLevels = useMemo(
+    () => openBuckets[activeSport],
+    [activeSport, openBuckets]
+  );
   const summary = useMemo(
-    () => buildTryoutEvaluationSummary(plannerState.template, levelsDraft, levelLabels),
-    [plannerState.template, levelsDraft]
+    () => buildTryoutEvaluationSummary(activeTemplate, levelsDraft),
+    [activeTemplate, levelsDraft]
   );
   const athletePool = useMemo(() => buildTeamBuilderCandidates(plannerState, LEVEL_LABELS), [plannerState]);
   const filteredAthletePool = useMemo(() => buildFilteredAthletePool(athletePool, filters), [athletePool, filters]);
-  const sortedEvaluations = useMemo(
-    () => [...plannerState.evaluations].sort((left, right) => new Date(getTryoutEvaluationDate(right)).getTime() - new Date(getTryoutEvaluationDate(left)).getTime()),
-    [plannerState.evaluations]
+  const sortedTryoutRecords = useMemo(
+    () => [...plannerState.tryoutRecords].sort((left, right) => new Date(getTryoutRecordDate(right)).getTime() - new Date(getTryoutRecordDate(left)).getTime()),
+    [plannerState.tryoutRecords]
   );
-  const recentEvaluations = useMemo(() => sortedEvaluations.slice(0, 8), [sortedEvaluations]);
+  const recentTryoutRecords = useMemo(() => sortedTryoutRecords.slice(0, 8), [sortedTryoutRecords]);
   const stats = useMemo(() => buildPlannerStats(athletePool), [athletePool]);
   const skillPlannerTeams = useMemo(() => buildSkillPlannerTeamInputs(plannerState, LEVEL_LABELS), [plannerState]);
   const routineBuilderTeams = useMemo(() => buildRoutineBuilderTeamInputs(plannerState), [plannerState]);
@@ -1438,11 +1658,7 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
     updatedAtFallback?: string
   ) {
     const nextState = applyProjectSyncMetadata(updater(plannerStateRef.current), syncSource, updatedAtFallback);
-
-    plannerStateRef.current = nextState;
-    setPlannerState(nextState);
-    writePlannerProject(nextState, scope);
-    return nextState;
+    return commitPlannerStateSnapshot(nextState, { countAsMutation: true });
   }
 
   function persistState(updater: (current: CheerPlannerState) => CheerPlannerState) {
@@ -1492,15 +1708,21 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
 
   const startNewAthlete = () => {
     setAthleteDraft(buildEmptyAthleteDraft());
-    setLevelsDraft(buildLevelEvaluations(plannerState.template));
-    setOpenLevels([]);
+    setEvaluationDrafts((current) => ({
+      ...current,
+      [activeSport]: buildBucketEvaluations(getActiveTryoutTemplate(plannerStateRef.current, activeSport))
+    }));
+    setOpenBuckets((current) => ({ ...current, [activeSport]: [] }));
     setSaveMessage("Ready for a new athlete.");
   };
 
   const resetAthleteDraft = () => {
     setAthleteDraft(buildEmptyAthleteDraft());
-    setLevelsDraft(buildLevelEvaluations(plannerState.template));
-    setOpenLevels([]);
+    setEvaluationDrafts((current) => ({
+      ...current,
+      [activeSport]: buildBucketEvaluations(getActiveTryoutTemplate(plannerStateRef.current, activeSport))
+    }));
+    setOpenBuckets((current) => ({ ...current, [activeSport]: [] }));
   };
 
   const loadRegisteredAthlete = (athleteId: string) => {
@@ -1511,7 +1733,6 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
       return;
     }
 
-    setActiveSport("tumbling");
     setAthleteDraft({
       athleteId: athlete.id,
       workspaceRootId: athlete.workspaceRootId,
@@ -1523,127 +1744,164 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
       notes: athlete.notes,
       parentContacts: athlete.parentContacts.length ? athlete.parentContacts.map((contact) => ({ ...contact })) : [buildEmptyParentContact()]
     });
-    setLevelsDraft(buildLevelEvaluations(plannerState.template));
-    setOpenLevels([]);
+    setEvaluationDrafts((current) => ({
+      ...current,
+      [activeSport]: buildBucketEvaluations(getActiveTryoutTemplate(plannerStateRef.current, activeSport))
+    }));
+    setOpenBuckets((current) => ({ ...current, [activeSport]: [] }));
     setSaveMessage(`Loaded ${athlete.name}.`);
   };
 
   const updateTemplateOption = (index: number, field: "label" | "value", value: string) => {
-    setTemplateDraft((current) => ({
+    setTemplateDrafts((current) => ({
       ...current,
-      options: current.options.map((option, optionIndex) => {
-            if (optionIndex !== index) {
-              return option;
-            }
+      [activeSport]: {
+        ...current[activeSport],
+        options: current[activeSport].options.map((option, optionIndex) => {
+          if (optionIndex !== index) {
+            return option;
+          }
 
-            return {
-              ...option,
-              [field]: field === "value" ? Number(value) || 0 : value
-            };
-          })
-    }));
-  };
-
-  const updateSkillCount = (levelKey: PlannerLevelKey, value: string) => {
-    const nextCount = Math.max(1, Math.min(20, Number(value) || 1));
-    setTemplateDraft((current) => ({
-      ...current,
-      defaultSkillCounts: {
-        ...current.defaultSkillCounts,
-        [levelKey]: nextCount
+          return {
+            ...option,
+            [field]: field === "value" ? Number(value) || 0 : value
+          };
+        })
       }
     }));
   };
 
+  const updateSkillCount = () => {
+    // Kept for compatibility with older integration consumers. Settings now derive counts from bucket skills.
+  };
+
   const removeTemplateOption = (optionId: string) => {
-    setTemplateDraft((current) => ({
+    setTemplateDrafts((current) => ({
       ...current,
-      options: current.options.filter((option) => option.id !== optionId)
+      [activeSport]: {
+        ...current[activeSport],
+        options: current[activeSport].options.filter((option) => option.id !== optionId)
+      }
     }));
   };
 
   const addTemplateOption = () => {
-    setTemplateDraft((current) => ({
+    setTemplateDrafts((current) => ({
       ...current,
-      options: [...current.options, buildTemplateOption()]
+      [activeSport]: {
+        ...current[activeSport],
+        options: [...current[activeSport].options, buildTemplateOption()]
+      }
     }));
   };
 
-  const updateTemplateSkill = (levelKey: PlannerLevelKey, skillId: string, value: string) => {
-    setTemplateDraft((current) => {
-      const nextSkillLibrary = {
-        ...current.skillLibrary,
-        [levelKey]: (current.skillLibrary[levelKey] ?? []).map((skill) => (
-          skill.id === skillId ? { ...skill, name: value } : skill
-        ))
-      };
-
-      return {
-        ...current,
-        skillLibrary: nextSkillLibrary,
-        defaultSkillCounts: clampTemplateSkillCounts(nextSkillLibrary)
-      };
-    });
+  const updateTemplateSkill = (bucketKey: string, skillId: string, value: string) => {
+    setTemplateDrafts((current) => ({
+      ...current,
+      [activeSport]: patchTemplateBucket(current[activeSport], bucketKey, (bucket) => ({
+        ...bucket,
+        skills: bucket.skills.map((skill) => skill.id === skillId ? { ...skill, name: value } : skill)
+      }))
+    }));
   };
 
-  const moveTemplateSkill = (levelKey: PlannerLevelKey, skillId: string, nextLevelKey: PlannerLevelKey) => {
-    if (levelKey === nextLevelKey) {
+  const moveTemplateSkill = (bucketKey: string, skillId: string, nextBucketKey: string) => {
+    if (bucketKey === nextBucketKey) {
       return;
     }
 
-    setTemplateDraft((current) => {
-      const currentSkill = (current.skillLibrary[levelKey] ?? []).find((skill) => skill.id === skillId);
+    setTemplateDrafts((current) => {
+      const template = current[activeSport];
+      const currentBucket = template.buckets.find((bucket) => bucket.key === bucketKey);
+      const currentSkill = currentBucket?.skills.find((skill) => skill.id === skillId);
 
       if (!currentSkill) {
         return current;
       }
 
-      const nextSkillLibrary = {
-        ...current.skillLibrary,
-        [levelKey]: (current.skillLibrary[levelKey] ?? []).filter((skill) => skill.id !== skillId),
-        [nextLevelKey]: [...(current.skillLibrary[nextLevelKey] ?? []), currentSkill]
-      };
-
       return {
         ...current,
-        skillLibrary: nextSkillLibrary,
-        defaultSkillCounts: clampTemplateSkillCounts(nextSkillLibrary)
+        [activeSport]: {
+          ...template,
+          buckets: template.buckets.map((bucket) => {
+            if (bucket.key === bucketKey) {
+              return { ...bucket, skills: bucket.skills.filter((skill) => skill.id !== skillId) };
+            }
+
+            if (bucket.key === nextBucketKey) {
+              return { ...bucket, skills: [...bucket.skills, currentSkill] };
+            }
+
+            return bucket;
+          })
+        }
       };
     });
   };
 
-  const addTemplateSkill = (levelKey: PlannerLevelKey) => {
-    setTemplateDraft((current) => {
-      const nextSkillLibrary = {
-        ...current.skillLibrary,
-        [levelKey]: [...(current.skillLibrary[levelKey] ?? []), buildTemplateSkill("")]
-      };
-
-      return {
-        ...current,
-        skillLibrary: nextSkillLibrary,
-        defaultSkillCounts: clampTemplateSkillCounts(nextSkillLibrary)
-      };
-    });
+  const addTemplateSkill = (bucketKey: string) => {
+    setTemplateDrafts((current) => ({
+      ...current,
+      [activeSport]: patchTemplateBucket(current[activeSport], bucketKey, (bucket) => ({
+        ...bucket,
+        skills: [...bucket.skills, buildTemplateSkill("")]
+      }))
+    }));
   };
 
-  const removeTemplateSkill = (levelKey: PlannerLevelKey, skillId: string) => {
-    setTemplateDraft((current) => {
-      const nextSkillLibrary = {
-        ...current.skillLibrary,
-        [levelKey]: (current.skillLibrary[levelKey] ?? []).filter((skill) => skill.id !== skillId)
-      };
+  const removeTemplateSkill = (bucketKey: string, skillId: string) => {
+    setTemplateDrafts((current) => ({
+      ...current,
+      [activeSport]: patchTemplateBucket(current[activeSport], bucketKey, (bucket) => ({
+        ...bucket,
+        skills: bucket.skills.filter((skill) => skill.id !== skillId)
+      }))
+    }));
+  };
 
-      return {
-        ...current,
-        skillLibrary: nextSkillLibrary,
-        defaultSkillCounts: clampTemplateSkillCounts(nextSkillLibrary)
-      };
-    });
+  const updateTemplateBucketLabel = (bucketKey: string, value: string) => {
+    setTemplateDrafts((current) => ({
+      ...current,
+      [activeSport]: patchTemplateBucket(current[activeSport], bucketKey, (bucket) => ({
+        ...bucket,
+        label: value,
+        skills: bucket.kind === "item" && bucket.skills.length === 1
+          ? bucket.skills.map((skill) => ({ ...skill, name: value }))
+          : bucket.skills
+      }))
+    }));
+  };
+
+  const addTemplateBucket = () => {
+    if (activeSport !== "dance") {
+      return;
+    }
+
+    setTemplateDrafts((current) => ({
+      ...current,
+      [activeSport]: {
+        ...current[activeSport],
+        buckets: [...current[activeSport].buckets, buildTemplateBucketDraft()]
+      }
+    }));
+  };
+
+  const removeTemplateBucket = (bucketKey: string) => {
+    if (activeSport !== "dance") {
+      return;
+    }
+
+    setTemplateDrafts((current) => ({
+      ...current,
+      [activeSport]: {
+        ...current[activeSport],
+        buckets: current[activeSport].buckets.filter((bucket) => bucket.key !== bucketKey)
+      }
+    }));
   };
 
   const cancelTemplateChanges = () => {
-    setTemplateDraft(cloneTemplate(plannerStateRef.current.template));
+    setTemplateDrafts(buildTemplateDraftsBySport(plannerStateRef.current.tryoutTemplates));
     setSettingsOpen(false);
     setSaveMessage("Template changes discarded.");
   };
@@ -1660,15 +1918,22 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
       });
       const nextState = buildProjectConfigSnapshot((current) => ({
         ...current,
-        template: nextTemplate
+        template: activeSport === "tumbling" ? nextTemplate : current.template,
+        tryoutTemplates: {
+          ...current.tryoutTemplates,
+          [activeSport]: nextTemplate
+        }
       }));
 
       try {
         const remoteProject = await syncRemotePlannerConfig(scope, nextState);
         commitRemoteProject(remoteProject);
-        setTemplateDraft(cloneTemplate(remoteProject.template));
-        setLevelsDraft(buildLevelEvaluations(remoteProject.template));
-        setOpenLevels([]);
+        setTemplateDrafts(buildTemplateDraftsBySport(remoteProject.tryoutTemplates));
+        setEvaluationDrafts((current) => ({
+          ...current,
+          [activeSport]: buildBucketEvaluations(remoteProject.tryoutTemplates[activeSport])
+        }));
+        setOpenBuckets((current) => ({ ...current, [activeSport]: [] }));
         setSaveState("template", "saved");
         setSaveMessage("Template saved.");
       } catch (error) {
@@ -1683,7 +1948,7 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
             name: nextState.name,
             status: nextState.status,
             pipelineStage: nextState.pipelineStage,
-            template: nextState.template,
+            template: { tryoutTemplates: nextState.tryoutTemplates },
             qualificationRules: nextState.qualificationRules
           })
         );
@@ -1692,59 +1957,77 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
   };
 
   const resetTemplate = () => {
-    const nextTemplate = cloneTemplate(cloneCheerPlannerState(defaultCheerPlannerState).template);
-    setTemplateDraft(nextTemplate);
+    const nextTemplate = cloneTemplate(cloneCheerPlannerState(defaultCheerPlannerState).tryoutTemplates[activeSport]);
+    setTemplateDrafts((current) => ({
+      ...current,
+      [activeSport]: nextTemplate
+    }));
     setSaveMessage("Template draft reset. Save Template to apply it.");
   };
 
-  const toggleLevel = (levelKey: PlannerLevelKey) => {
-    setOpenLevels((current) => (
-      current.includes(levelKey) ? current.filter((item) => item !== levelKey) : [...current, levelKey]
-    ));
+  const toggleLevel = (bucketKey: string) => {
+    setOpenBuckets((current) => ({
+      ...current,
+      [activeSport]: current[activeSport].includes(bucketKey)
+        ? current[activeSport].filter((item) => item !== bucketKey)
+        : [...current[activeSport], bucketKey]
+    }));
   };
 
-  const updateSkillName = (levelKey: PlannerLevelKey, skillId: string, value: string) => {
-    setLevelsDraft((current) => current.map((level) => (
-      level.levelKey === levelKey
-        ? {
-            ...level,
-            skills: level.skills.map((skill) => skill.id === skillId ? { ...skill, name: value } : skill)
-          }
-        : level
-    )));
+  const updateSkillName = (bucketKey: string, skillId: string, value: string) => {
+    setEvaluationDrafts((current) => ({
+      ...current,
+      [activeSport]: current[activeSport].map((bucket) => (
+        bucket.bucketKey === bucketKey
+          ? {
+              ...bucket,
+              skills: bucket.skills.map((skill) => skill.id === skillId ? { ...skill, name: value } : skill)
+            }
+          : bucket
+      ))
+    }));
   };
 
-  const updateSkillOption = (levelKey: PlannerLevelKey, skillId: string, optionId: string) => {
-    setLevelsDraft((current) => current.map((level) => (
-      level.levelKey === levelKey
-        ? {
-            ...level,
-            skills: level.skills.map((skill) => skill.id === skillId ? { ...skill, optionId } : skill)
-          }
-        : level
-    )));
+  const updateSkillOption = (bucketKey: string, skillId: string, optionId: string) => {
+    setEvaluationDrafts((current) => ({
+      ...current,
+      [activeSport]: current[activeSport].map((bucket) => (
+        bucket.bucketKey === bucketKey
+          ? {
+              ...bucket,
+              skills: bucket.skills.map((skill) => skill.id === skillId ? { ...skill, optionId: optionId || null } : skill)
+            }
+          : bucket
+      ))
+    }));
   };
 
-  const removeSkill = (levelKey: PlannerLevelKey, skillId: string) => {
-    setLevelsDraft((current) => current.map((level) => (
-      level.levelKey === levelKey
-        ? {
-            ...level,
-            skills: level.skills.filter((skill) => skill.id !== skillId)
-          }
-        : level
-    )));
+  const removeSkill = (bucketKey: string, skillId: string) => {
+    setEvaluationDrafts((current) => ({
+      ...current,
+      [activeSport]: current[activeSport].map((bucket) => (
+        bucket.bucketKey === bucketKey
+          ? {
+              ...bucket,
+              skills: bucket.skills.filter((skill) => skill.id !== skillId)
+            }
+          : bucket
+      ))
+    }));
   };
 
-  const addExtraSkill = (levelKey: PlannerLevelKey) => {
-    setLevelsDraft((current) => current.map((level) => (
-      level.levelKey === levelKey
-        ? {
-            ...level,
-            skills: [...level.skills, buildTryoutSkillRow("", true)]
-          }
-        : level
-    )));
+  const addExtraSkill = (bucketKey: string) => {
+    setEvaluationDrafts((current) => ({
+      ...current,
+      [activeSport]: current[activeSport].map((bucket) => (
+        bucket.bucketKey === bucketKey && bucket.allowsExtra
+          ? {
+              ...bucket,
+              skills: [...bucket.skills, buildTryoutSkillRow("", true)]
+            }
+          : bucket
+      ))
+    }));
   };
 
   const saveAthleteProfile = async () => {
@@ -1807,13 +2090,8 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
     });
   };
 
-  const saveEvaluation = async () => {
+  const saveTryoutRecord = async () => {
     if (!canUsePremiumAction()) {
-      return;
-    }
-
-    if (activeSport !== "tumbling") {
-      setSaveMessage("Tumbling is the only active tryout track right now.");
       return;
     }
 
@@ -1824,7 +2102,7 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
       return;
     }
 
-    await runSavingAction("evaluation", async () => {
+    await runSavingAction("tryout-record", async () => {
       const occurredAt = new Date().toISOString();
       const athletePayload: PendingAthleteSavePayload = {
         workspaceId: plannerState.workspaceId,
@@ -1841,26 +2119,29 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
 
       try {
         const remoteAthlete = await savePlannerAthlete(scope, athletePayload);
-        const nextEvaluation = buildTryoutEvaluationRecord({
+        const nextTryoutRecord = buildTryoutRecord({
           project: plannerState,
           athlete: remoteAthlete,
-          sport: "tumbling",
-          levels: levelsDraft,
+          sport: activeSport,
+          template: activeTemplate,
+          buckets: levelsDraft,
           resultSummary: summary,
           scoringContext: {
             scoringSystemId: activeScoringSystem.id,
             scoringSystemVersionId: activeScoringVersion.id,
+            season: activeScoringVersion.season ?? null,
+            seasonLabel: activeScoringVersion.seasonLabel ?? null,
             createdById: null
           },
           occurredAt
         });
 
-        const remoteEvaluation = await syncRemoteEvaluationRecord(scope, nextEvaluation);
+        const remoteTryoutRecord = await syncRemoteTryoutRecord(scope, nextTryoutRecord);
         patchPlannerState((current) => ({
           ...current,
           athletes: upsertAthleteRecord(current.athletes, remoteAthlete),
-          evaluations: upsertRecordById(current.evaluations, remoteEvaluation)
-        }), remoteEvaluation, remoteEvaluation.updatedAt);
+          tryoutRecords: upsertRecordById(current.tryoutRecords, remoteTryoutRecord)
+        }), remoteTryoutRecord, remoteTryoutRecord.updatedAt);
         setAthleteDraft((current) => ({
           ...current,
           athleteId: remoteAthlete.id,
@@ -1868,10 +2149,10 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
           lockVersion: remoteAthlete.lockVersion,
           registrationNumber: remoteAthlete.registrationNumber
         }));
-        setSaveState("evaluation", "saved");
-        setSaveMessage(`Saved evaluation for ${remoteAthlete.name}. Registration ${remoteAthlete.registrationNumber}.`);
+        setSaveState("tryout-record", "saved");
+        setSaveMessage(`Saved tryout record for ${remoteAthlete.name}. Registration ${remoteAthlete.registrationNumber}.`);
       } catch (error) {
-        const offlineEvaluation = buildTryoutEvaluationRecord({
+        const offlineTryoutRecord = buildTryoutRecord({
           project: plannerState,
           athlete: {
             id: athleteDraft.athleteId ?? `offline-athlete-${athleteDraft.registrationNumber || Date.now()}`,
@@ -1893,55 +2174,65 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
             deletedAt: null,
             restoredFromVersionId: null
           },
-          sport: "tumbling",
-          levels: levelsDraft,
+          sport: activeSport,
+          template: activeTemplate,
+          buckets: levelsDraft,
           resultSummary: summary,
           scoringContext: {
             scoringSystemId: activeScoringSystem.id,
             scoringSystemVersionId: activeScoringVersion.id,
+            season: activeScoringVersion.season ?? null,
+            seasonLabel: activeScoringVersion.seasonLabel ?? null,
             createdById: null
           },
           occurredAt
         });
 
         handleWriteFailure(
-          "evaluation",
+          "tryout-record",
           error,
-          "Unable to save the evaluation to Supabase.",
-          buildPendingWrite(scope, "evaluation-save", athletePayload.workspaceRootId ?? null, {
+          "Unable to save the tryout record to Supabase.",
+          buildPendingWrite(scope, "tryout-save", athletePayload.workspaceRootId ?? null, {
             athlete: athletePayload,
-            evaluation: offlineEvaluation,
+            tryoutRecord: offlineTryoutRecord,
             athleteId: athletePayload.athleteId ?? null,
             registrationNumber: athletePayload.registrationNumber,
-            evaluationId: offlineEvaluation.id
+            tryoutRecordId: offlineTryoutRecord.id
           })
         );
       }
     });
   };
 
-  const loadEvaluation = (evaluation: PlannerTryoutEvaluation, options?: { expandLevels?: boolean }) => {
-    const athlete = plannerState.athletes.find((item) => item.id === evaluation.athleteId) ?? null;
-    setActiveSport("tumbling");
+  const loadTryoutRecord = (tryoutRecord: PlannerTryoutRecord, options?: { expandLevels?: boolean }) => {
+    const athlete = plannerState.athletes.find((item) => item.id === tryoutRecord.athleteId) ?? null;
+    const nextSport = tryoutRecord.rawData.sport as PlannerSportTab;
+    setActiveSport(nextSport);
     setAthleteDraft({
-      athleteId: evaluation.athleteId,
+      athleteId: tryoutRecord.athleteId,
       workspaceRootId: athlete?.workspaceRootId,
       lockVersion: athlete?.lockVersion,
-      registrationNumber: evaluation.athleteSnapshot?.registrationNumber ?? "",
-      firstName: evaluation.athleteSnapshot?.firstName ?? "",
-      lastName: evaluation.athleteSnapshot?.lastName ?? "",
-      dateOfBirth: evaluation.athleteSnapshot?.dateOfBirth ?? "",
-      notes: evaluation.athleteSnapshot?.notes ?? evaluation.athleteSnapshot?.athleteNotes ?? "",
-      parentContacts: evaluation.athleteSnapshot?.parentContacts?.length
-        ? evaluation.athleteSnapshot.parentContacts.map((contact) => ({ ...contact }))
+      registrationNumber: tryoutRecord.athleteSnapshot?.registrationNumber ?? "",
+      firstName: tryoutRecord.athleteSnapshot?.firstName ?? "",
+      lastName: tryoutRecord.athleteSnapshot?.lastName ?? "",
+      dateOfBirth: tryoutRecord.athleteSnapshot?.dateOfBirth ?? "",
+      notes: tryoutRecord.athleteSnapshot?.notes ?? tryoutRecord.athleteSnapshot?.athleteNotes ?? "",
+      parentContacts: tryoutRecord.athleteSnapshot?.parentContacts?.length
+        ? tryoutRecord.athleteSnapshot.parentContacts.map((contact) => ({ ...contact }))
         : [buildEmptyParentContact()]
     });
-    setLevelsDraft(evaluation.rawData.levels.map((level) => ({
-      ...level,
-      skills: level.skills.map((skill) => ({ ...skill }))
-    })));
-    setOpenLevels(options?.expandLevels === false ? [] : evaluation.rawData.levels.map((level) => level.levelKey));
-    setSaveMessage(`Loaded ${getRecentAthleteLabel(evaluation)}.`);
+    setEvaluationDrafts((current) => ({
+      ...current,
+      [nextSport]: tryoutRecord.rawData.buckets.map((bucket) => ({
+        ...bucket,
+        skills: bucket.skills.map((skill) => ({ ...skill }))
+      }))
+    }));
+    setOpenBuckets((current) => ({
+      ...current,
+      [nextSport]: options?.expandLevels === false ? [] : tryoutRecord.rawData.buckets.map((bucket) => bucket.bucketKey)
+    }));
+    setSaveMessage(`Loaded ${getRecentAthleteLabel(tryoutRecord)}.`);
   };
 
   const updateQualificationRule = (levelLabel: PlannerLevelLabel, value: string) => {
@@ -1988,7 +2279,7 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
             name: nextState.name,
             status: nextState.status,
             pipelineStage: nextState.pipelineStage,
-            template: nextState.template,
+            template: { tryoutTemplates: nextState.tryoutTemplates },
             qualificationRules: nextState.qualificationRules
           })
         );
@@ -2022,7 +2313,7 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
           name: nextState.name,
           status: nextState.status,
           pipelineStage: nextState.pipelineStage,
-          template: nextState.template,
+          template: { tryoutTemplates: nextState.tryoutTemplates },
           qualificationRules: nextState.qualificationRules
         })
       );
@@ -2053,6 +2344,7 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
         trainingHours: "",
         linkedCoachIds: [],
         assignedCoachNames: [],
+        selectionProfile: teamDraft.selectionProfile,
         fallbackTeam: {
           memberAthleteIds: [],
           memberRegistrationNumbers: [],
@@ -2078,12 +2370,13 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
         const nextTeam = result.team ?? createPlannerTeamRecord(plannerState, {
           name: teamDraft.name,
           teamLevel: teamDraft.teamLevel,
-          teamType: normalizedTeamType,
-          teamDivision: "Elite",
-          assignedCoachNames: result.assignedCoachNames,
-          linkedCoachIds: result.linkedCoachIds,
-          remoteTeamId: result.teamId
-        }, now);
+            teamType: normalizedTeamType,
+            teamDivision: "Elite",
+            assignedCoachNames: result.assignedCoachNames,
+            linkedCoachIds: result.linkedCoachIds,
+            selectionProfile: teamDraft.selectionProfile,
+            remoteTeamId: result.teamId
+          }, now);
 
         patchPlannerState((current) => ({
           ...current,
@@ -2095,7 +2388,14 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
           updatedAt: nextTeam.updatedAt
         }, nextTeam.updatedAt);
         setCreateTeamOpen(false);
-        setTeamDraft({ name: "", teamLevel: "Beginner", teamType: "Youth", trainingSchedule: "", assignedCoachNames: [""] });
+        setTeamDraft({
+          name: "",
+          teamLevel: "Beginner",
+          teamType: "Youth",
+          trainingSchedule: "",
+          assignedCoachNames: [""],
+          selectionProfile: buildDefaultTeamSelectionProfile()
+        });
         setSaveState("create-team", "saved");
         setSaveMessage(`Created ${nextTeam.name}.`);
       } catch (error) {
@@ -2110,7 +2410,14 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
   };
 
   const startNewMyTeamsTeamDraft = () => {
-    setTeamDraft({ name: "", teamLevel: "Beginner", teamType: "Youth", trainingSchedule: "", assignedCoachNames: [""] });
+    setTeamDraft({
+      name: "",
+      teamLevel: "Beginner",
+      teamType: "Youth",
+      trainingSchedule: "",
+      assignedCoachNames: [""],
+      selectionProfile: buildDefaultTeamSelectionProfile()
+    });
   };
 
   const updateAssignedCoachName = (index: number, value: string) => {
@@ -2137,24 +2444,169 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
     });
   };
 
-  const saveMyTeamsTeamProfile = (draft: TeamBuilderTeamDraftInput) => {
-    const occurredAt = new Date().toISOString();
-    const nextTeam = createPlannerTeamRecord(plannerState, draft, occurredAt);
+  const saveMyTeamsTeamProfileLocal = (draft: TeamBuilderTeamDraftInput, syncSource?: TeamRemoteSyncSource) => {
+    const occurredAt = syncSource?.updatedAt?.trim() || new Date().toISOString();
+    const nextTeam = createPlannerTeamRecord(plannerStateRef.current, draft, occurredAt, syncSource);
 
-    persistState((current) => ({
+    patchPlannerState((current) => ({
       ...current,
       teams: upsertRecordById(current.teams, nextTeam)
-    }));
+    }), {
+      workspaceRootId: syncSource?.workspaceRootId ?? plannerStateRef.current.workspaceRootId,
+      lockVersion: typeof syncSource?.lockVersion === "number" ? syncSource.lockVersion : plannerStateRef.current.lockVersion,
+      lastChangeSetId: syncSource?.lastChangeSetId ?? plannerStateRef.current.lastChangeSetId ?? null,
+      archivedAt: syncSource?.archivedAt ?? plannerStateRef.current.archivedAt ?? null,
+      deletedAt: syncSource?.deletedAt ?? plannerStateRef.current.deletedAt ?? null,
+      restoredFromVersionId: syncSource?.restoredFromVersionId ?? plannerStateRef.current.restoredFromVersionId ?? null,
+      updatedAt: occurredAt
+    }, occurredAt);
     setSaveMessage(`Created ${nextTeam.name}.`);
     return nextTeam.id;
   };
 
-  const updateMyTeamsTeamProfile = (teamId: string, draft: TeamBuilderTeamDraftInput) => {
-    persistState((current) => updateMyTeamsTeamProfileState(current, {
+  const updateMyTeamsTeamProfileLocal = (teamId: string, draft: TeamBuilderTeamDraftInput, syncSource?: TeamRemoteSyncSource) => {
+    const occurredAt = syncSource?.updatedAt?.trim() || new Date().toISOString();
+
+    patchPlannerState((current) => updateMyTeamsTeamProfileState(current, {
       teamId,
       ...draft
-    }, new Date().toISOString()));
+    }, occurredAt, syncSource), {
+      workspaceRootId: syncSource?.workspaceRootId ?? plannerStateRef.current.workspaceRootId,
+      lockVersion: typeof syncSource?.lockVersion === "number" ? syncSource.lockVersion : plannerStateRef.current.lockVersion,
+      lastChangeSetId: syncSource?.lastChangeSetId ?? plannerStateRef.current.lastChangeSetId ?? null,
+      archivedAt: syncSource?.archivedAt ?? plannerStateRef.current.archivedAt ?? null,
+      deletedAt: syncSource?.deletedAt ?? plannerStateRef.current.deletedAt ?? null,
+      restoredFromVersionId: syncSource?.restoredFromVersionId ?? plannerStateRef.current.restoredFromVersionId ?? null,
+      updatedAt: occurredAt
+    }, occurredAt);
     setSaveMessage(`Updated ${draft.name.trim() || "team"}.`);
+  };
+
+  const saveMyTeamsTeamProfile = async (draft: TeamBuilderTeamDraftInput) => {
+    if (!canUsePremiumAction()) {
+      throw new Error("Cheer Planner Premium is required.");
+    }
+
+    return runSavingAction("myteams-team-save", async () => {
+      const currentState = plannerStateRef.current;
+      const occurredAt = new Date().toISOString();
+      const teamPayload: PendingTeamSavePayload = {
+        workspaceId: currentState.workspaceId,
+        workspaceRootId: currentState.workspaceRootId ?? null,
+        expectedLockVersion: null,
+        name: draft.name,
+        teamLevel: draft.teamLevel,
+        teamType: draft.teamType,
+        teamDivision: draft.teamDivision || "Elite",
+        trainingDays: draft.trainingDays || "",
+        trainingHours: draft.trainingHours || "",
+        linkedCoachIds: draft.linkedCoachIds ?? [],
+        assignedCoachNames: draft.assignedCoachNames ?? [],
+        selectionProfile: draft.selectionProfile ?? buildDefaultTeamSelectionProfile(),
+        fallbackTeam: {
+          memberAthleteIds: [],
+          memberRegistrationNumbers: [],
+          status: "draft"
+        }
+      };
+
+      try {
+        const result = await savePlannerTeam(scope, teamPayload);
+        const nextTeam = result.team ?? createPlannerTeamRecord(currentState, draft, occurredAt);
+
+        patchPlannerState((current) => ({
+          ...current,
+          teams: upsertRecordById(current.teams, nextTeam)
+        }), nextTeam, nextTeam.updatedAt || occurredAt);
+        setSaveState("myteams-team-save", "saved");
+        setSaveMessage(`Created ${nextTeam.name}.`);
+        return nextTeam.id;
+      } catch (error) {
+        if (isPlannerOfflineError(error)) {
+          const localTeamId = saveMyTeamsTeamProfileLocal(draft);
+          queueOfflineWrite(
+            "myteams-team-save",
+            buildPendingWrite(scope, "team-save", teamPayload.workspaceRootId ?? null, teamPayload)
+          );
+          return localTeamId;
+        }
+
+        setSaveState("myteams-team-save", "error");
+        handlePremiumWriteError(error, "Unable to create the team in Supabase.");
+        throw error instanceof Error ? error : new Error("Unable to create the team right now.");
+      }
+    });
+  };
+
+  const updateMyTeamsTeamProfile = async (teamId: string, draft: TeamBuilderTeamDraftInput) => {
+    if (!canUsePremiumAction()) {
+      throw new Error("Cheer Planner Premium is required.");
+    }
+
+    return runSavingAction("myteams-team-edit", async () => {
+      const currentState = plannerStateRef.current;
+      const currentTeam = currentState.teams.find((team) => team.id === teamId) ?? null;
+
+      if (!currentTeam) {
+        throw new Error("Team record was not found.");
+      }
+
+      const occurredAt = new Date().toISOString();
+      const teamPayload: PendingTeamSavePayload = {
+        workspaceId: currentState.workspaceId,
+        workspaceRootId: currentTeam.workspaceRootId ?? currentState.workspaceRootId ?? null,
+        expectedLockVersion: currentTeam.lockVersion ?? null,
+        teamId: currentTeam.remoteTeamId || (isUuidString(currentTeam.id) ? currentTeam.id : null),
+        name: draft.name,
+        teamLevel: draft.teamLevel,
+        teamType: draft.teamType,
+        teamDivision: draft.teamDivision || currentTeam.teamDivision || "Elite",
+        trainingDays: draft.trainingDays || currentTeam.trainingDays || "",
+        trainingHours: draft.trainingHours || currentTeam.trainingHours || "",
+        linkedCoachIds: draft.linkedCoachIds ?? [],
+        assignedCoachNames: draft.assignedCoachNames ?? [],
+        selectionProfile: draft.selectionProfile ?? currentTeam.selectionProfile,
+        fallbackTeam: {
+          memberAthleteIds: currentTeam.memberAthleteIds ?? [],
+          memberRegistrationNumbers: currentTeam.memberRegistrationNumbers ?? [],
+          status: currentTeam.status
+        }
+      };
+
+      try {
+        const result = await savePlannerTeam(scope, teamPayload);
+        const nextTeam = result.team ?? updatePlannerTeamDefinition({
+          ...currentState,
+          teams: [currentTeam]
+        }, {
+          teamId,
+          name: draft.name,
+          teamLevel: draft.teamLevel,
+          teamType: draft.teamType,
+          selectionProfile: draft.selectionProfile ?? currentTeam.selectionProfile
+        }, occurredAt).teams[0];
+
+        patchPlannerState((current) => ({
+          ...current,
+          teams: upsertRecordById(current.teams, nextTeam)
+        }), nextTeam, nextTeam.updatedAt || occurredAt);
+        setSaveState("myteams-team-edit", "saved");
+        setSaveMessage(`Updated ${nextTeam.name}.`);
+      } catch (error) {
+        if (isPlannerOfflineError(error)) {
+          updateMyTeamsTeamProfileLocal(teamId, draft);
+          queueOfflineWrite(
+            "myteams-team-edit",
+            buildPendingWrite(scope, "team-save", teamPayload.workspaceRootId ?? null, teamPayload)
+          );
+          return;
+        }
+
+        setSaveState("myteams-team-edit", "error");
+        handlePremiumWriteError(error, "Unable to update the team in Supabase.");
+        throw error instanceof Error ? error : new Error("Unable to update the team right now.");
+      }
+    });
   };
 
   const assignToTeam = async (athleteId: string, teamId: string) => {
@@ -2167,13 +2619,6 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
 
     if (!athlete || !team) {
       setSaveMessage("Athlete or team record was not found.");
-      return;
-    }
-
-    if (!canAssignQualifiedLevelToTeam(athlete.displayLevel, team.teamLevel)) {
-      setSaveMessage(
-        `${athlete.name} is qualified for ${athlete.displayLevel}, which does not meet ${team.name} (${team.teamLevel}).`
-      );
       return;
     }
 
@@ -2197,7 +2642,13 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
         lastChangeSetId: rosterSync.changeSetId ?? remoteAthlete.lastChangeSetId ?? null,
         updatedAt: occurredAt
       }, occurredAt);
-      setSaveMessage(`Assigned ${remoteAthlete.name} to ${team.name}.`);
+      const nextCandidate = athleteMapById.get(remoteAthlete.id) ?? athlete;
+      const warnings = buildTeamSelectionWarnings(nextCandidate, team);
+      setSaveMessage(
+        warnings.length
+          ? `Assigned ${remoteAthlete.name} to ${team.name}. ${buildTeamFitSummary(warnings)}.`
+          : `Assigned ${remoteAthlete.name} to ${team.name}.`
+      );
     } catch (error) {
       handleWriteFailure(
         "team-assignments",
@@ -2334,7 +2785,7 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
           patchPlannerState((current) => ({
             ...current,
             athletes: current.athletes.filter((item) => item.id !== athlete.id),
-            evaluations: current.evaluations.filter((item) => item.athleteId !== athlete.id),
+            tryoutRecords: current.tryoutRecords.filter((item) => item.athleteId !== athlete.id),
             teams: current.teams.map((team) => ({
               ...team,
               memberAthleteIds: team.memberAthleteIds.filter((memberId) => memberId !== athlete.id),
@@ -2345,7 +2796,7 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
           patchPlannerState((current) => ({
             ...current,
             athletes: current.athletes.filter((item) => item.id !== athlete.id),
-            evaluations: current.evaluations.filter((item) => item.athleteId !== athlete.id),
+            tryoutRecords: current.tryoutRecords.filter((item) => item.athleteId !== athlete.id),
             teams: current.teams.map((team) => ({
               ...team,
               memberAthleteIds: team.memberAthleteIds.filter((memberId) => memberId !== athlete.id),
@@ -2354,10 +2805,12 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
           }), null, occurredAt);
         }
 
-        await loadTrash().catch(() => undefined);
-
         setSaveState("athlete-delete", "saved");
         setSaveMessage(`Deleted ${athlete.name}. You can restore it from Trash for 90 days.`);
+        syncAfterTrashMutation(
+          `Deleted ${athlete.name}. You can restore it from Trash for 90 days.`,
+          `Deleted ${athlete.name}. Trash sync may take a moment.`
+        );
         return true;
       } catch (error) {
         handlePremiumWriteError(error, "Unable to delete the athlete in Supabase.");
@@ -2410,10 +2863,12 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
           }, null, occurredAt);
         }
 
-        await loadTrash().catch(() => undefined);
-
         setSaveState("team-delete", "saved");
         setSaveMessage(`Deleted ${team.name}. You can restore it from Trash for 90 days.`);
+        syncAfterTrashMutation(
+          `Deleted ${team.name}. You can restore it from Trash for 90 days.`,
+          `Deleted ${team.name}. Trash sync may take a moment.`
+        );
         return true;
       } catch (error) {
         handlePremiumWriteError(error, "Unable to delete the team in Supabase.");
@@ -2443,15 +2898,35 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
 
     return runSavingAction("trash-restore", async () => {
       try {
-        await restorePlannerEntity(scope, {
+        const result = await restorePlannerEntity(scope, {
+          workspaceId: plannerState.workspaceId,
           workspaceRootId: plannerState.workspaceRootId ?? null,
           entityType: item.entityType,
           versionId: item.versionId
         });
-        await refreshRemoteFoundation();
-        await loadTrash();
+
+        if (result.entityType === "athlete" && result.athlete) {
+          patchPlannerState((current) => ({
+            ...current,
+            athletes: upsertAthleteRecord(current.athletes, result.athlete!)
+          }), result.athlete, result.athlete.updatedAt);
+        }
+
+        if (result.entityType === "team" && result.team) {
+          patchPlannerState((current) => ({
+            ...current,
+            teams: upsertRecordById(current.teams, result.team!)
+          }), result.team, result.team.updatedAt);
+        }
+
+        setTrashItems((current) => current.filter((trashItem) => trashItem.versionId !== item.versionId));
         setSaveState("trash-restore", "saved");
         setSaveMessage(`Restored ${item.name}.`);
+        syncAfterTrashMutation(
+          `Restored ${item.name}.`,
+          `Restored ${item.name}. Workspace sync may take a moment.`
+        );
+
         return true;
       } catch (error) {
         handlePremiumWriteError(error, "Unable to restore this item right now.");
@@ -2465,7 +2940,8 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
       teamId: team.id,
       name: team.name,
       teamLevel: team.teamLevel,
-      teamType: team.teamType
+      teamType: team.teamType,
+      selectionProfile: buildTeamSelectionProfileForDraft(team.selectionProfile)
     });
   };
 
@@ -2486,21 +2962,15 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
       return;
     }
 
-    const currentTeamWithMembers = teamWithMembersMap.get(teamEdit.teamId);
-    const invalidMembers = (currentTeamWithMembers?.members ?? [])
-      .filter((member) => !canAssignQualifiedLevelToTeam(member.displayLevel, teamEdit.teamLevel));
-
-    if (invalidMembers.length) {
-      const preview = invalidMembers.slice(0, 3).map((member) => member.name).join(", ");
-      const suffix = invalidMembers.length > 3 ? ` and ${invalidMembers.length - 3} more` : "";
-      setSaveMessage(
-        `Cannot change ${currentTeam.name} to ${teamEdit.teamLevel}. ${preview}${suffix} no longer meet that team level.`
-      );
-      return;
-    }
-
     await runSavingAction("team-edit", async () => {
       const occurredAt = new Date().toISOString();
+      const currentTeamWithMembers = teamWithMembersMap.get(teamEdit.teamId);
+      const selectionWarnings = (currentTeamWithMembers?.members ?? [])
+        .flatMap((member) => buildTeamSelectionWarnings(member, {
+          ...currentTeam,
+          teamLevel: teamEdit.teamLevel,
+          selectionProfile: teamEdit.selectionProfile
+        }));
       const teamPayload: PendingTeamSavePayload = {
         workspaceId: plannerState.workspaceId,
         workspaceRootId: currentTeam.workspaceRootId ?? plannerState.workspaceRootId ?? null,
@@ -2514,6 +2984,7 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
         trainingHours: currentTeam.trainingHours || "",
         linkedCoachIds: currentTeam.linkedCoachIds ?? [],
         assignedCoachNames: currentTeam.assignedCoachNames ?? [],
+        selectionProfile: teamEdit.selectionProfile,
         fallbackTeam: {
           memberAthleteIds: currentTeam.memberAthleteIds ?? [],
           memberRegistrationNumbers: currentTeam.memberRegistrationNumbers ?? [],
@@ -2531,7 +3002,8 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
             teamId: currentTeam.id,
             name: teamEdit.name,
             teamLevel: teamEdit.teamLevel,
-            teamType: teamEdit.teamType
+            teamType: teamEdit.teamType,
+            selectionProfile: teamEdit.selectionProfile
           }, occurredAt).teams[0];
 
           patchPlannerState((current) => ({
@@ -2548,12 +3020,17 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
             teamId: currentTeam.id,
             name: teamEdit.name,
             teamLevel: teamEdit.teamLevel,
-            teamType: teamEdit.teamType
+            teamType: teamEdit.teamType,
+            selectionProfile: teamEdit.selectionProfile
           }, occurredAt), null, occurredAt);
         }
 
         setSaveState("team-edit", "saved");
-        setSaveMessage(`Updated ${teamEdit.name.trim() || currentTeam.name}.`);
+        setSaveMessage(
+          selectionWarnings.length
+            ? `Updated ${teamEdit.name.trim() || currentTeam.name}. ${selectionWarnings.length} roster warnings remain for the selected criteria.`
+            : `Updated ${teamEdit.name.trim() || currentTeam.name}.`
+        );
         setTeamEdit(null);
       } catch (error) {
         handleWriteFailure(
@@ -2941,7 +3418,7 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
     settingsOpen,
     setSettingsOpen,
     summary,
-    recentEvaluations,
+    recentTryoutRecords,
     saveAthleteProfile,
     deleteAthleteProfile,
     resetAthleteDraft,
@@ -2951,15 +3428,18 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
     removeAssignedCoachName,
     saveMyTeamsTeamProfile,
     updateMyTeamsTeamProfile,
-    saveEvaluation,
-    loadEvaluation,
+    saveTryoutRecord,
+    loadTryoutRecord,
     updateTemplateOption,
     removeTemplateOption,
     addTemplateOption,
+    updateTemplateBucketLabel,
     updateTemplateSkill,
     moveTemplateSkill,
     addTemplateSkill,
     removeTemplateSkill,
+    addTemplateBucket,
+    removeTemplateBucket,
     updateSkillCount,
     saveTemplate,
     resetTemplate,
@@ -3025,7 +3505,7 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
     levelLabelsList: LEVEL_LABELS,
     canAssignQualifiedLevelToTeam,
     formatScore: formatPlannerScore,
-    getEvaluationDate: getTryoutEvaluationDate,
+    getTryoutRecordDate: getTryoutRecordDate,
     getRecentAthleteLabel
   };
 }

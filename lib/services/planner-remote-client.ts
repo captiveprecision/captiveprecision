@@ -1,14 +1,14 @@
 import type { AthleteRecord } from "@/lib/domain/athlete";
-import type { EvaluationRecord } from "@/lib/domain/evaluation-record";
+import type { TryoutRecord } from "@/lib/domain/evaluation-record";
 import type { PlannerProject } from "@/lib/domain/planner-project";
 import type { TeamRoutinePlan } from "@/lib/domain/routine-plan";
 import type { TeamSeasonPlan } from "@/lib/domain/season-plan";
 import type { TeamSkillPlan } from "@/lib/domain/skill-plan";
-import type { TeamRecord } from "@/lib/domain/team";
+import type { TeamRecord, TeamSelectionProfile } from "@/lib/domain/team";
 import type { PlannerTrashItem, RestorePreview, WorkspaceRoot } from "@/lib/domain/planner-versioning";
 import {
   buildPlannerAthleteFromRow,
-  buildPlannerEvaluationFromRow,
+  buildPlannerTryoutRecordFromRow,
   buildPlannerProjectFromRow,
   buildRoutinePlanFromRow,
   buildTeamSeasonPlanFromRow,
@@ -23,6 +23,15 @@ type PlannerCommandResult<TEntity> = {
   lockVersion: number;
   changeSetId: string;
   latestVersionNumber: number;
+  versionId?: string;
+  restoredRelations?: Record<string, number>;
+};
+
+type PlannerRestoreResult = {
+  entityType: "athlete" | "team";
+  rawEntity: PlannerCommandEntityRow;
+  athlete?: AthleteRecord;
+  team?: TeamRecord;
   restoredRelations?: Record<string, number>;
 };
 
@@ -125,7 +134,7 @@ function asStringArray(value: unknown) {
     : [];
 }
 
-function normalizeCommandTeam(
+export function normalizeCommandTeam(
   workspaceId: string,
   entity: PlannerCommandEntityRow,
   result: Pick<PlannerCommandResult<PlannerCommandEntityRow>, "lockVersion" | "changeSetId">,
@@ -149,6 +158,7 @@ function normalizeCommandTeam(
     linkedCoachIds: asStringArray(metadata.linkedCoachIds),
     memberAthleteIds: fallback?.memberAthleteIds ?? [],
     memberRegistrationNumbers: fallback?.memberRegistrationNumbers ?? [],
+    selectionProfile: metadata.selectionProfile as TeamSelectionProfile | undefined,
     status: fallback?.status ?? "draft",
     createdAt: asString(row.created_at),
     updatedAt: asString(row.updated_at),
@@ -161,7 +171,9 @@ function normalizeCommandTeam(
 }
 
 export async function fetchPlannerFoundation(scope: PlannerWorkspaceScope) {
-  const response = await performPlannerRequest(buildPlannerUrl("/api/planner/foundation", scope));
+  const response = await performPlannerRequest(buildPlannerUrl("/api/planner/foundation", scope), {
+    cache: "no-store"
+  });
   const result = await parseResponse<PlannerRemoteFoundationSnapshot & { error?: string; code?: string }>(response);
 
   if (!response.ok || !result) {
@@ -173,7 +185,9 @@ export async function fetchPlannerFoundation(scope: PlannerWorkspaceScope) {
 
 export async function savePlannerProjectConfig(
   scope: PlannerWorkspaceScope,
-  payload: Pick<PlannerProject, "workspaceId" | "name" | "status" | "pipelineStage" | "template" | "qualificationRules" | "workspaceRootId" | "lockVersion">
+  payload: Pick<PlannerProject, "workspaceId" | "name" | "status" | "pipelineStage" | "qualificationRules" | "workspaceRootId" | "lockVersion"> & {
+    template: Record<string, unknown>;
+  }
 ) {
   const result = await postPlannerCommand<PlannerCommandResult<PlannerCommandEntityRow>>(scope, "/api/planner/commands/project-save", {
     workspaceRootId: payload.workspaceRootId ?? null,
@@ -208,17 +222,17 @@ export async function savePlannerAthlete(
   return buildPlannerAthleteFromRow(buildCommandEntityRow(result.entity, result) as never, payload.workspaceId);
 }
 
-export async function savePlannerEvaluation(scope: PlannerWorkspaceScope, evaluation: EvaluationRecord) {
-  const result = await postPlannerCommand<PlannerCommandResult<PlannerCommandEntityRow>>(scope, "/api/planner/commands/evaluation-save", {
-    workspaceRootId: evaluation.workspaceRootId ?? null,
-    expectedLockVersion: evaluation.lockVersion ?? null,
-    evaluationId: evaluation.id,
-    athleteId: evaluation.athleteId,
-    occurredAt: evaluation.occurredAt,
-    record: evaluation
+export async function savePlannerTryoutRecord(scope: PlannerWorkspaceScope, tryoutRecord: TryoutRecord) {
+  const result = await postPlannerCommand<PlannerCommandResult<PlannerCommandEntityRow>>(scope, "/api/planner/commands/tryout-save", {
+    workspaceRootId: tryoutRecord.workspaceRootId ?? null,
+    expectedLockVersion: tryoutRecord.lockVersion ?? null,
+    tryoutRecordId: tryoutRecord.id,
+    athleteId: tryoutRecord.athleteId,
+    occurredAt: tryoutRecord.occurredAt,
+    record: tryoutRecord
   });
 
-  return buildPlannerEvaluationFromRow(buildCommandEntityRow(result.entity, result) as never, evaluation.workspaceId);
+  return buildPlannerTryoutRecordFromRow(buildCommandEntityRow(result.entity, result) as never, tryoutRecord.workspaceId);
 }
 
 export async function savePlannerSkillPlan(scope: PlannerWorkspaceScope, plan: TeamSkillPlan) {
@@ -275,6 +289,7 @@ export async function savePlannerTeam(
     trainingHours: string;
     linkedCoachIds: string[];
     assignedCoachNames: string[];
+    selectionProfile: TeamSelectionProfile;
     fallbackTeam?: Pick<TeamRecord, "memberAthleteIds" | "memberRegistrationNumbers" | "status">;
   }
 ) {
@@ -289,7 +304,8 @@ export async function savePlannerTeam(
     trainingDays: payload.trainingDays,
     trainingHours: payload.trainingHours,
     linkedCoachIds: payload.linkedCoachIds,
-    assignedCoachNames: payload.assignedCoachNames
+    assignedCoachNames: payload.assignedCoachNames,
+    selectionProfile: payload.selectionProfile
   });
 
   return {
@@ -379,7 +395,9 @@ export async function fetchPlannerTrash(
     url.searchParams.set("limit", String(payload.limit));
   }
 
-  const response = await performPlannerRequest(url.toString());
+  const response = await performPlannerRequest(url.toString(), {
+    cache: "no-store"
+  });
   const result = await parseResponse<{ workspaceRoot: WorkspaceRoot; items: PlannerTrashItem[]; error?: string; code?: string }>(response);
 
   if (!response.ok || !result) {
@@ -405,7 +423,9 @@ export async function fetchPlannerRestorePreview(
     url.searchParams.set("workspaceRootId", payload.workspaceRootId);
   }
 
-  const response = await performPlannerRequest(url.toString());
+  const response = await performPlannerRequest(url.toString(), {
+    cache: "no-store"
+  });
   const result = await parseResponse<{ workspaceRoot: WorkspaceRoot; preview: RestorePreview; error?: string; code?: string }>(response);
 
   if (!response.ok || !result) {
@@ -418,16 +438,37 @@ export async function fetchPlannerRestorePreview(
 export async function restorePlannerEntity(
   scope: PlannerWorkspaceScope,
   payload: {
+    workspaceId: string;
     workspaceRootId?: string | null;
     entityType: string;
     versionId: string;
     expectedLockVersion?: number | null;
   }
 ) {
-  return postPlannerCommand<PlannerCommandResult<PlannerCommandEntityRow>>(scope, "/api/planner/commands/entity-restore", {
+  const result = await postPlannerCommand<PlannerCommandResult<PlannerCommandEntityRow>>(scope, "/api/planner/commands/entity-restore", {
     workspaceRootId: payload.workspaceRootId ?? null,
     entityType: payload.entityType,
     versionId: payload.versionId,
     expectedLockVersion: payload.expectedLockVersion ?? null
   });
+
+  if (payload.entityType === "athlete") {
+    return {
+      entityType: "athlete" as const,
+      rawEntity: result.entity,
+      athlete: buildPlannerAthleteFromRow(buildCommandEntityRow(result.entity, result) as never, payload.workspaceId),
+      restoredRelations: result.restoredRelations
+    } satisfies PlannerRestoreResult;
+  }
+
+  if (payload.entityType === "team") {
+    return {
+      entityType: "team" as const,
+      rawEntity: result.entity,
+      team: normalizeCommandTeam(payload.workspaceId, result.entity, result),
+      restoredRelations: result.restoredRelations
+    } satisfies PlannerRestoreResult;
+  }
+
+  throw new PlannerApiError("Unable to restore this planner entity.", "RESTORE_NOT_AVAILABLE");
 }

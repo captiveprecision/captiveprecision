@@ -12,9 +12,9 @@ export type MyTeamsMemberSummary = {
   athleteName: string;
   registrationNumber: string;
   qualifiedLevel: PlannerQualifiedLevel;
-  // Minimal latest-evaluation provenance for UI display and drill-in. This is derived, not persisted here.
-  latestEvaluationId: string | null;
-  latestEvaluationOccurredAt: string | null;
+  // Minimal latest tryout provenance for UI display and drill-in. This is derived, not persisted here.
+  latestTryoutRecordId: string | null;
+  latestTryoutRecordOccurredAt: string | null;
   selectedSkillCount: number;
   approvedSkillCount: number;
   plannedRoutineItemCount: number;
@@ -64,8 +64,8 @@ export type MyTeamsTeamSummary = {
   memberCount: number;
   qualifiedMemberCount: number;
   unqualifiedMemberCount: number;
-  // Latest evaluation timestamp across the team's current canonical members.
-  latestEvaluationOccurredAt: string | null;
+  // Latest tryout timestamp across the team's current canonical members.
+  latestTryoutRecordOccurredAt: string | null;
   members: MyTeamsMemberSummary[];
   skillPlan: MyTeamsSkillPlanSummary;
   routinePlan: MyTeamsRoutinePlanSummary;
@@ -85,9 +85,9 @@ function getNextTargetDate(plan: TeamSeasonPlan | null) {
   return candidates[0] ?? null;
 }
 
-function getLatestEvaluationOccurredAt(members: MyTeamsMemberSummary[]) {
+function getLatestTryoutRecordOccurredAt(members: MyTeamsMemberSummary[]) {
   return members
-    .map((member) => member.latestEvaluationOccurredAt)
+    .map((member) => member.latestTryoutRecordOccurredAt)
     .filter((value): value is string => Boolean(value))
     .sort((left, right) => new Date(right).getTime() - new Date(left).getTime())[0] ?? null;
 }
@@ -117,8 +117,8 @@ export function buildMyTeamsTeamSummaries(project: PlannerProject): MyTeamsTeamS
         athleteName: member.name,
         registrationNumber: member.registrationNumber,
         qualifiedLevel: member.displayLevel,
-        latestEvaluationId: member.latestEvaluation?.id ?? null,
-        latestEvaluationOccurredAt: member.latestEvaluation?.occurredAt ?? member.latestEvaluation?.createdAt ?? null,
+        latestTryoutRecordId: member.latestTryoutRecord?.id ?? null,
+        latestTryoutRecordOccurredAt: member.latestTryoutRecord?.occurredAt ?? member.latestTryoutRecord?.createdAt ?? null,
         selectedSkillCount,
         approvedSkillCount,
         plannedRoutineItemCount,
@@ -141,7 +141,7 @@ export function buildMyTeamsTeamSummaries(project: PlannerProject): MyTeamsTeamS
       memberCount: members.length,
       qualifiedMemberCount: members.filter((member) => member.qualifiedLevel !== "Unqualified").length,
       unqualifiedMemberCount: members.filter((member) => member.qualifiedLevel === "Unqualified").length,
-      latestEvaluationOccurredAt: getLatestEvaluationOccurredAt(members),
+      latestTryoutRecordOccurredAt: getLatestTryoutRecordOccurredAt(members),
       members,
       skillPlan: {
         planId: skillPlan?.id ?? null,

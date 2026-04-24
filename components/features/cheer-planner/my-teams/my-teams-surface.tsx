@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 
 import { Badge, Button, Card, CardContent, EmptyState, Input, SectionHeader, Select } from "@/components/ui";
 import type { TeamBuilderTeamDraftInput } from "@/lib/services/planner-team-builder";
-import type { LinkedCoachOption } from "@/lib/services/team-coach-directory";
+import { findCoachOptionByText, type LinkedCoachOption } from "@/lib/services/team-coach-directory";
 import type { CheerPlannerIntegration } from "@/lib/services/planner-integration";
 
 const TEAM_LEVEL_OPTIONS = ["Level 1", "Level 2", "Level 3", "Level 4", "Level 5", "Level 6", "Level 7"] as const;
@@ -28,20 +28,51 @@ type MyTeamsTeamDraft = {
   coachAssignments: CoachAssignmentDraft[];
 };
 
-type CreateTeamApiResponse = {
-  teamId: string;
-  assignedCoachNames: string[];
-  linkedCoachIds: string[];
-};
-
 type MyTeamsSurfaceProps = {
   teams: CheerPlannerIntegration["myTeamsSummaries"];
   coachOptions: LinkedCoachOption[];
-  saveMyTeamsTeamProfile: (draft: TeamBuilderTeamDraftInput) => string;
-  updateMyTeamsTeamProfile: (teamId: string, draft: TeamBuilderTeamDraftInput) => void;
+  saveMyTeamsTeamProfile: (draft: TeamBuilderTeamDraftInput) => Promise<string>;
+  updateMyTeamsTeamProfile: (teamId: string, draft: TeamBuilderTeamDraftInput) => Promise<void>;
   requestDeleteTeam: (teamId: string) => void;
   deletingTeamId?: string | null;
 };
+
+function uniqueStrings(values: string[]) {
+  return Array.from(new Set(values.filter(Boolean)));
+}
+
+function resolveCoachAssignments(coachOptions: LinkedCoachOption[], assignments: CoachAssignmentDraft[]) {
+  const coachOptionMap = new Map(coachOptions.map((option) => [option.id, option] as const));
+  const linkedCoachIds: string[] = [];
+  const assignedCoachNames: string[] = [];
+
+  assignments.forEach((assignment) => {
+    const selectedCoachId = assignment.selectedCoachId.trim();
+    const manualName = assignment.manualName.trim();
+    const selectedOption = selectedCoachId && selectedCoachId !== MANUAL_COACH_VALUE
+      ? coachOptionMap.get(selectedCoachId) ?? null
+      : null;
+    const matchedManualOption = !selectedOption && manualName
+      ? findCoachOptionByText(coachOptions, manualName)
+      : null;
+    const resolvedOption = selectedOption ?? matchedManualOption;
+
+    if (resolvedOption) {
+      linkedCoachIds.push(resolvedOption.id);
+      assignedCoachNames.push(resolvedOption.label);
+      return;
+    }
+
+    if (manualName) {
+      assignedCoachNames.push(manualName);
+    }
+  });
+
+  return {
+    linkedCoachIds: uniqueStrings(linkedCoachIds),
+    assignedCoachNames: uniqueStrings(assignedCoachNames)
+  };
+}
 
 function buildEmptyCoachAssignment(): CoachAssignmentDraft {
   return {
@@ -214,30 +245,7 @@ export function MyTeamsSurface({
 
     try {
       const editingTeam = editingTeamId ? teams.find((team) => team.teamId === editingTeamId) ?? null : null;
-      const method = editingTeam ? "PATCH" : "POST";
-      const response = await fetch("/api/coach/teams", {
-        method,
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          teamId: editingTeam?.remoteTeamId || undefined,
-          name: teamDraft.name,
-          teamLevel: teamDraft.teamLevel,
-          teamType: teamDraft.teamType,
-          teamDivision: teamDraft.teamDivision,
-          trainingDays: teamDraft.trainingDays,
-          trainingHours: teamDraft.trainingHours,
-          coachAssignments: teamDraft.coachAssignments
-        })
-      });
-
-      const result = await response.json().catch(() => null) as CreateTeamApiResponse & { error?: string } | null;
-
-      if (!response.ok || !result) {
-        setFormError(result?.error ?? `Unable to ${editingTeam ? "update" : "create"} the team right now.`);
-        return;
-      }
+      const resolvedCoaches = resolveCoachAssignments(coachOptions, teamDraft.coachAssignments);
 
       const nextDraft: TeamBuilderTeamDraftInput = {
         name: teamDraft.name,
@@ -246,17 +254,17 @@ export function MyTeamsSurface({
         teamDivision: teamDraft.teamDivision,
         trainingDays: teamDraft.trainingDays,
         trainingHours: teamDraft.trainingHours,
-        assignedCoachNames: result.assignedCoachNames,
-        linkedCoachIds: result.linkedCoachIds,
-        remoteTeamId: result.teamId
+        assignedCoachNames: resolvedCoaches.assignedCoachNames,
+        linkedCoachIds: resolvedCoaches.linkedCoachIds,
+        remoteTeamId: editingTeam?.remoteTeamId
       };
 
       const localTeamId = editingTeam
         ? editingTeam.teamId
-        : saveMyTeamsTeamProfile(nextDraft);
+        : await saveMyTeamsTeamProfile(nextDraft);
 
       if (editingTeam) {
-        updateMyTeamsTeamProfile(editingTeam.teamId, nextDraft);
+        await updateMyTeamsTeamProfile(editingTeam.teamId, nextDraft);
       }
 
       setSelectedTeamId(localTeamId);
@@ -524,8 +532,8 @@ export function MyTeamsSurface({
                             <span>{team.seasonPlan.checkpointCount} Checkpoints / {team.seasonPlan.completedCheckpointCount} Completed</span>
                           </div>
                           <div className="planner-summary-row">
-                            <strong>Latest Evaluation</strong>
-                            <span>{team.latestEvaluationOccurredAt ? new Date(team.latestEvaluationOccurredAt).toLocaleDateString("en-US") : "No Evaluation"}</span>
+                            <strong>Latest Tryout</strong>
+                            <span>{team.latestTryoutRecordOccurredAt ? new Date(team.latestTryoutRecordOccurredAt).toLocaleDateString("en-US") : "No Tryout"}</span>
                           </div>
                         </div>
 

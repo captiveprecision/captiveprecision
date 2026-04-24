@@ -12,6 +12,10 @@ function asStringArray(value: unknown) {
   return Array.isArray(value) ? value.flatMap((item) => typeof item === "string" ? [item.trim()] : []).filter(Boolean) : [];
 }
 
+function asObject(value: unknown) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
+}
+
 export async function POST(request: NextRequest) {
   try {
     const { session, error } = await requirePlannerSession();
@@ -39,7 +43,8 @@ export async function POST(request: NextRequest) {
       trainingDays: asString(payload?.trainingDays),
       trainingHours: asString(payload?.trainingHours),
       linkedCoachIds: asStringArray(payload?.linkedCoachIds),
-      assignedCoachNames: asStringArray(payload?.assignedCoachNames)
+      assignedCoachNames: asStringArray(payload?.assignedCoachNames),
+      selectionProfile: asObject(payload?.selectionProfile)
     });
 
     return NextResponse.json(result);

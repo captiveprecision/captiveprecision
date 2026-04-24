@@ -187,6 +187,16 @@
   text-align: center;
 }
 
+.planner-dance-item-card {
+  border-radius: 20px;
+}
+
+.planner-dance-item-card__content {
+  display: grid;
+  gap: 12px;
+  padding-block: 8px;
+}
+
 .myteams-hero-controls {
   justify-items: start;
   align-items: start;
@@ -376,16 +386,24 @@
 }
 
 .planner-trash-row__content {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
   gap: 16px;
-  align-items: flex-start;
 }
 
 .planner-trash-row__copy {
   min-width: 0;
   display: grid;
   gap: 8px;
+}
+
+.planner-trash-row__actions {
+  display: flex;
+  justify-content: center;
+}
+
+.planner-trash-row__actions .ui-button {
+  width: min(100%, 280px);
+  justify-content: center;
 }
 
 .planner-trash-row__copy p,
@@ -436,9 +454,24 @@
   padding: 24px;
 }
 
+.planner-modal__body--loading {
+  min-height: 180px;
+  place-items: center;
+}
+
+.planner-modal__loading-copy {
+  margin: 0;
+  color: var(--cp-muted);
+  text-align: center;
+}
+
 .planner-modal__header {
   border-bottom: 1px solid var(--cp-border);
   background: var(--cp-card);
+}
+
+.planner-modal--danger .planner-modal__header {
+  border-bottom: none;
 }
 
 .planner-modal__header h2 {
@@ -472,8 +505,17 @@
   background: var(--cp-card);
 }
 
+.planner-modal__actions {
+  padding: 0 24px 24px;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+.planner-modal__actions .ui-button {
+  min-width: 132px;
+}
+
 @media (max-width: 720px) {
-  .planner-trash-row__content,
   .planner-athlete-pool-row__content {
     flex-direction: column;
     align-items: stretch;
@@ -481,19 +523,32 @@
 
   .planner-athlete-row-actions,
   .planner-modal__actions {
-    justify-content: stretch;
+    justify-content: flex-end;
   }
 
   .planner-athlete-row-actions .ui-button,
-  .planner-modal__actions .ui-button,
   .planner-trash-row__content .ui-button {
     width: 100%;
     justify-content: center;
   }
 
+  .planner-trash-row__actions .ui-button {
+    width: min(100%, 280px);
+    min-width: 120px;
+  }
+
+  .planner-modal__actions .ui-button {
+    width: auto;
+    min-width: 120px;
+  }
+
   .planner-modal__header,
   .planner-modal__body {
     padding: 20px;
+  }
+
+  .planner-modal__actions {
+    padding: 0 20px 20px;
   }
 }
 

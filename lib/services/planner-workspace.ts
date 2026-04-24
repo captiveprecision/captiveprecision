@@ -1,6 +1,6 @@
 import type { AuthSession } from "@/lib/auth/session";
 import type { PlannerProject } from "@/lib/domain/planner-project";
-import { defaultQualificationRules, defaultTryoutTemplate } from "@/lib/tools/cheer-planner-tryouts";
+import { cloneTemplate, cloneTryoutTemplates, defaultQualificationRules, defaultTryoutTemplate, defaultTryoutTemplates } from "@/lib/tools/cheer-planner-tryouts";
 
 export type PlannerWorkspaceScope = "coach" | "gym";
 
@@ -60,13 +60,10 @@ export function buildDefaultPlannerProject(scope: PlannerScopeContext): PlannerP
     name: "Cheer Planner",
     status: "active",
     pipelineStage: "tryouts",
-    template: {
-      ...defaultTryoutTemplate,
-      options: defaultTryoutTemplate.options.map((option) => ({ ...option })),
-      defaultSkillCounts: { ...defaultTryoutTemplate.defaultSkillCounts }
-    },
+    template: cloneTemplate(defaultTryoutTemplate),
+    tryoutTemplates: cloneTryoutTemplates(defaultTryoutTemplates),
     athletes: [],
-    evaluations: [],
+    tryoutRecords: [],
     teams: [],
     skillPlans: [],
     routinePlans: [],

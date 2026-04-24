@@ -1,7 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { getPlannerScopeContext, requirePlannerSession } from "@/lib/services/planner-api-access";
-import { getPlannerRestorePreview } from "@/lib/services/planner-command-service";
+import { getPlannerCommandError, getPlannerRestorePreview } from "@/lib/services/planner-command-service";
+
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
+function getPlannerStatusCode(code: string | null) {
+  switch (code) {
+    case "WORKSPACE_ACCESS_DENIED":
+      return 403;
+    case "WORKSPACE_ROOT_NOT_FOUND":
+    case "VERSION_NOT_FOUND":
+      return 404;
+    case "RESTORE_NOT_AVAILABLE":
+    case "RESTORE_EXPIRED":
+      return 410;
+    default:
+      return code ? 409 : 500;
+  }
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -25,9 +43,21 @@ export async function GET(request: NextRequest) {
       versionId
     });
 
-    return NextResponse.json(result);
+    return NextResponse.json(result, {
+      headers: {
+        "Cache-Control": "no-store"
+      }
+    });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unable to load restore preview.";
-    return NextResponse.json({ error: message }, { status: 500 });
+    const plannerError = getPlannerCommandError(error);
+    return NextResponse.json(
+      { error: plannerError.message, code: plannerError.code },
+      {
+        status: getPlannerStatusCode(plannerError.code),
+        headers: {
+          "Cache-Control": "no-store"
+        }
+      }
+    );
   }
 }

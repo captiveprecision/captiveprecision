@@ -1,6 +1,6 @@
 "use client";
 
-import { Pencil, RotateCcw, Trash2 } from "lucide-react";
+import { Pencil, Plus, RotateCcw, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { MyTeamsSurface } from "@/components/features/cheer-planner/my-teams/my-teams-surface";
@@ -147,8 +147,8 @@ function RestoreDialog({
         </div>
 
         {loading ? (
-          <div className="planner-modal__body">
-            <p>Loading restore preview...</p>
+          <div className="planner-modal__body planner-modal__body--loading">
+            <p className="planner-modal__loading-copy">Loading restore preview...</p>
           </div>
         ) : error ? (
           <div className="planner-modal__body">
@@ -199,10 +199,10 @@ function RestoreDialog({
         )}
 
         <div className="planner-modal__actions">
-          <Button type="button" variant="secondary" onClick={onClose} disabled={restoring}>
+          <Button type="button" variant="secondary" size="sm" leadingIcon={<X size={16} />} onClick={onClose} disabled={restoring}>
             Cancel
           </Button>
-          <Button type="button" onClick={onConfirm} disabled={loading || restoring || Boolean(error)}>
+          <Button type="button" size="sm" leadingIcon={<RotateCcw size={16} />} onClick={onConfirm} disabled={loading || restoring || Boolean(error)}>
             {restoring ? "Restoring..." : "Restore"}
           </Button>
         </div>
@@ -250,10 +250,18 @@ function DeleteDialog({
         </div>
 
         <div className="planner-modal__actions">
-          <Button type="button" onClick={onClose} disabled={deleting}>
+          <Button type="button" size="sm" leadingIcon={<X size={16} />} onClick={onClose} disabled={deleting}>
             Cancel
           </Button>
-          <Button type="button" variant="ghost" className="planner-modal__destructive-ghost" onClick={onConfirm} disabled={deleting}>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            leadingIcon={<Trash2 size={16} />}
+            className="planner-modal__destructive-ghost"
+            onClick={onConfirm}
+            disabled={deleting}
+          >
             {deleting ? "Deleting..." : isAthlete ? "Delete Athlete" : "Delete Team"}
           </Button>
         </div>
@@ -531,7 +539,7 @@ export function MyTeamsWorkspaceShell({ coachOptions }: { coachOptions: LinkedCo
                 title="Manage Athletes"
                 description="Register athletes here, then search them directly from Tryouts when coaches are ready to evaluate."
                 actions={(
-                  <Button type="button" onClick={openCreateAthlete}>
+                  <Button type="button" onClick={openCreateAthlete} leadingIcon={<Plus size={16} />}>
                     Add Athlete
                 </Button>
               )}
@@ -726,15 +734,17 @@ export function MyTeamsWorkspaceShell({ coachOptions }: { coachOptions: LinkedCo
                         Available until {formatTrashDate(item.expiresAt)}
                       </p>
                     </div>
-                    <Button
-                      type="button"
-                      size="sm"
-                      leadingIcon={<RotateCcw />}
-                      disabled={!item.restoreAvailable}
-                      onClick={() => void openRestorePreview(item)}
-                    >
-                      Restore
-                    </Button>
+                    <div className="planner-trash-row__actions">
+                      <Button
+                        type="button"
+                        size="sm"
+                        leadingIcon={<RotateCcw />}
+                        disabled={!item.restoreAvailable}
+                        onClick={() => void openRestorePreview(item)}
+                      >
+                        Restore
+                      </Button>
+                    </div>
                   </CardContent>
                 </Card>
               )) : (

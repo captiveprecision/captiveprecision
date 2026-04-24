@@ -4630,10 +4630,20 @@
     gap: 16px;
   }
 
+  .planner-layout-grid {
+    gap: 16px;
+  }
+
   .planner-shell .ui-button,
   .planner-shell .ui-tabs-trigger {
     white-space: normal;
     text-align: center;
+  }
+
+  .planner-sport-tabs .ui-tabs-trigger,
+  .planner-athlete-intake-tabs .ui-tabs-trigger,
+  .planner-skill-option-tabs .ui-tabs-trigger {
+    white-space: nowrap;
   }
 
   .planner-hero-header .ui-section-header__actions,
@@ -4733,43 +4743,105 @@
     justify-self: flex-start;
   }
 
+  .planner-selected-athlete-summary {
+    grid-template-columns: 1fr;
+    align-items: start;
+  }
+
+  .planner-selected-athlete-summary__actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
   .planner-athlete-detail-row {
     grid-template-columns: 1fr;
     gap: 4px;
   }
 
   .planner-tryout-header {
-    flex-direction: row;
-    align-items: flex-start;
+    flex-direction: column;
+    align-items: stretch;
   }
 
   .planner-tryout-header .ui-section-header__actions {
-    width: auto;
-    align-items: flex-start;
+    width: 100%;
+    align-items: stretch;
+    margin-left: 0;
+  }
+
+  .planner-athlete-intake-tabs .ui-tabs {
+    width: 100%;
   }
 
   .planner-athlete-intake-tabs .ui-tabs-list {
+    width: 100%;
     max-width: 100%;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .planner-athlete-intake-tabs .ui-tabs-trigger {
-    width: auto;
+    width: 100%;
+    min-width: 0;
     justify-content: center;
   }
 
   .planner-settings-header {
-    flex-direction: row;
-    align-items: flex-start;
+    flex-direction: column;
+    align-items: stretch;
   }
 
   .planner-settings-header .ui-section-header__actions {
-    width: auto;
-    align-items: flex-start;
+    width: 100%;
+    align-items: stretch;
+    margin-left: 0;
   }
 
   .planner-settings-header .ui-section-header__actions > .ui-button {
-    width: auto;
+    width: 100%;
     justify-content: center;
+  }
+
+  .planner-template-level-head,
+  .planner-template-level-head .ui-button__label {
+    align-items: flex-start;
+    justify-content: flex-start;
+    flex-direction: column;
+  }
+
+  .planner-template-level-meta {
+    width: 100%;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 6px 12px;
+  }
+
+  .planner-template-skill-card__content,
+  .planner-option-row {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .planner-option-row__action {
+    justify-content: flex-start;
+  }
+
+  .planner-sport-tabs .ui-tabs-list {
+    display: flex;
+    grid-template-columns: none;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .planner-sport-tabs .ui-tabs-trigger {
+    flex: 0 0 auto;
+    min-width: max-content;
+  }
+
+  .planner-level-head .ui-button__label {
+    gap: 10px;
   }
 
   .planner-skill-row-action,
@@ -5381,9 +5453,18 @@
 }
 
 @media (max-width: 560px) {
+  .planner-athlete-search-result,
+  .planner-athlete-search-result .ui-button__label,
   .planner-recent-card,
   .planner-recent-card .ui-button__label {
+    flex-direction: column;
     align-items: flex-start;
+  }
+
+  .planner-athlete-search-result .ui-badge,
+  .planner-recent-card__meta {
+    justify-items: start;
+    text-align: left;
   }
 
   .planner-recent-card__meta {

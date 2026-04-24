@@ -8,7 +8,7 @@ export type VersionedEntityType =
   | "team"
   | "assignment"
   | "planner-project"
-  | "evaluation"
+  | "tryout-record"
   | "skill-plan"
   | "routine-plan"
   | "season-plan";

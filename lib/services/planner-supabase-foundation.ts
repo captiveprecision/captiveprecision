@@ -1,6 +1,6 @@
 import type { AthleteParentContact, AthleteRecord } from "@/lib/domain/athlete";
 import type { AuthSession } from "@/lib/auth/session";
-import type { EvaluationRecord } from "@/lib/domain/evaluation-record";
+import type { TryoutRecord } from "@/lib/domain/evaluation-record";
 import type { PlannerLevelLabel } from "@/lib/domain/planner-levels";
 import type { PlannerProject } from "@/lib/domain/planner-project";
 import type { TeamRoutinePlan } from "@/lib/domain/routine-plan";
@@ -9,7 +9,8 @@ import type { TeamSkillPlan } from "@/lib/domain/skill-plan";
 import type { TeamRecord } from "@/lib/domain/team";
 import type { SyncMetadata, WorkspaceRoot } from "@/lib/domain/planner-versioning";
 import {
-  normalizePlannerEvaluation,
+  normalizePlannerTryoutRecord,
+  normalizePlannerTeam,
   normalizePlannerProject,
   normalizeTeamRoutinePlan,
   normalizeTeamSeasonPlan,
@@ -25,7 +26,7 @@ import {
 } from "@/lib/services/planner-workspace";
 import { getPlannerSyncMetadata, resolveWorkspaceRoot } from "@/lib/services/planner-command-service";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { defaultQualificationRules, defaultTryoutTemplate } from "@/lib/tools/cheer-planner-tryouts";
+import { defaultQualificationRules, defaultTryoutTemplate, defaultTryoutTemplates } from "@/lib/tools/cheer-planner-tryouts";
 import type { Database, Json } from "@/lib/types/database";
 
 type TeamRow = Database["public"]["Tables"]["teams"]["Row"];
@@ -35,7 +36,7 @@ type AthleteAssignmentRow = Database["public"]["Tables"]["athlete_team_assignmen
 type ProfileRow = Database["public"]["Tables"]["profiles"]["Row"];
 type TeamRoutinePlanRow = Database["public"]["Tables"]["team_routine_plans"]["Row"];
 type PlannerProjectRow = Database["public"]["Tables"]["planner_projects"]["Row"];
-type PlannerEvaluationRow = Database["public"]["Tables"]["planner_evaluations"]["Row"];
+type PlannerTryoutRecordRow = Database["public"]["Tables"]["planner_tryout_records"]["Row"];
 type TeamSkillPlanRow = Database["public"]["Tables"]["team_skill_plans"]["Row"];
 type TeamSeasonPlanRow = Database["public"]["Tables"]["team_season_plans"]["Row"];
 
@@ -46,6 +47,7 @@ type TeamMetadata = {
   trainingHours?: string;
   assignedCoachNames?: string[];
   linkedCoachIds?: string[];
+  selectionProfile?: unknown;
 };
 
 type AthleteMetadata = {
@@ -69,7 +71,7 @@ export type PlannerRemoteFoundationSnapshot = {
   plannerProject: PlannerProject;
   assignments: Array<{ id: string; athleteId: string; teamId: string; createdAt: string; updatedAt: string; lockVersion?: number }>;
   athletes: AthleteRecord[];
-  evaluations: EvaluationRecord[];
+  tryoutRecords: TryoutRecord[];
   teams: TeamRecord[];
   skillPlans: TeamSkillPlan[];
   routinePlans: TeamRoutinePlan[];
@@ -216,7 +218,7 @@ function buildTeamRecord(
     .filter((assignment) => assignment.team_id === row.id)
     .map((assignment) => assignment.athlete_id);
 
-  return {
+  return normalizePlannerTeam({
     id: row.id,
     workspaceId,
     workspaceRootId: getWorkspaceRootId(versionedRow),
@@ -234,6 +236,7 @@ function buildTeamRecord(
     memberRegistrationNumbers: memberAthleteIds
       .map((athleteId) => athleteMap.get(athleteId)?.registrationNumber ?? "")
       .filter(Boolean),
+    selectionProfile: metadata.selectionProfile as TeamRecord["selectionProfile"] | undefined,
     status: "draft",
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -242,7 +245,7 @@ function buildTeamRecord(
     archivedAt: getArchivedAt(versionedRow),
     deletedAt: getDeletedAt(versionedRow),
     restoredFromVersionId: getRestoredFromVersionId(versionedRow)
-  };
+  });
 }
 
 export function buildPlannerProjectFromRow(row: PlannerProjectRow, workspaceId: string): PlannerProject {
@@ -264,14 +267,14 @@ export function buildPlannerProjectFromRow(row: PlannerProjectRow, workspaceId: 
     archivedAt: getArchivedAt(versionedRow),
     deletedAt: getDeletedAt(versionedRow),
     restoredFromVersionId: getRestoredFromVersionId(versionedRow)
-  }, defaultTryoutTemplate, defaultQualificationRules);
+  }, defaultTryoutTemplate, defaultQualificationRules, defaultTryoutTemplates);
 }
 
-export function buildPlannerEvaluationFromRow(row: PlannerEvaluationRow, workspaceId: string): EvaluationRecord {
-  const record = asObject(row.record) as Parameters<typeof normalizePlannerEvaluation>[0];
-  const versionedRow = row as PlannerEvaluationRow & VersionedRow;
+export function buildPlannerTryoutRecordFromRow(row: PlannerTryoutRecordRow, workspaceId: string): TryoutRecord {
+  const record = asObject(row.record) as Parameters<typeof normalizePlannerTryoutRecord>[0];
+  const versionedRow = row as PlannerTryoutRecordRow & VersionedRow;
 
-  return normalizePlannerEvaluation({
+  return normalizePlannerTryoutRecord({
     ...record,
     id: row.id,
     workspaceId,
@@ -442,7 +445,7 @@ function mergeEntityList<T extends { id: string }>(localItems: T[], remoteItems:
   return [...remoteItems, ...localOnlyItems];
 }
 
-function mergeProjectConfig(localProject: PlannerProject, remoteProject: PlannerProject, merged: Omit<PlannerProject, "name" | "status" | "pipelineStage" | "template" | "qualificationRules" | "workspaceId" | "id" | "createdAt" | "updatedAt">) {
+function mergeProjectConfig(localProject: PlannerProject, remoteProject: PlannerProject, merged: Omit<PlannerProject, "name" | "status" | "pipelineStage" | "template" | "tryoutTemplates" | "qualificationRules" | "workspaceId" | "id" | "createdAt" | "updatedAt">) {
   const localUpdatedAt = Date.parse(localProject.updatedAt);
   const remoteUpdatedAt = Date.parse(remoteProject.updatedAt);
   const configSource = Number.isFinite(localUpdatedAt) && localUpdatedAt > remoteUpdatedAt
@@ -457,9 +460,10 @@ function mergeProjectConfig(localProject: PlannerProject, remoteProject: Planner
     status: configSource.status,
     pipelineStage: configSource.pipelineStage,
     template: configSource.template,
+    tryoutTemplates: configSource.tryoutTemplates,
     qualificationRules: configSource.qualificationRules,
     athletes: merged.athletes,
-    evaluations: merged.evaluations,
+    tryoutRecords: merged.tryoutRecords,
     teams: merged.teams,
     skillPlans: merged.skillPlans,
     routinePlans: merged.routinePlans,
@@ -471,7 +475,7 @@ function mergeProjectConfig(localProject: PlannerProject, remoteProject: Planner
     archivedAt: remoteProject.archivedAt,
     deletedAt: remoteProject.deletedAt,
     restoredFromVersionId: remoteProject.restoredFromVersionId
-  }, remoteProject.template, remoteProject.qualificationRules);
+  }, remoteProject.template, remoteProject.qualificationRules, defaultTryoutTemplates);
 }
 
 export function mergeRemoteFoundationIntoProject(
@@ -482,7 +486,7 @@ export function mergeRemoteFoundationIntoProject(
   const athletes = mergeRemoteAthletes(project, snapshot.athletes);
   const merged = {
     athletes,
-    evaluations: mergeEntityList(project.evaluations, snapshot.evaluations),
+    tryoutRecords: mergeEntityList(project.tryoutRecords, snapshot.tryoutRecords),
     teams,
     skillPlans: mergeTeamScopedPlans(project.skillPlans, teams, snapshot.skillPlans),
     routinePlans: mergeTeamScopedPlans(project.routinePlans, teams, snapshot.routinePlans),
@@ -566,7 +570,7 @@ export async function listRemotePlannerFoundation(
     listWorkspaceRows<TeamRow>("teams", workspaceRoot.id),
     listWorkspaceRows<AthleteAssignmentRow>("athlete_team_assignments", workspaceRoot.id),
     listWorkspaceRows<AthleteRow>("athletes", workspaceRoot.id),
-    listWorkspaceRows<PlannerEvaluationRow>("planner_evaluations", workspaceRoot.id, "occurred_at"),
+    listWorkspaceRows<PlannerTryoutRecordRow>("planner_tryout_records", workspaceRoot.id, "occurred_at"),
     listWorkspaceRows<TeamSkillPlanRow>("team_skill_plans", workspaceRoot.id, "updated_at"),
     listWorkspaceRows<TeamRoutinePlanRow>("team_routine_plans", workspaceRoot.id, "updated_at"),
     listWorkspaceRows<TeamSeasonPlanRow>("team_season_plans", workspaceRoot.id, "updated_at"),
@@ -615,7 +619,13 @@ export async function listRemotePlannerFoundation(
       };
     }),
     athletes: [...athleteMap.values()].sort((left, right) => left.name.localeCompare(right.name)),
-    evaluations: evaluationRows.map((row) => buildPlannerEvaluationFromRow(row, workspaceId)),
+    tryoutRecords: evaluationRows.flatMap((row) => {
+      try {
+        return [buildPlannerTryoutRecordFromRow(row, workspaceId)];
+      } catch {
+        return [];
+      }
+    }),
     teams,
     skillPlans: skillPlanRows.map((row) => buildTeamSkillPlanFromRow(row, workspaceId)),
     routinePlans: routinePlanRows.map((row) => buildRoutinePlanFromRow(row, workspaceId)),

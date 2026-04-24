@@ -1,6 +1,6 @@
 import type { DomainEntityStatus, TimestampedEntity } from "@/lib/domain/base";
 import type { AthleteRecord } from "@/lib/domain/athlete";
-import type { EvaluationRecord, PlannerTryoutTemplate } from "@/lib/domain/evaluation-record";
+import type { PlannerTryoutTemplate, TryoutRecord } from "@/lib/domain/evaluation-record";
 import type { PlannerLevelLabel, PlannerPipelineStage } from "@/lib/domain/planner-levels";
 import type { TeamRoutinePlan } from "@/lib/domain/routine-plan";
 import type { TeamSeasonPlan } from "@/lib/domain/season-plan";
@@ -16,9 +16,11 @@ export type PlannerProject = TimestampedEntity & {
   name: string;
   status: PlannerProjectStatus;
   pipelineStage: PlannerPipelineStage;
+  // Legacy tumbling alias kept so older consumers can still read a primary template safely.
   template: PlannerTryoutTemplate;
+  tryoutTemplates: Record<PlannerTryoutTemplate["sport"], PlannerTryoutTemplate>;
   athletes: AthleteRecord[];
-  evaluations: EvaluationRecord[];
+  tryoutRecords: TryoutRecord[];
   teams: TeamRecord[];
   // Planner-scoped per-team skill-planning state for future routine-building phases.
   skillPlans: TeamSkillPlan[];

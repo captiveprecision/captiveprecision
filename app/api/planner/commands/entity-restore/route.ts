@@ -8,6 +8,23 @@ function asString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function getPlannerStatusCode(code: string | null) {
+  switch (code) {
+    case "WORKSPACE_ACCESS_DENIED":
+      return 403;
+    case "WORKSPACE_ROOT_NOT_FOUND":
+    case "VERSION_NOT_FOUND":
+      return 404;
+    case "PLANNER_CONFLICT":
+      return 409;
+    case "RESTORE_NOT_AVAILABLE":
+    case "RESTORE_EXPIRED":
+      return 410;
+    default:
+      return code ? 409 : 500;
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const { session, error } = await requirePlannerSession();
@@ -34,6 +51,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(result);
   } catch (error) {
     const plannerError = getPlannerCommandError(error);
-    return NextResponse.json({ error: plannerError.message, code: plannerError.code }, { status: plannerError.code ? 409 : 500 });
+    return NextResponse.json(
+      { error: plannerError.message, code: plannerError.code },
+      { status: getPlannerStatusCode(plannerError.code) }
+    );
   }
 }

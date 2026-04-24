@@ -1,12 +1,23 @@
 import { LEVEL_KEYS, LEVEL_LABELS, type PlannerLevelKey, type PlannerLevelLabel, type PlannerPipelineStage, type PlannerSportKey } from "@/lib/domain/planner-levels";
 import type { AthleteParentContact, AthleteRecord, AthleteSnapshot, AthleteStatus } from "@/lib/domain/athlete";
-import type { EvaluationRecord, EvaluationRecordStatus, PlannerLevelEvaluation, PlannerSkillEvaluation, PlannerTopLevel, PlannerTryoutOption, PlannerTryoutSummary, PlannerTryoutTemplate } from "@/lib/domain/evaluation-record";
+import type {
+  PlannerLevelEvaluation,
+  PlannerSkillEvaluation,
+  PlannerTopLevel,
+  PlannerTryoutOption,
+  PlannerTryoutSummary,
+  PlannerTryoutSummaryBucket,
+  PlannerTryoutTemplate,
+  PlannerTryoutTemplateBucket,
+  TryoutRecord,
+  TryoutRecordStatus
+} from "@/lib/domain/evaluation-record";
 import type { PlannerProject, PlannerProjectStatus, PlannerQualificationRules } from "@/lib/domain/planner-project";
 import type { RoutineDocument, TeamRoutineItem, TeamRoutineItemStatus, TeamRoutinePlacement, TeamRoutinePlacementKind, TeamRoutinePlan, TeamRoutinePlanStatus } from "@/lib/domain/routine-plan";
 import type { TeamSeasonCheckpoint, TeamSeasonCheckpointStatus, TeamSeasonPlan, TeamSeasonPlanStatus } from "@/lib/domain/season-plan";
 import type { TeamSkillPlan, TeamSkillPlanStatus, TeamSkillSelection, TeamSkillSelectionStatus } from "@/lib/domain/skill-plan";
 import type { ScoringSystem, ScoringSystemSection, ScoringSystemStatus, ScoringSystemVersion, ScoringSystemVersionStatus } from "@/lib/domain/scoring-system";
-import type { TeamRecord, TeamStatus } from "@/lib/domain/team";
+import type { TeamRecord, TeamSelectionProfile, TeamStatus } from "@/lib/domain/team";
 
 function isIsoDateString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0 && !Number.isNaN(Date.parse(value));
@@ -40,7 +51,7 @@ export function isTeamStatus(value: unknown): value is TeamStatus {
   return value === "draft" || value === "active" || value === "archived";
 }
 
-export function isEvaluationRecordStatus(value: unknown): value is EvaluationRecordStatus {
+export function isTryoutRecordStatus(value: unknown): value is TryoutRecordStatus {
   return value === "active" || value === "archived";
 }
 
@@ -120,6 +131,41 @@ export function isPlannerTopLevel(value: unknown): value is PlannerTopLevel {
   return isPlannerLevelKey(record.levelKey) && isPlannerLevelLabel(record.levelLabel) && typeof record.baseScore === "number" && typeof record.extraScore === "number";
 }
 
+export function isPlannerTryoutTemplateBucket(value: unknown): value is PlannerTryoutTemplateBucket {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const record = value as Record<string, unknown>;
+  return isNonEmptyString(record.id)
+    && isNonEmptyString(record.key)
+    && isNonEmptyString(record.label)
+    && (record.kind === "level" || record.kind === "group" || record.kind === "item")
+    && Array.isArray(record.skills)
+    && record.skills.every((skill) => {
+      const skillRecord = skill as Record<string, unknown>;
+      return isNonEmptyString(skillRecord.id) && typeof skillRecord.name === "string";
+    })
+    && typeof record.allowsExtra === "boolean"
+    && (record.levelKey === undefined || record.levelKey === null || isPlannerLevelKey(record.levelKey))
+    && (record.levelLabel === undefined || record.levelLabel === null || isPlannerLevelLabel(record.levelLabel));
+}
+
+export function isPlannerTryoutSummaryBucket(value: unknown): value is PlannerTryoutSummaryBucket {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const record = value as Record<string, unknown>;
+  return isNonEmptyString(record.bucketKey)
+    && isNonEmptyString(record.bucketLabel)
+    && (record.bucketKind === "level" || record.bucketKind === "group" || record.bucketKind === "item")
+    && typeof record.baseScore === "number"
+    && typeof record.extraScore === "number"
+    && (record.levelKey === undefined || record.levelKey === null || isPlannerLevelKey(record.levelKey))
+    && (record.levelLabel === undefined || record.levelLabel === null || isPlannerLevelLabel(record.levelLabel));
+}
+
 export function isPlannerTryoutSummary(value: unknown): value is PlannerTryoutSummary {
   if (!value || typeof value !== "object") {
     return false;
@@ -128,10 +174,10 @@ export function isPlannerTryoutSummary(value: unknown): value is PlannerTryoutSu
   const record = value as Record<string, unknown>;
   return typeof record.totalBaseScore === "number"
     && typeof record.totalExtraScore === "number"
-    && Array.isArray(record.levelScores)
-    && record.levelScores.every(isPlannerTopLevel)
-    && Array.isArray(record.topLevels)
-    && record.topLevels.every(isPlannerTopLevel);
+    && Array.isArray(record.bucketScores)
+    && record.bucketScores.every(isPlannerTryoutSummaryBucket)
+    && Array.isArray(record.highlights)
+    && record.highlights.every(isPlannerTryoutSummaryBucket);
 }
 
 export function isPlannerTryoutTemplate(value: unknown): value is PlannerTryoutTemplate {
@@ -143,20 +189,12 @@ export function isPlannerTryoutTemplate(value: unknown): value is PlannerTryoutT
   return isNonEmptyString(record.id)
     && isNonEmptyString(record.name)
     && record.stage === "tryouts"
-    && isPlannerSportKey(record.activeSport)
+    && isPlannerSportKey(record.sport ?? record.activeSport)
+    && (record.mode === "levels" || record.mode === "groups" || record.mode === "items")
     && Array.isArray(record.options)
     && record.options.every(isPlannerTryoutOption)
-    && !!record.defaultSkillCounts
-    && typeof record.defaultSkillCounts === "object"
-    && LEVEL_KEYS.every((levelKey) => typeof (record.defaultSkillCounts as Record<string, unknown>)[levelKey] === "number")
-    && (
-      record.skillLibrary === undefined
-      || (
-        typeof record.skillLibrary === "object"
-        && !!record.skillLibrary
-        && LEVEL_KEYS.every((levelKey) => Array.isArray((record.skillLibrary as Record<string, unknown>)[levelKey]))
-      )
-    )
+    && Array.isArray(record.buckets)
+    && record.buckets.every(isPlannerTryoutTemplateBucket)
     && isIsoDateString(record.updatedAt);
 }
 
@@ -231,28 +269,37 @@ export function isTeamRecord(value: unknown): value is TeamRecord {
     && Array.isArray(record.memberAthleteIds)
     && record.memberAthleteIds.every(isNonEmptyString)
     && (record.memberRegistrationNumbers === undefined || (Array.isArray(record.memberRegistrationNumbers) && record.memberRegistrationNumbers.every(isNonEmptyString)))
+    && isTeamSelectionProfile(record.selectionProfile)
     && isTeamStatus(record.status)
     && isIsoDateString(record.createdAt)
     && isIsoDateString(record.updatedAt);
 }
 
-function isPlannerTryoutRawData(value: unknown): value is EvaluationRecord["rawData"] {
+function isPlannerTryoutRawData(value: unknown): value is TryoutRecord["rawData"] {
   if (!value || typeof value !== "object") {
     return false;
   }
 
   const record = value as Record<string, unknown>;
   return isPlannerSportKey(record.sport)
+    && (record.mode === "levels" || record.mode === "groups" || record.mode === "items")
     && !!record.template
     && typeof record.template === "object"
     && isNonEmptyString((record.template as Record<string, unknown>).id)
     && isNonEmptyString((record.template as Record<string, unknown>).name)
     && isIsoDateString((record.template as Record<string, unknown>).updatedAt)
-    && Array.isArray(record.levels)
-    && record.levels.every(isPlannerLevelEvaluation);
+    && Array.isArray(record.buckets)
+    && record.buckets.every((bucket) => {
+      const bucketRecord = bucket as Record<string, unknown>;
+      return isNonEmptyString(bucketRecord.bucketKey)
+        && isNonEmptyString(bucketRecord.bucketLabel)
+        && (bucketRecord.bucketKind === "level" || bucketRecord.bucketKind === "group" || bucketRecord.bucketKind === "item")
+        && Array.isArray(bucketRecord.skills)
+        && bucketRecord.skills.every(isPlannerSkillEvaluation);
+    });
 }
 
-export function isEvaluationRecord(value: unknown): value is EvaluationRecord {
+export function isTryoutRecord(value: unknown): value is TryoutRecord {
   if (!value || typeof value !== "object") {
     return false;
   }
@@ -261,7 +308,7 @@ export function isEvaluationRecord(value: unknown): value is EvaluationRecord {
   return isNonEmptyString(record.id)
     && isNonEmptyString(record.workspaceId)
     && record.recordType === "planner-tryout"
-    && isEvaluationRecordStatus(record.status)
+    && isTryoutRecordStatus(record.status)
     && (record.athleteId === null || isNonEmptyString(record.athleteId))
     && (record.athleteRegistrationNumber === null || typeof record.athleteRegistrationNumber === "string")
     && (record.plannerProjectId === null || typeof record.plannerProjectId === "string")
@@ -269,12 +316,60 @@ export function isEvaluationRecord(value: unknown): value is EvaluationRecord {
     && (record.athleteSnapshot === null || isAthleteSnapshot(record.athleteSnapshot))
     && (record.scoringSystemId === null || typeof record.scoringSystemId === "string")
     && (record.scoringSystemVersionId === null || typeof record.scoringSystemVersionId === "string")
+    && (record.season === undefined || record.season === null || typeof record.season === "string")
+    && (record.seasonLabel === undefined || record.seasonLabel === null || typeof record.seasonLabel === "string")
     && (record.occurredAt === null || isIsoDateString(record.occurredAt))
     && isPlannerTryoutRawData(record.rawData)
     && isPlannerTryoutSummary(record.resultSummary)
     && (record.createdById === null || typeof record.createdById === "string")
     && isIsoDateString(record.createdAt)
     && isIsoDateString(record.updatedAt);
+}
+
+function isTeamSelectionProfile(value: unknown): value is TeamSelectionProfile {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const record = value as Record<string, unknown>;
+  const sports = record.sports as Record<string, unknown> | undefined;
+
+  if (record.mode !== "warn-only" || !sports || typeof sports !== "object") {
+    return false;
+  }
+
+  const tumbling = sports.tumbling as Record<string, unknown> | undefined;
+  const stunts = sports.stunts as Record<string, unknown> | undefined;
+  const jumps = sports.jumps as Record<string, unknown> | undefined;
+  const dance = sports.dance as Record<string, unknown> | undefined;
+
+  return !!tumbling
+    && typeof tumbling.enabled === "boolean"
+    && isPlannerLevelLabel(tumbling.minLevel)
+    && typeof tumbling.minScore === "number"
+    && !!stunts
+    && typeof stunts.enabled === "boolean"
+    && isPlannerLevelLabel(stunts.minLevel)
+    && typeof stunts.minScore === "number"
+    && !!jumps
+    && typeof jumps.enabled === "boolean"
+    && (jumps.group === "basic" || jumps.group === "advanced")
+    && typeof jumps.minScore === "number"
+    && !!dance
+    && typeof dance.enabled === "boolean"
+    && typeof dance.minTotalScore === "number";
+}
+
+export function isPlannerTryoutTemplates(value: unknown): value is Record<PlannerSportKey, PlannerTryoutTemplate> {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const record = value as Record<string, unknown>;
+  return isPlannerTryoutTemplate(record.tumbling)
+    && isPlannerTryoutTemplate(record.stunts)
+    && isPlannerTryoutTemplate(record.jumps)
+    && isPlannerTryoutTemplate(record.dance);
 }
 
 export function isTeamSkillSelection(value: unknown): value is TeamSkillSelection {
@@ -442,10 +537,11 @@ export function isPlannerProject(value: unknown): value is PlannerProject {
     && isPlannerProjectStatus(record.status)
     && isPlannerPipelineStage(record.pipelineStage)
     && isPlannerTryoutTemplate(record.template)
+    && isPlannerTryoutTemplates(record.tryoutTemplates)
     && Array.isArray(record.athletes)
     && record.athletes.every(isAthleteRecord)
-    && Array.isArray(record.evaluations)
-    && record.evaluations.every(isEvaluationRecord)
+    && Array.isArray(record.tryoutRecords)
+    && record.tryoutRecords.every(isTryoutRecord)
     && Array.isArray(record.teams)
     && record.teams.every(isTeamRecord)
     && Array.isArray(record.skillPlans)
