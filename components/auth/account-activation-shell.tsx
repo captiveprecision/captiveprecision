@@ -26,6 +26,9 @@ export function AccountActivationShell() {
       const supabase = createClient();
       const url = new URL(window.location.href);
       const code = url.searchParams.get("code");
+      const hashParams = new URLSearchParams(url.hash.replace(/^#/, ""));
+      const accessToken = hashParams.get("access_token");
+      const refreshToken = hashParams.get("refresh_token");
 
       if (code) {
         const { error } = await supabase.auth.exchangeCodeForSession(code);
@@ -39,6 +42,34 @@ export function AccountActivationShell() {
           setState({ mode: "error", message: error.message });
           return;
         }
+      } else if (accessToken && refreshToken) {
+        const { error } = await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken
+        });
+
+        if (cancelled) {
+          return;
+        }
+
+        if (error) {
+          setSessionReady(false);
+          setState({ mode: "error", message: error.message });
+          return;
+        }
+      } else {
+        await supabase.auth.signOut();
+
+        if (cancelled) {
+          return;
+        }
+
+        setSessionReady(false);
+        setState({
+          mode: "error",
+          message: "This activation page must be opened from a valid invitation link."
+        });
+        return;
       }
 
       const { data, error } = await supabase.auth.getSession();
@@ -105,7 +136,7 @@ export function AccountActivationShell() {
     const supabase = createClient();
     await supabase.auth.signOut();
 
-    setState({ mode: "success", message: "Password saved. Redirecting to workspace selection..." });
+    setState({ mode: "success", message: "Password saved. Redirecting to sign in..." });
     window.setTimeout(() => {
       window.location.assign("/");
     }, 600);
