@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AthleteParentContact, AthleteRecord } from "@/lib/domain/athlete";
 import type { PlannerTrashItem } from "@/lib/domain/planner-versioning";
 import type { RoutineDocument, TeamRoutinePlan } from "@/lib/domain/routine-plan";
-import type { TeamSeasonPlan } from "@/lib/domain/season-plan";
+import type { TeamSeasonCheckpoint, TeamSeasonCheckpointStatus, TeamSeasonManualEntry, TeamSeasonPlan } from "@/lib/domain/season-plan";
 import type { TeamSkillCategory, TeamSkillPlan, TeamSkillSelection } from "@/lib/domain/skill-plan";
 
 import { getSystemById, getVersionById } from "@/lib/scoring/scoring-systems";
@@ -40,7 +40,6 @@ import { buildSkillPlannerTeamInputs, replaceTeamSkillPlanSelections } from "@/l
 import {
   buildSeasonPlannerAvailableCheckpoints,
   buildSeasonPlannerDraftCheckpointIds,
-  buildSeasonPlannerPersistedCheckpoints,
   buildSkillPlannerDraftSelectionRows,
   buildSkillPlannerPersistedSelections
 } from "@/lib/services/planner-integration-adapters";
@@ -157,7 +156,16 @@ type RoutineBuilderDraftState = {
 
 type SeasonPlannerDraftState = {
   teamId: string;
-  checkpointIds: string[];
+  checkpoints: Array<{
+    id: string;
+    selected: boolean;
+    name: string;
+    targetDate: string;
+    status: TeamSeasonCheckpointStatus;
+    notes: string;
+    sourceRoutinePlanId: string | null;
+  }>;
+  manualEntries: TeamSeasonManualEntry[];
 } | null;
 
 type PremiumAccessState = {
@@ -3309,9 +3317,25 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
       return;
     }
 
+    const selectedCheckpointIds = new Set(buildSeasonPlannerDraftCheckpointIds(team));
+    const existingCheckpoints = new Map((team.seasonPlan?.checkpoints ?? []).map((checkpoint) => [checkpoint.id, checkpoint] as const));
+
     setSeasonPlannerDraft({
       teamId,
-      checkpointIds: buildSeasonPlannerDraftCheckpointIds(team)
+      checkpoints: team.availableCheckpoints.map((checkpoint) => {
+        const existingCheckpoint = existingCheckpoints.get(checkpoint.id);
+
+        return {
+          id: checkpoint.id,
+          selected: selectedCheckpointIds.has(checkpoint.id),
+          name: existingCheckpoint?.name ?? checkpoint.name,
+          targetDate: existingCheckpoint?.targetDate ?? checkpoint.targetDate ?? "",
+          status: existingCheckpoint?.status ?? "planned",
+          notes: existingCheckpoint?.notes ?? "",
+          sourceRoutinePlanId: existingCheckpoint?.sourceRoutinePlanId ?? checkpoint.sourceRoutinePlanId
+        };
+      }),
+      manualEntries: (team.seasonPlan?.manualEntries ?? []).map((entry) => ({ ...entry }))
     });
   };
 
@@ -3325,13 +3349,121 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
         return current;
       }
 
-      const checkpointIds = current.checkpointIds.includes(checkpointId)
-        ? current.checkpointIds.filter((currentCheckpointId) => currentCheckpointId !== checkpointId)
-        : [...current.checkpointIds, checkpointId];
+      return {
+        ...current,
+        checkpoints: current.checkpoints.map((checkpoint) => (
+          checkpoint.id === checkpointId
+            ? { ...checkpoint, selected: !checkpoint.selected }
+            : checkpoint
+        ))
+      };
+    });
+  };
+
+  const updateSeasonPlannerCheckpoint = (
+    checkpointId: string,
+    field: "targetDate" | "status" | "notes",
+    value: string
+  ) => {
+    setSeasonPlannerDraft((current) => {
+      if (!current) {
+        return current;
+      }
 
       return {
         ...current,
-        checkpointIds
+        checkpoints: current.checkpoints.map((checkpoint) => {
+          if (checkpoint.id !== checkpointId) {
+            return checkpoint;
+          }
+
+          if (field === "status") {
+            return {
+              ...checkpoint,
+              status: value === "confirmed" || value === "completed" ? value : "planned"
+            };
+          }
+
+          return { ...checkpoint, [field]: value };
+        })
+      };
+    });
+  };
+
+  const addSeasonPlannerManualEntry = (entryType: TeamSeasonManualEntry["type"]) => {
+    setSeasonPlannerDraft((current) => {
+      if (!current) {
+        return current;
+      }
+
+      return {
+        ...current,
+        manualEntries: [
+          ...current.manualEntries,
+          {
+            id: `season-manual-${current.teamId}-${Date.now()}`,
+            type: entryType,
+            title: "",
+            targetDate: null,
+            status: "planned",
+            notes: "",
+            sortOrder: current.manualEntries.length
+          }
+        ]
+      };
+    });
+  };
+
+  const updateSeasonPlannerManualEntry = (
+    entryId: string,
+    field: "type" | "title" | "targetDate" | "status" | "notes",
+    value: string
+  ) => {
+    setSeasonPlannerDraft((current) => {
+      if (!current) {
+        return current;
+      }
+
+      return {
+        ...current,
+        manualEntries: current.manualEntries.map((entry) => {
+          if (entry.id !== entryId) {
+            return entry;
+          }
+
+          if (field === "targetDate") {
+            return { ...entry, targetDate: value || null };
+          }
+
+          if (field === "type") {
+            return {
+              ...entry,
+              type: value === "choreography" || value === "event" ? value : "evaluation"
+            };
+          }
+
+          if (field === "status") {
+            return {
+              ...entry,
+              status: value === "confirmed" || value === "completed" ? value : "planned"
+            };
+          }
+
+          return { ...entry, [field]: value };
+        })
+      };
+    });
+  };
+
+  const removeSeasonPlannerManualEntry = (entryId: string) => {
+    setSeasonPlannerDraft((current) => {
+      if (!current) {
+        return current;
+      }
+
+      return {
+        ...current,
+        manualEntries: current.manualEntries.filter((entry) => entry.id !== entryId)
       };
     });
   };
@@ -3347,10 +3479,29 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
     }
 
     const occurredAt = new Date().toISOString();
-    const checkpoints = buildSeasonPlannerPersistedCheckpoints(seasonPlannerEditingTeam, seasonPlannerDraft.checkpointIds);
+    const checkpoints: TeamSeasonCheckpoint[] = seasonPlannerDraft.checkpoints
+      .filter((checkpoint) => checkpoint.selected)
+      .map((checkpoint, index) => ({
+        id: checkpoint.id,
+        name: checkpoint.name,
+        targetDate: checkpoint.targetDate || null,
+        sourceRoutinePlanId: checkpoint.sourceRoutinePlanId,
+        sortOrder: index,
+        status: checkpoint.status,
+        notes: checkpoint.notes
+      }));
+    const manualEntries = seasonPlannerDraft.manualEntries
+      .filter((entry) => entry.title.trim().length > 0)
+      .map((entry, index) => ({
+        ...entry,
+        title: entry.title.trim(),
+        targetDate: entry.targetDate || null,
+        sortOrder: index
+      }));
     const draftProject = replaceTeamSeasonPlanCheckpoints(plannerState, {
       teamId: seasonPlannerEditingTeam.teamId,
       checkpoints,
+      manualEntries,
       occurredAt
     });
     const nextPlan = draftProject.seasonPlans.find((plan) => plan.teamId === seasonPlannerEditingTeam.teamId) ?? null;
@@ -3485,6 +3636,10 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
     openSeasonPlannerTeam,
     cancelSeasonPlannerEdit,
     toggleSeasonPlannerCheckpoint,
+    updateSeasonPlannerCheckpoint,
+    addSeasonPlannerManualEntry,
+    updateSeasonPlannerManualEntry,
+    removeSeasonPlannerManualEntry,
     saveSeasonPlannerEdit,
     seasonPlannerTeams,
     myTeamsSummaries,

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { requireCheerPlannerPremium } from "@/lib/access/membership";
 import { getPlannerScopeContext, requirePlannerSession } from "@/lib/services/planner-api-access";
+import { canScopeWritePlannerCommand } from "@/lib/services/planner-capabilities";
 import { getPlannerCommandError, savePlannerSkillPlanCommand } from "@/lib/services/planner-command-service";
 
 function asString(value: unknown) {
@@ -22,6 +23,10 @@ export async function POST(request: NextRequest) {
 
     if (premiumError) {
       return premiumError;
+    }
+
+    if (!canScopeWritePlannerCommand(scope.scope, "skill-plan-save")) {
+      return NextResponse.json({ error: "Gym workspaces can review skill plans, but cannot edit them from Cheer Planner." }, { status: 403 });
     }
 
     const result = await savePlannerSkillPlanCommand(session, scope.scope, {

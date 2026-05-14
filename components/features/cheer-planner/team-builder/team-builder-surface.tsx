@@ -5,6 +5,7 @@ import type { Dispatch, SetStateAction } from "react";
 
 import { Badge, Button, Card, CardContent, EmptyState, Input, SectionHeader, Select } from "@/components/ui";
 import type { TeamSelectionProfile } from "@/lib/domain/team";
+import type { CheerPlannerCapabilities } from "@/lib/services/planner-capabilities";
 import {
   buildTeamFitSummary,
   buildTeamSelectionWarnings,
@@ -21,6 +22,7 @@ import type {
 import type { PlannerLevelLabel } from "@/lib/tools/cheer-planner-tryouts";
 
 type TeamBuilderSurfaceProps = {
+  capabilities: CheerPlannerCapabilities;
   stats: PlannerStatItem[];
   qualificationOpen: boolean;
   setQualificationOpen: Dispatch<SetStateAction<boolean>>;
@@ -264,6 +266,7 @@ function SelectionProfileEditor({ profile, levelLabelsList, onChange }: Selectio
 
 export function TeamBuilderSurface(props: TeamBuilderSurfaceProps) {
   const {
+    capabilities,
     stats,
     levelLabelsList,
     isSavingAction,
@@ -308,14 +311,14 @@ export function TeamBuilderSurface(props: TeamBuilderSurfaceProps) {
                 eyebrow="Athlete pool"
                 title="Best Tryout Profiles"
                 description="Selection now reads the tryout logbook by sport. Team criteria warn, but do not block assignments."
-                actions={
+                actions={capabilities.canCreateTeams ? (
                   <Button onClick={() => setCreateTeamOpen((current) => !current)}>
                     {createTeamOpen ? "Close" : "Create Team"}
                   </Button>
-                }
+                ) : undefined}
               />
 
-              {createTeamOpen ? (
+              {createTeamOpen && capabilities.canCreateTeams ? (
                 <Card variant="subtle" className="planner-create-team-card">
                   <CardContent className="planner-panel-stack">
                     <Input
@@ -428,6 +431,7 @@ export function TeamBuilderSurface(props: TeamBuilderSurfaceProps) {
                           label="Assign to builder team"
                           containerClassName="planner-athlete-assign-field"
                           value={athlete.assignedTeamId ?? ""}
+                          disabled={!capabilities.canAssignRosters}
                           onChange={(event) => {
                             const nextTeamId = event.target.value;
 
@@ -470,7 +474,7 @@ export function TeamBuilderSurface(props: TeamBuilderSurfaceProps) {
             <CardContent className="planner-panel-stack">
               <SectionHeader eyebrow="Teams Review" title="Saved Rosters" />
 
-              {teamEdit ? (
+              {teamEdit && capabilities.canEditTeams ? (
                 <Card variant="subtle" className="planner-team-edit-card">
                   <CardContent className="planner-panel-stack">
                     <Input
@@ -531,15 +535,21 @@ export function TeamBuilderSurface(props: TeamBuilderSurfaceProps) {
                           <Badge variant="subtle">{team.members.length} athletes</Badge>
                         </div>
                         <div className="planner-inline-actions">
-                          <Button variant="ghost" size="sm" leadingIcon={<Pencil />} onClick={() => openTeamEdit(team)}>
-                            Edit Team
-                          </Button>
-                          <Button variant="ghost" size="sm" onClick={() => clearTeam(team.id)}>
-                            Clear Roster
-                          </Button>
-                          <Button variant="ghost" size="sm" leadingIcon={<Trash2 />} onClick={() => deleteTeam(team.id)}>
-                            Delete Team
-                          </Button>
+                          {capabilities.canEditTeams ? (
+                            <Button variant="ghost" size="sm" leadingIcon={<Pencil />} onClick={() => openTeamEdit(team)}>
+                              Edit Team
+                            </Button>
+                          ) : null}
+                          {capabilities.canAssignRosters ? (
+                            <Button variant="ghost" size="sm" onClick={() => clearTeam(team.id)}>
+                              Clear Roster
+                            </Button>
+                          ) : null}
+                          {capabilities.canDeleteTeams ? (
+                            <Button variant="ghost" size="sm" leadingIcon={<Trash2 />} onClick={() => deleteTeam(team.id)}>
+                              Delete Team
+                            </Button>
+                          ) : null}
                         </div>
 
                         <div className="planner-panel-stack">
@@ -568,9 +578,11 @@ export function TeamBuilderSurface(props: TeamBuilderSurfaceProps) {
                                     </p>
                                     {warnings.length ? <p>{buildTeamFitSummary(warnings)}</p> : null}
                                   </div>
-                                  <Button variant="ghost" size="sm" leadingIcon={<Trash2 />} onClick={() => removeFromTeam(member.id, team.id)}>
-                                    Remove
-                                  </Button>
+                                  {capabilities.canAssignRosters ? (
+                                    <Button variant="ghost" size="sm" leadingIcon={<Trash2 />} onClick={() => removeFromTeam(member.id, team.id)}>
+                                      Remove
+                                    </Button>
+                                  ) : null}
                                 </div>
                               );
                             })

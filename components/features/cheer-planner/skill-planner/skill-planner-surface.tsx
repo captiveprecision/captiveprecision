@@ -11,6 +11,7 @@ import type { CheerPlannerIntegration } from "@/lib/services/planner-integration
 const SKILL_LEVEL_OPTIONS = ["Elite", "Advanced", "Level Appropriate", "Below Level"] as const;
 
 type SkillPlannerSurfaceProps = {
+  readOnly?: boolean;
   teams: CheerPlannerIntegration["skillPlannerTeams"];
   skillPlannerDraft: CheerPlannerIntegration["skillPlannerDraft"];
   openSkillPlannerTeam: (teamId: string) => void;
@@ -66,6 +67,7 @@ function buildPlanStatusBadge(status: TeamSkillPlanStatus | null) {
 
 export function SkillPlannerSurface(props: SkillPlannerSurfaceProps) {
   const {
+    readOnly = false,
     teams,
     skillPlannerDraft,
     openSkillPlannerTeam,
@@ -127,7 +129,7 @@ export function SkillPlannerSurface(props: SkillPlannerSurfaceProps) {
                       </div>
                       <div className="planner-team-card-actions">
                         {statusBadge}
-                        {isEditing ? (
+                        {isEditing && !readOnly ? (
                           <>
                             <Button size="sm" onClick={saveSkillPlannerEdit} disabled={isSavingAction("skill-plan")}>
                               {isSavingAction("skill-plan") ? "Saving..." : "Save Changes"}
@@ -144,17 +146,19 @@ export function SkillPlannerSurface(props: SkillPlannerSurfaceProps) {
                             >
                               {isSelected ? "Hide Details" : "View Team"}
                             </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              leadingIcon={<Pencil />}
-                              onClick={() => {
-                                setSelectedTeamId(team.teamId);
-                                openSkillPlannerTeam(team.teamId);
-                              }}
-                            >
-                              Edit Team
-                            </Button>
+                            {!readOnly ? (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                leadingIcon={<Pencil />}
+                                onClick={() => {
+                                  setSelectedTeamId(team.teamId);
+                                  openSkillPlannerTeam(team.teamId);
+                                }}
+                              >
+                                Edit Team
+                              </Button>
+                            ) : null}
                           </>
                         )}
                       </div>
@@ -185,7 +189,7 @@ export function SkillPlannerSurface(props: SkillPlannerSurfaceProps) {
                                         <Input
                                           label="Skill"
                                           value={selection.skillName}
-                                          disabled={!isEditing}
+                                          disabled={!isEditing || readOnly}
                                           onChange={(event) => updateSkillPlannerSelection(selection.id, "skillName", event.target.value)}
                                         />
                                         <div className="planner-skill-level-field">
@@ -200,7 +204,7 @@ export function SkillPlannerSurface(props: SkillPlannerSurfaceProps) {
                                                   type="button"
                                                   className={isActive ? "planner-skill-level-toggle__button is-active" : "planner-skill-level-toggle__button"}
                                                   onClick={() => updateSkillPlannerSelection(selection.id, "levelLabel", option)}
-                                                  disabled={!isEditing}
+                                                  disabled={!isEditing || readOnly}
                                                   aria-pressed={isActive}
                                                 >
                                                   {option}
@@ -209,7 +213,7 @@ export function SkillPlannerSurface(props: SkillPlannerSurfaceProps) {
                                             })}
                                           </div>
                                         </div>
-                                        {isEditing ? (
+                                        {isEditing && !readOnly ? (
                                           <div className="planner-skill-row-action">
                                             <Button
                                               type="button"
@@ -226,7 +230,7 @@ export function SkillPlannerSurface(props: SkillPlannerSurfaceProps) {
                                       </div>
                                     ))}
                                   </div>
-                                  {isEditing ? (
+                                  {isEditing && !readOnly ? (
                                     <div className="planner-skill-add-action">
                                       <Button
                                         type="button"

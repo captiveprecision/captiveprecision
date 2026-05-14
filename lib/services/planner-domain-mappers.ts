@@ -11,7 +11,7 @@ import type {
 import { LEVEL_KEYS, type PlannerLevelKey, type PlannerLevelLabel, type PlannerQualifiedLevel } from "@/lib/domain/planner-levels";
 import type { PlannerProject, PlannerQualificationRules } from "@/lib/domain/planner-project";
 import { ROUTINE_BUILDER_COLUMN_COUNT, ROUTINE_BUILDER_DEFAULT_ROW_COUNT, type RoutineDocument, type TeamRoutineItem, type TeamRoutinePlacement, type TeamRoutinePlan } from "@/lib/domain/routine-plan";
-import type { TeamSeasonCheckpoint, TeamSeasonPlan } from "@/lib/domain/season-plan";
+import type { TeamSeasonCheckpoint, TeamSeasonManualEntry, TeamSeasonPlan } from "@/lib/domain/season-plan";
 import type { TeamSkillPlan, TeamSkillSelection } from "@/lib/domain/skill-plan";
 import { buildDefaultTeamSelectionProfile, type TeamRecord, type TeamSelectionProfile } from "@/lib/domain/team";
 import { cloneTemplate, cloneTryoutTemplates, defaultTryoutTemplates } from "@/lib/tools/cheer-planner-tryouts";
@@ -560,6 +560,18 @@ function normalizeTeamSeasonCheckpoints(checkpoints: TeamSeasonCheckpoint[] = []
   }));
 }
 
+function normalizeTeamSeasonManualEntries(entries: TeamSeasonManualEntry[] = []): TeamSeasonManualEntry[] {
+  return entries.map((entry, index) => ({
+    id: entry.id,
+    type: entry.type === "choreography" || entry.type === "event" ? entry.type : "evaluation",
+    title: entry.title ?? "",
+    targetDate: entry.targetDate ?? null,
+    status: entry.status ?? "planned",
+    notes: entry.notes ?? "",
+    sortOrder: typeof entry.sortOrder === "number" ? entry.sortOrder : index
+  }));
+}
+
 export function normalizeTeamSeasonPlan(raw: Partial<TeamSeasonPlan> & { id: string; teamId: string; plannerProjectId: string }): TeamSeasonPlan {
   const now = raw.updatedAt ?? raw.createdAt ?? new Date().toISOString();
   return {
@@ -570,6 +582,7 @@ export function normalizeTeamSeasonPlan(raw: Partial<TeamSeasonPlan> & { id: str
     status: raw.status ?? "draft",
     notes: raw.notes ?? "",
     checkpoints: normalizeTeamSeasonCheckpoints(Array.isArray(raw.checkpoints) ? raw.checkpoints : []),
+    manualEntries: normalizeTeamSeasonManualEntries(Array.isArray(raw.manualEntries) ? raw.manualEntries : []),
     createdAt: raw.createdAt ?? now,
     updatedAt: raw.updatedAt ?? now,
     workspaceRootId: raw.workspaceRootId,

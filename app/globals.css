@@ -1515,6 +1515,247 @@
   background: var(--cp-accent);
 }
 
+.settings-data-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--cp-border);
+  border-radius: var(--cp-radius-card-sm);
+  background: var(--cp-color-white);
+}
+
+.settings-data-table {
+  width: 100%;
+  min-width: 0;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.settings-data-table th,
+.settings-data-table td {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--cp-border);
+  text-align: left;
+  vertical-align: middle;
+  font-size: 14px;
+}
+
+.settings-data-table th {
+  background: var(--cp-color-black);
+  color: var(--cp-color-white);
+  font-size: 11px;
+  font-weight: var(--cp-font-weight-bold);
+  letter-spacing: var(--cp-letter-spacing-label);
+  text-transform: uppercase;
+}
+
+.settings-data-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.settings-data-table strong {
+  color: var(--cp-text-strong);
+  font-weight: var(--cp-font-weight-semibold);
+}
+
+.manage-gym-table-col-name {
+  width: 30%;
+}
+
+.manage-gym-table-col-role {
+  width: 32%;
+}
+
+.manage-gym-table-col-teams,
+.manage-gym-table-col-classes {
+  width: 19%;
+}
+
+.manage-gym-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.manage-gym-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.manage-gym-card-header > div {
+  display: grid;
+  gap: 4px;
+}
+
+.manage-gym-card-header p {
+  margin: 0;
+  color: var(--cp-muted);
+}
+
+.settings-data-table__expand-row {
+  cursor: pointer;
+  transition: background-color 140ms ease;
+}
+
+.settings-data-table__expand-row:hover,
+.settings-data-table__expand-row:focus-visible {
+  background: var(--cp-state-hover-bg);
+}
+
+.settings-data-table__expand-row:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--cp-focus-color);
+}
+
+.settings-data-table__expand-row[aria-expanded="true"] td {
+  border-bottom-color: transparent;
+}
+
+.settings-data-table__detail-row td {
+  padding-top: 0;
+  background: #fafafa;
+}
+
+.settings-data-table--compact {
+  min-width: 0;
+}
+
+.manage-gym-role-cell,
+.manage-gym-unassigned {
+  display: grid;
+  gap: 10px;
+}
+
+.manage-gym-role-cell {
+  max-width: 220px;
+}
+
+.manage-gym-unassigned {
+  margin-top: 4px;
+  padding-top: 18px;
+  border-top: 1px solid var(--cp-border);
+}
+
+.manage-gym-unassigned h3 {
+  margin: 4px 0 0;
+  font-size: 1.05rem;
+}
+
+.manage-gym-person-details {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) minmax(220px, 0.45fr) minmax(260px, 0.8fr);
+  gap: 16px;
+}
+
+.manage-gym-profile-details {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.manage-gym-profile-details > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.manage-gym-profile-details strong {
+  overflow-wrap: anywhere;
+  font-size: 14px;
+}
+
+.manage-gym-membership-details {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--cp-border);
+  border-radius: var(--cp-radius-card-sm);
+  background: var(--cp-color-white);
+}
+
+.manage-gym-membership-details > div {
+  display: grid;
+  gap: 4px;
+}
+
+.manage-gym-membership-details strong {
+  font-size: 14px;
+}
+
+.manage-gym-staff-modal {
+  width: min(640px, 100%);
+}
+
+.manage-gym-staff-search-state,
+.manage-gym-staff-create p,
+.manage-gym-staff-notice {
+  margin: 0;
+  color: var(--cp-muted);
+  font-size: 14px;
+  font-weight: var(--cp-font-weight-semibold);
+}
+
+.manage-gym-staff-result {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) minmax(140px, 0.35fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 14px;
+  border: 1px solid var(--cp-border);
+  border-radius: var(--cp-radius-card-sm);
+  background: #fafafa;
+}
+
+.manage-gym-staff-result__icon {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border-radius: var(--cp-radius-control);
+  background: var(--cp-color-black);
+  color: var(--cp-color-white);
+}
+
+.manage-gym-staff-result strong,
+.manage-gym-staff-result p {
+  display: block;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.manage-gym-staff-result p {
+  color: var(--cp-muted);
+}
+
+.manage-gym-staff-create,
+.manage-gym-staff-invite-form {
+  display: grid;
+  gap: 14px;
+}
+
+.manage-gym-staff-invite-form {
+  padding-top: 4px;
+}
+
+.manage-gym-staff-notice {
+  padding: 12px 14px;
+  border: 1px solid var(--cp-border);
+  border-radius: var(--cp-radius-control);
+  background: #fafafa;
+}
+
+.manage-gym-staff-notice--success {
+  border-color: rgba(35, 133, 88, 0.3);
+  color: #1f7a53;
+}
+
+.manage-gym-staff-notice--error {
+  border-color: rgba(181, 59, 50, 0.28);
+  color: #a3342c;
+}
+
 @media (max-width: 1180px) {
   .dashboard-top-grid,
   .dashboard-main-grid,
@@ -1557,6 +1798,29 @@
 
   .dashboard-chart-labels {
     text-align: left;
+  }
+
+  .manage-gym-overview-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .manage-gym-person-details,
+  .manage-gym-profile-details,
+  .manage-gym-membership-details {
+    grid-template-columns: 1fr;
+  }
+
+  .manage-gym-membership-details {
+    display: grid;
+  }
+
+  .manage-gym-card-header,
+  .manage-gym-staff-result {
+    grid-template-columns: 1fr;
+  }
+
+  .manage-gym-card-header {
+    display: grid;
   }
 }
 
@@ -2052,6 +2316,240 @@
   align-items: center;
 }
 
+.admin-accounts-shell {
+  gap: 20px;
+}
+
+.admin-accounts-hero {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 18px;
+}
+
+.admin-accounts-hero__copy {
+  display: grid;
+  gap: 8px;
+  max-width: 740px;
+}
+
+.admin-accounts-hero__copy h1,
+.admin-account-modal__header h2,
+.admin-accounts-empty h3 {
+  margin: 0;
+}
+
+.admin-accounts-hero__copy p,
+.admin-account-modal__header p,
+.admin-accounts-empty p {
+  margin: 0;
+  color: var(--cp-muted);
+}
+
+.admin-accounts-notice {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: var(--cp-radius-control);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.admin-accounts-notice--success {
+  background: color-mix(in srgb, var(--cp-accent) 14%, var(--cp-color-white));
+  color: color-mix(in srgb, var(--cp-accent) 72%, #1f4f2f);
+}
+
+.admin-accounts-notice--error {
+  background: #fff0ee;
+  color: #b53b32;
+}
+
+.admin-accounts-panel {
+  gap: 18px;
+}
+
+.admin-accounts-tabs .ui-tabs-list {
+  width: 100%;
+}
+
+.admin-accounts-grid {
+  display: grid;
+  gap: 14px;
+}
+
+.admin-account-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 16px;
+  align-items: flex-start;
+  padding: 18px;
+  border: 1px solid var(--cp-border);
+  border-radius: var(--cp-radius-card-sm);
+  background: var(--cp-card);
+  box-shadow: var(--cp-shadow-subtle);
+}
+
+.admin-account-card__icon {
+  display: inline-grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  background: var(--cp-color-black);
+  color: var(--cp-color-yellow);
+}
+
+.admin-account-card__body {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.admin-account-card__headline {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.admin-account-card__headline h3,
+.admin-account-card__body p {
+  margin: 0;
+}
+
+.admin-account-card__body p {
+  color: var(--cp-muted);
+}
+
+.admin-account-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  color: var(--cp-muted);
+  font-size: var(--cp-font-size-label);
+  font-weight: var(--cp-font-weight-semibold);
+  letter-spacing: var(--cp-letter-spacing-label);
+  text-transform: uppercase;
+}
+
+.admin-accounts-empty {
+  box-shadow: none;
+}
+
+.admin-account-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 22px;
+  background: rgba(0, 0, 0, 0.42);
+  backdrop-filter: blur(5px);
+}
+
+.admin-account-modal {
+  display: grid;
+  gap: 18px;
+  width: min(720px, 100%);
+  max-height: calc(100vh - 44px);
+  overflow: auto;
+  padding: 22px;
+  border: 1px solid var(--cp-border);
+  border-radius: var(--cp-radius-panel);
+  background: var(--cp-card);
+  box-shadow: 0 20px 70px rgba(0, 0, 0, 0.22);
+}
+
+.admin-account-modal__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.admin-account-modal__header > div {
+  display: grid;
+  gap: 6px;
+}
+
+.admin-account-modal__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.admin-account-modal__full,
+.admin-account-modal__actions {
+  grid-column: 1 / -1;
+}
+
+.admin-account-premium-toggle {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  align-items: flex-start;
+  padding: 14px;
+  border: 1px solid var(--cp-border);
+  border-radius: var(--cp-radius-control);
+  background: #fff9db;
+  cursor: pointer;
+}
+
+.admin-account-premium-toggle input {
+  margin-top: 3px;
+}
+
+.admin-account-premium-toggle span {
+  display: grid;
+  gap: 4px;
+}
+
+.admin-account-premium-toggle strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.admin-account-premium-toggle small {
+  color: var(--cp-muted);
+}
+
+.admin-account-modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.account-activation-shell {
+  min-height: calc(100vh - 88px);
+  align-content: center;
+}
+
+.account-activation-card {
+  width: min(560px, 100%);
+  margin: 0 auto;
+}
+
+.account-activation-card__content,
+.account-activation-form {
+  gap: 16px;
+}
+
+.account-activation-message {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--cp-muted);
+}
+
+.account-activation-message--error {
+  color: #b53b32;
+}
+
+.account-activation-message--success {
+  color: color-mix(in srgb, var(--cp-accent) 72%, #1f4f2f);
+}
+
 @keyframes landingFadeUp {
   from {
     opacity: 0;
@@ -2104,7 +2602,24 @@
 
   .landing-auth-actions,
   .admin-beta-row,
-  .admin-beta-row__actions {
+  .admin-beta-row__actions,
+  .admin-accounts-hero,
+  .admin-account-modal__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-accounts-hero,
+  .admin-account-modal__header,
+  .admin-account-modal__actions {
+    flex-direction: column;
+  }
+
+  .admin-accounts-hero .ui-button,
+  .admin-account-modal__actions .ui-button {
+    width: 100%;
+  }
+
+  .admin-account-card {
     grid-template-columns: 1fr;
   }
 

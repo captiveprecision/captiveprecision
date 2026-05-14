@@ -268,7 +268,8 @@ export async function savePlannerSeasonPlan(scope: PlannerWorkspaceScope, plan: 
     teamId: plan.teamId,
     status: plan.status,
     notes: plan.notes,
-    checkpoints: plan.checkpoints
+    checkpoints: plan.checkpoints,
+    manualEntries: plan.manualEntries ?? []
   });
 
   return buildTeamSeasonPlanFromRow(buildCommandEntityRow(result.entity, result) as never, plan.workspaceId);

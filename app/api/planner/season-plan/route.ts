@@ -10,6 +10,7 @@ type SeasonPlanPayload = {
   status?: TeamSeasonPlan["status"];
   notes?: string;
   checkpoints?: unknown;
+  manualEntries?: unknown;
   scope?: "coach" | "gym";
 };
 
@@ -41,6 +42,7 @@ export async function POST(request: NextRequest) {
     const notes = asString(payload?.notes);
     const status = isPlanStatus(payload?.status) ? payload.status : "draft";
     const checkpoints = Array.isArray(payload?.checkpoints) ? payload.checkpoints : [];
+    const manualEntries = Array.isArray(payload?.manualEntries) ? payload.manualEntries : [];
 
     if (!teamId) {
       return NextResponse.json({ error: "A team id is required to save a season plan." }, { status: 400 });
@@ -59,7 +61,8 @@ export async function POST(request: NextRequest) {
       teamId,
       status,
       notes,
-      checkpoints
+      checkpoints,
+      manualEntries
     });
 
     return NextResponse.json({

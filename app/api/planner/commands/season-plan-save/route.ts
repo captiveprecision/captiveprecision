@@ -30,7 +30,8 @@ export async function POST(request: NextRequest) {
       teamId: asString(payload?.teamId),
       status: asString(payload?.status) || "draft",
       notes: asString(payload?.notes),
-      checkpoints: Array.isArray(payload?.checkpoints) ? payload.checkpoints : []
+      checkpoints: Array.isArray(payload?.checkpoints) ? payload.checkpoints : [],
+      manualEntries: Array.isArray(payload?.manualEntries) ? payload.manualEntries : []
     });
 
     return NextResponse.json(result);

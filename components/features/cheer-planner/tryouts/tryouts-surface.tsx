@@ -4,6 +4,7 @@ import { ChevronDown, ChevronUp, Eraser, Eye, Pencil, Plus, Save, Trash2, X } fr
 import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 
 import { Badge, Button, Card, CardContent, EmptyState, Input, SectionHeader, Tabs, Textarea } from "@/components/ui";
+import type { CheerPlannerCapabilities } from "@/lib/services/planner-capabilities";
 import type {
   AthleteDraftState,
   CheerPlannerIntegration,
@@ -92,6 +93,7 @@ function formatSelectedAthleteBirthDate(dateOfBirth: string) {
 }
 
 type TryoutsSurfaceProps = {
+  capabilities: CheerPlannerCapabilities;
   athleteDraft: AthleteDraftState;
   athletePool: CheerPlannerIntegration["athletePool"];
   updateAthleteDraft: (field: keyof AthleteDraftState, value: string) => void;
@@ -136,6 +138,7 @@ type TryoutsSurfaceProps = {
 
 export function TryoutsSurface(props: TryoutsSurfaceProps) {
   const {
+    capabilities,
     athleteDraft,
     athletePool,
     updateAthleteDraft,
@@ -272,6 +275,8 @@ export function TryoutsSurface(props: TryoutsSurfaceProps) {
   const showAthleteForm = athleteIntakeMode === "new" || (showSelectedAthleteSummary && registeredAthleteDetailMode === "edit");
   const canSaveAthleteRecord = athleteIntakeMode === "new" || Boolean(athleteDraft.athleteId);
   const athleteFieldsReadOnly = athleteIntakeMode === "registered" && registeredAthleteDetailMode === "view";
+  const canManageAthleteDetails = capabilities.canManageAthletes && !athleteFieldsReadOnly;
+  const canEditTryoutScores = capabilities.canSaveTryoutRecords;
 
   const selectNewAthleteMode = () => {
     setAthleteIntakeMode("new");
@@ -486,20 +491,20 @@ export function TryoutsSurface(props: TryoutsSurfaceProps) {
                     <Input
                       label="First Name"
                       value={athleteDraft.firstName}
-                      readOnly={athleteFieldsReadOnly}
+                      readOnly={!canManageAthleteDetails}
                       onChange={(event) => updateAthleteDraft("firstName", event.target.value)}
                     />
                     <Input
                       label="Last Name"
                       value={athleteDraft.lastName}
-                      readOnly={athleteFieldsReadOnly}
+                      readOnly={!canManageAthleteDetails}
                       onChange={(event) => updateAthleteDraft("lastName", event.target.value)}
                     />
                     <Input
                       type="date"
                       label="Date Of Birth"
                       value={athleteDraft.dateOfBirth}
-                      readOnly={athleteFieldsReadOnly}
+                      readOnly={!canManageAthleteDetails}
                       onChange={(event) => updateAthleteDraft("dateOfBirth", event.target.value)}
                     />
                     <Textarea
@@ -507,7 +512,7 @@ export function TryoutsSurface(props: TryoutsSurfaceProps) {
                       rows={3}
                       containerClassName="planner-athlete-grid-wide"
                       value={athleteDraft.notes}
-                      readOnly={athleteFieldsReadOnly}
+                      readOnly={!canManageAthleteDetails}
                       onChange={(event) => updateAthleteDraft("notes", event.target.value)}
                     />
                   </div>
@@ -516,7 +521,7 @@ export function TryoutsSurface(props: TryoutsSurfaceProps) {
                     <SectionHeader
                       eyebrow="Parents"
                       title="Parent Or Guardian Contacts"
-                      actions={!athleteFieldsReadOnly ? (
+                      actions={canManageAthleteDetails ? (
                         <Button type="button" variant="ghost" size="sm" onClick={addParentContact}>
                           Add Contact
                         </Button>
@@ -527,7 +532,7 @@ export function TryoutsSurface(props: TryoutsSurfaceProps) {
                         <CardContent className="planner-panel-stack">
                           <div className="planner-inline-actions planner-parent-contact-card__head">
                             <strong>Contact {index + 1}</strong>
-                            {!athleteFieldsReadOnly ? (
+                            {canManageAthleteDetails ? (
                               <Button type="button" variant="ghost" size="sm" leadingIcon={<Trash2 />} onClick={() => removeParentContact(contact.id)}>
                                 Remove
                               </Button>
@@ -537,20 +542,20 @@ export function TryoutsSurface(props: TryoutsSurfaceProps) {
                             <Input
                               label="Parent Name"
                               value={contact.name}
-                              readOnly={athleteFieldsReadOnly}
+                              readOnly={!canManageAthleteDetails}
                               onChange={(event) => updateParentContact(contact.id, "name", event.target.value)}
                             />
                             <Input
                               label="Parent Email"
                               type="email"
                               value={contact.email}
-                              readOnly={athleteFieldsReadOnly}
+                              readOnly={!canManageAthleteDetails}
                               onChange={(event) => updateParentContact(contact.id, "email", event.target.value)}
                             />
                             <Input
                               label="Parent Phone"
                               value={contact.phone}
-                              readOnly={athleteFieldsReadOnly}
+                              readOnly={!canManageAthleteDetails}
                               onChange={(event) => updateParentContact(contact.id, "phone", event.target.value)}
                             />
                           </div>
@@ -831,6 +836,7 @@ export function TryoutsSurface(props: TryoutsSurfaceProps) {
                                             leadingIcon={<Trash2 />}
                                             aria-label="Clear item score"
                                             title="Clean"
+                                            disabled={!canEditTryoutScores}
                                             onClick={() => updateSkillOption(bucket.bucketKey, skill.id, "")}
                                           />
                                         </div>
@@ -844,7 +850,8 @@ export function TryoutsSurface(props: TryoutsSurfaceProps) {
                                           onValueChange={(value) => updateSkillOption(bucket.bucketKey, skill.id, value)}
                                           items={template.options.map((option) => ({
                                             value: option.id,
-                                            label: shouldUseCompactSkillOptionLabels ? formatScore(option.value) : `${option.label} / ${formatScore(option.value)}`
+                                            label: shouldUseCompactSkillOptionLabels ? formatScore(option.value) : `${option.label} / ${formatScore(option.value)}`,
+                                            disabled: !canEditTryoutScores
                                           }))}
                                         />
                                       </div>
@@ -900,6 +907,7 @@ export function TryoutsSurface(props: TryoutsSurfaceProps) {
                                           leadingIcon={<Eraser />}
                                           aria-label="Clear skill score"
                                           title="Clean"
+                                          disabled={!canEditTryoutScores}
                                           onClick={() => updateSkillOption(bucket.bucketKey, skill.id, "")}
                                         />
                                       </div>
@@ -913,13 +921,14 @@ export function TryoutsSurface(props: TryoutsSurfaceProps) {
                                         onValueChange={(value) => updateSkillOption(bucket.bucketKey, skill.id, value)}
                                         items={template.options.map((option) => ({
                                           value: option.id,
-                                          label: shouldUseCompactSkillOptionLabels ? formatScore(option.value) : `${option.label} / ${formatScore(option.value)}`
+                                          label: shouldUseCompactSkillOptionLabels ? formatScore(option.value) : `${option.label} / ${formatScore(option.value)}`,
+                                          disabled: !canEditTryoutScores
                                         }))}
                                       />
                                     </div>
                                   </div>
                                 ))}
-                                {bucket.allowsExtra ? (
+                                {bucket.allowsExtra && canEditTryoutScores ? (
                                   <Button type="button" variant="secondary" size="sm" onClick={() => addExtraSkill(bucket.bucketKey)}>
                                     Add Extra Skill
                                   </Button>
@@ -933,15 +942,17 @@ export function TryoutsSurface(props: TryoutsSurfaceProps) {
                   )}
                 </div>
 
-                <Button
-                  size="lg"
-                  className="planner-save-evaluation-button"
-                  leadingIcon={<Save />}
-                  onClick={saveTryoutRecord}
-                  disabled={!canSaveAthleteRecord || isSavingAction("tryout-record")}
-                >
-                  {isSavingAction("tryout-record") ? "Saving..." : "Save Athlete Record"}
-                </Button>
+                {capabilities.canSaveTryoutRecords ? (
+                  <Button
+                    size="lg"
+                    className="planner-save-evaluation-button"
+                    leadingIcon={<Save />}
+                    onClick={saveTryoutRecord}
+                    disabled={!canSaveAthleteRecord || isSavingAction("tryout-record")}
+                  >
+                    {isSavingAction("tryout-record") ? "Saving..." : "Save Athlete Record"}
+                  </Button>
+                ) : null}
 
                 <div className="planner-panel-divider" aria-hidden="true" />
 
@@ -1027,7 +1038,9 @@ export function TryoutsSurface(props: TryoutsSurfaceProps) {
               </div>
               <div className="planner-evaluation-sheet__header-meta">
                 <div className="planner-evaluation-sheet__header-actions">
-                  <Button variant="ghost" size="sm" iconOnly leadingIcon={<Pencil />} aria-label="Edit tryout record" onClick={handlePreviewEdit} />
+                  {capabilities.canSaveTryoutRecords ? (
+                    <Button variant="ghost" size="sm" iconOnly leadingIcon={<Pencil />} aria-label="Edit tryout record" onClick={handlePreviewEdit} />
+                  ) : null}
                   <Button variant="ghost" size="sm" iconOnly leadingIcon={<X />} aria-label="Close tryout record summary" onClick={() => setPreviewTryoutRecord(null)} />
                 </div>
                 <div className="planner-evaluation-sheet__header-status">

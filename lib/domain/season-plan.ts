@@ -2,6 +2,7 @@ import type { TimestampedEntity } from "@/lib/domain/base";
 
 export type TeamSeasonPlanStatus = "draft" | "approved" | "archived";
 export type TeamSeasonCheckpointStatus = "planned" | "confirmed" | "completed";
+export type TeamSeasonManualEntryType = "evaluation" | "choreography" | "event";
 
 export type TeamSeasonCheckpoint = {
   id: string;
@@ -15,6 +16,16 @@ export type TeamSeasonCheckpoint = {
   notes: string;
 };
 
+export type TeamSeasonManualEntry = {
+  id: string;
+  type: TeamSeasonManualEntryType;
+  title: string;
+  targetDate: string | null;
+  status: TeamSeasonCheckpointStatus;
+  notes: string;
+  sortOrder: number;
+};
+
 export type TeamSeasonPlan = TimestampedEntity & {
   // Planner-scoped season aggregate for one team. This stores season planning decisions and progression checkpoints, not calendar/editor UI state.
   workspaceId: string;
@@ -23,5 +34,6 @@ export type TeamSeasonPlan = TimestampedEntity & {
   status: TeamSeasonPlanStatus;
   notes: string;
   checkpoints: TeamSeasonCheckpoint[];
+  manualEntries: TeamSeasonManualEntry[];
 };
 

@@ -14,7 +14,7 @@ import type {
 } from "@/lib/domain/evaluation-record";
 import type { PlannerProject, PlannerProjectStatus, PlannerQualificationRules } from "@/lib/domain/planner-project";
 import type { RoutineDocument, TeamRoutineItem, TeamRoutineItemStatus, TeamRoutinePlacement, TeamRoutinePlacementKind, TeamRoutinePlan, TeamRoutinePlanStatus } from "@/lib/domain/routine-plan";
-import type { TeamSeasonCheckpoint, TeamSeasonCheckpointStatus, TeamSeasonPlan, TeamSeasonPlanStatus } from "@/lib/domain/season-plan";
+import type { TeamSeasonCheckpoint, TeamSeasonCheckpointStatus, TeamSeasonManualEntry, TeamSeasonManualEntryType, TeamSeasonPlan, TeamSeasonPlanStatus } from "@/lib/domain/season-plan";
 import type { TeamSkillPlan, TeamSkillPlanStatus, TeamSkillSelection, TeamSkillSelectionStatus } from "@/lib/domain/skill-plan";
 import type { ScoringSystem, ScoringSystemSection, ScoringSystemStatus, ScoringSystemVersion, ScoringSystemVersionStatus } from "@/lib/domain/scoring-system";
 import type { TeamRecord, TeamSelectionProfile, TeamStatus } from "@/lib/domain/team";
@@ -85,6 +85,10 @@ export function isTeamSeasonPlanStatus(value: unknown): value is TeamSeasonPlanS
 
 export function isTeamSeasonCheckpointStatus(value: unknown): value is TeamSeasonCheckpointStatus {
   return value === "planned" || value === "confirmed" || value === "completed";
+}
+
+export function isTeamSeasonManualEntryType(value: unknown): value is TeamSeasonManualEntryType {
+  return value === "evaluation" || value === "choreography" || value === "event";
 }
 
 export function isScoringSystemStatus(value: unknown): value is ScoringSystemStatus {
@@ -497,6 +501,21 @@ export function isTeamSeasonCheckpoint(value: unknown): value is TeamSeasonCheck
     && typeof record.notes === "string";
 }
 
+export function isTeamSeasonManualEntry(value: unknown): value is TeamSeasonManualEntry {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const record = value as Record<string, unknown>;
+  return isNonEmptyString(record.id)
+    && isTeamSeasonManualEntryType(record.type)
+    && typeof record.title === "string"
+    && (record.targetDate === null || isIsoDateString(record.targetDate))
+    && isTeamSeasonCheckpointStatus(record.status)
+    && typeof record.notes === "string"
+    && typeof record.sortOrder === "number";
+}
+
 export function isTeamSeasonPlan(value: unknown): value is TeamSeasonPlan {
   if (!value || typeof value !== "object") {
     return false;
@@ -511,6 +530,8 @@ export function isTeamSeasonPlan(value: unknown): value is TeamSeasonPlan {
     && typeof record.notes === "string"
     && Array.isArray(record.checkpoints)
     && record.checkpoints.every(isTeamSeasonCheckpoint)
+    && Array.isArray(record.manualEntries)
+    && record.manualEntries.every(isTeamSeasonManualEntry)
     && isIsoDateString(record.createdAt)
     && isIsoDateString(record.updatedAt);
 }

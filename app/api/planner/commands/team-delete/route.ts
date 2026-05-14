@@ -24,6 +24,10 @@ export async function POST(request: NextRequest) {
       return premiumError;
     }
 
+    if (scope.scope === "gym") {
+      return NextResponse.json({ error: "Gym workspaces can manage rosters, but cannot delete teams from Cheer Planner." }, { status: 403 });
+    }
+
     const result = await softDeletePlannerTeamCommand(session, scope.scope, {
       workspaceRootId: typeof payload?.workspaceRootId === "string" ? payload.workspaceRootId : null,
       teamId: asString(payload?.teamId),

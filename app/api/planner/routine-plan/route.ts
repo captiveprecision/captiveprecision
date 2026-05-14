@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { deriveRoutineItemsFromDocument, normalizeRoutineDocument } from "@/lib/services/planner-routine-builder";
 import { getPlannerScopeContext, requirePlannerSession, canEditTeamForSession } from "@/lib/services/planner-api-access";
 import { requireCheerPlannerPremium } from "@/lib/access/membership";
+import { canScopeWritePlannerCommand } from "@/lib/services/planner-capabilities";
 import { getPlannerCommandError, savePlannerRoutinePlanCommand } from "@/lib/services/planner-command-service";
 
 type RoutinePlanPayload = {
@@ -35,6 +36,10 @@ export async function POST(request: NextRequest) {
 
     if (premiumError) {
       return premiumError;
+    }
+
+    if (!canScopeWritePlannerCommand(scope.scope, "routine-plan-save")) {
+      return NextResponse.json({ error: "Gym workspaces can review routines, but cannot edit them from Cheer Planner." }, { status: 403 });
     }
 
     const teamId = asString(payload?.teamId);

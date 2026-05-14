@@ -215,6 +215,11 @@ export async function PATCH(request: NextRequest) {
     if (premiumError) {
       return premiumError;
     }
+
+    if (scope.scope === "gym") {
+      return NextResponse.json({ error: "Gym workspaces can manage rosters, but cannot delete teams from Cheer Planner." }, { status: 403 });
+    }
+
     const remoteTeamId = normalizeText(payload?.teamId);
 
     if (!remoteTeamId) {

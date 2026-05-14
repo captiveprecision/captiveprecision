@@ -1,7 +1,7 @@
 import type { PlannerLevelLabel } from "@/lib/domain/planner-levels";
 import type { PlannerProject } from "@/lib/domain/planner-project";
 import type { TeamRoutinePlan } from "@/lib/domain/routine-plan";
-import type { TeamSeasonCheckpoint, TeamSeasonPlan, TeamSeasonPlanStatus } from "@/lib/domain/season-plan";
+import type { TeamSeasonCheckpoint, TeamSeasonManualEntry, TeamSeasonPlan, TeamSeasonPlanStatus } from "@/lib/domain/season-plan";
 import type { TeamSkillPlan } from "@/lib/domain/skill-plan";
 
 // Derived read model for the canonical routine context available to Season Planner.
@@ -30,6 +30,10 @@ export type SeasonPlannerTeamInput = {
 
 function cloneCheckpoint(checkpoint: TeamSeasonCheckpoint): TeamSeasonCheckpoint {
   return { ...checkpoint };
+}
+
+function cloneManualEntry(entry: TeamSeasonManualEntry): TeamSeasonManualEntry {
+  return { ...entry };
 }
 
 export function buildSeasonPlannerTeamInputs(project: PlannerProject): SeasonPlannerTeamInput[] {
@@ -73,6 +77,7 @@ export function createTeamSeasonPlanRecord(project: PlannerProject, teamId: stri
     status: "draft",
     notes: "",
     checkpoints: [],
+    manualEntries: [],
     createdAt: occurredAt,
     updatedAt: occurredAt
   };
@@ -88,10 +93,21 @@ export function normalizeTeamSeasonCheckpoints(checkpoints: TeamSeasonCheckpoint
   return [...byId.values()].sort((left, right) => left.sortOrder - right.sortOrder || left.id.localeCompare(right.id));
 }
 
+export function normalizeTeamSeasonManualEntries(entries: TeamSeasonManualEntry[]): TeamSeasonManualEntry[] {
+  const byId = new Map<string, TeamSeasonManualEntry>();
+
+  entries.forEach((entry) => {
+    byId.set(entry.id, cloneManualEntry(entry));
+  });
+
+  return [...byId.values()].sort((left, right) => left.sortOrder - right.sortOrder || left.id.localeCompare(right.id));
+}
+
 export function upsertTeamSeasonPlan(project: PlannerProject, nextPlan: TeamSeasonPlan, occurredAt: string): PlannerProject {
   const normalizedPlan: TeamSeasonPlan = {
     ...nextPlan,
     checkpoints: normalizeTeamSeasonCheckpoints(nextPlan.checkpoints),
+    manualEntries: normalizeTeamSeasonManualEntries(nextPlan.manualEntries),
     updatedAt: occurredAt
   };
 
@@ -110,6 +126,7 @@ export function replaceTeamSeasonPlanCheckpoints(
   input: {
     teamId: string;
     checkpoints: TeamSeasonCheckpoint[];
+    manualEntries?: TeamSeasonManualEntry[];
     notes?: string;
     status?: TeamSeasonPlanStatus;
     occurredAt: string;
@@ -122,6 +139,7 @@ export function replaceTeamSeasonPlanCheckpoints(
     notes: input.notes ?? existingPlan.notes,
     status: input.status ?? existingPlan.status,
     checkpoints: input.checkpoints,
+    manualEntries: input.manualEntries ?? existingPlan.manualEntries,
     updatedAt: input.occurredAt
   }, input.occurredAt);
 }

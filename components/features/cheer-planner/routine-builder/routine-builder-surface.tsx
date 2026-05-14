@@ -8,6 +8,7 @@ import { buildRoutineBuilderSkillDefinitions, resolveRoutineBuilderDocument } fr
 import type { CheerPlannerIntegration } from "@/lib/services/planner-integration";
 
 type RoutineBuilderSurfaceProps = {
+  readOnly?: boolean;
   teams: CheerPlannerIntegration["routineBuilderTeams"];
   routineBuilderDraft: CheerPlannerIntegration["routineBuilderDraft"];
   openRoutineBuilderTeam: (teamId: string) => void | Promise<void>;
@@ -19,6 +20,7 @@ type RoutineBuilderSurfaceProps = {
 
 export function RoutineBuilderSurface(props: RoutineBuilderSurfaceProps) {
   const {
+    readOnly = false,
     teams,
     routineBuilderDraft,
     openRoutineBuilderTeam,
@@ -78,7 +80,7 @@ export function RoutineBuilderSurface(props: RoutineBuilderSurfaceProps) {
                           <Badge variant={team.skillPlan ? "accent" : "subtle"}>{team.skillPlan ? `Skills ${team.skillPlan.status.charAt(0).toUpperCase()}${team.skillPlan.status.slice(1)}` : "No Skill Plan"}</Badge>
                           <Badge variant={team.routinePlan ? "dark" : "subtle"}>{team.routinePlan ? `Routine ${team.routinePlan.status.charAt(0).toUpperCase()}${team.routinePlan.status.slice(1)}` : "No Routine Plan"}</Badge>
                         </div>
-                        {isEditing ? (
+                        {isEditing && !readOnly ? (
                           <>
                             <Button size="sm" onClick={() => void saveRoutineBuilderEdit()} disabled={isSavingAction("routine-plan")}>
                               {isSavingAction("routine-plan") ? "Saving..." : "Save"}
@@ -95,17 +97,19 @@ export function RoutineBuilderSurface(props: RoutineBuilderSurfaceProps) {
                             >
                               {isSelected ? "Hide Details" : "View Team"}
                             </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              leadingIcon={<Pencil />}
-                              onClick={() => {
-                                setSelectedTeamId(team.teamId);
-                                void openRoutineBuilderTeam(team.teamId);
-                              }}
-                            >
-                              Edit Team
-                            </Button>
+                            {!readOnly ? (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                leadingIcon={<Pencil />}
+                                onClick={() => {
+                                  setSelectedTeamId(team.teamId);
+                                  void openRoutineBuilderTeam(team.teamId);
+                                }}
+                              >
+                                Edit Team
+                              </Button>
+                            ) : null}
                           </>
                         )}
                       </div>
@@ -120,7 +124,7 @@ export function RoutineBuilderSurface(props: RoutineBuilderSurfaceProps) {
                           teamName={team.teamName}
                           initialDocument={effectiveDocument}
                           skills={editorSkills}
-                          readOnly={!isEditing}
+                          readOnly={!isEditing || readOnly}
                           onDocumentChange={updateRoutineBuilderDocument}
                         />
                       </div>

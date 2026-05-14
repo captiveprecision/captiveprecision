@@ -325,6 +325,9 @@ export function buildTeamSeasonPlanFromRow(row: TeamSeasonPlanRow, workspaceId: 
     status: row.status as TeamSeasonPlan["status"],
     notes: row.notes,
     checkpoints: Array.isArray(row.checkpoints) ? row.checkpoints as TeamSeasonPlan["checkpoints"] : [],
+    manualEntries: Array.isArray((row as TeamSeasonPlanRow & { manual_entries?: unknown }).manual_entries)
+      ? (row as TeamSeasonPlanRow & { manual_entries?: TeamSeasonPlan["manualEntries"] }).manual_entries ?? []
+      : [],
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     workspaceRootId: getWorkspaceRootId(versionedRow),

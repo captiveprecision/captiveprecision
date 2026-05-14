@@ -8,6 +8,7 @@ import { TryoutsSurface } from "@/components/features/cheer-planner/tryouts/tryo
 import { SkillPlannerSurface } from "@/components/features/cheer-planner/skill-planner/skill-planner-surface";
 import { Badge, Card, CardContent, SectionHeader, Tabs } from "@/components/ui";
 import type { PlannerPipelineStage } from "@/lib/domain/planner-levels";
+import type { CheerPlannerCapabilities } from "@/lib/services/planner-capabilities";
 import type { CheerPlannerIntegration } from "@/lib/services/planner-integration";
 
 const PLANNER_WORKSPACE_TABS: { value: PlannerPipelineStage; label: string }[] = [
@@ -24,9 +25,10 @@ function isPlannerWorkspaceTab(value: string): value is PlannerPipelineStage {
 
 type CheerPlannerShellProps = {
   integration: CheerPlannerIntegration;
+  capabilities: CheerPlannerCapabilities;
 };
 
-export function CheerPlannerShell({ integration }: CheerPlannerShellProps) {
+export function CheerPlannerShell({ integration, capabilities }: CheerPlannerShellProps) {
   const workspaceTab = integration.plannerState.pipelineStage;
 
   return (
@@ -60,6 +62,7 @@ export function CheerPlannerShell({ integration }: CheerPlannerShellProps) {
 
       {workspaceTab === "tryouts" ? (
         <TryoutsSurface
+          capabilities={capabilities}
           athleteDraft={integration.athleteDraft}
           athletePool={integration.athletePool}
           updateAthleteDraft={integration.updateAthleteDraft}
@@ -108,6 +111,7 @@ export function CheerPlannerShell({ integration }: CheerPlannerShellProps) {
 
       {workspaceTab === "team-builder" ? (
         <TeamBuilderSurface
+          capabilities={capabilities}
           stats={integration.stats}
           qualificationOpen={integration.qualificationOpen}
           setQualificationOpen={integration.setQualificationOpen}
@@ -142,6 +146,7 @@ export function CheerPlannerShell({ integration }: CheerPlannerShellProps) {
 
       {workspaceTab === "skill-planner" ? (
         <SkillPlannerSurface
+          readOnly={!capabilities.canEditSkillPlanner}
           teams={integration.skillPlannerTeams}
           skillPlannerDraft={integration.skillPlannerDraft}
           openSkillPlannerTeam={integration.openSkillPlannerTeam}
@@ -155,6 +160,7 @@ export function CheerPlannerShell({ integration }: CheerPlannerShellProps) {
       ) : null}
       {workspaceTab === "routine-builder" ? (
         <RoutineBuilderSurface
+          readOnly={!capabilities.canEditRoutineBuilder}
           teams={integration.routineBuilderTeams}
           routineBuilderDraft={integration.routineBuilderDraft}
           openRoutineBuilderTeam={integration.openRoutineBuilderTeam}
@@ -166,11 +172,17 @@ export function CheerPlannerShell({ integration }: CheerPlannerShellProps) {
       ) : null}
       {workspaceTab === "season-planner" ? (
         <SeasonPlannerSurface
+          canEdit={capabilities.canEditSeasonPlanner}
+          canEditManualEntries={capabilities.canEditSeasonManualEntries}
           teams={integration.seasonPlannerTeams}
           seasonPlannerDraft={integration.seasonPlannerDraft}
           openSeasonPlannerTeam={integration.openSeasonPlannerTeam}
           cancelSeasonPlannerEdit={integration.cancelSeasonPlannerEdit}
           toggleSeasonPlannerCheckpoint={integration.toggleSeasonPlannerCheckpoint}
+          updateSeasonPlannerCheckpoint={integration.updateSeasonPlannerCheckpoint}
+          addSeasonPlannerManualEntry={integration.addSeasonPlannerManualEntry}
+          updateSeasonPlannerManualEntry={integration.updateSeasonPlannerManualEntry}
+          removeSeasonPlannerManualEntry={integration.removeSeasonPlannerManualEntry}
           saveSeasonPlannerEdit={integration.saveSeasonPlannerEdit}
           isSavingAction={integration.isSavingAction}
         />

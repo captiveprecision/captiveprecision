@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { getPlannerScopeContext, requirePlannerSession } from "@/lib/services/planner-api-access";
 import { requireCheerPlannerPremium } from "@/lib/access/membership";
+import { canScopeWritePlannerCommand } from "@/lib/services/planner-capabilities";
 import { getPlannerCommandError, savePlannerTryoutRecordCommand } from "@/lib/services/planner-command-service";
 import { normalizePlannerTryoutRecord } from "@/lib/services/planner-domain-mappers";
 import { isUuidString } from "@/lib/services/planner-workspace";
@@ -39,6 +40,10 @@ export async function POST(request: NextRequest) {
 
     if (premiumError) {
       return premiumError;
+    }
+
+    if (!canScopeWritePlannerCommand(scope.scope, "tryout-save")) {
+      return NextResponse.json({ error: "Gym workspaces can review tryouts, but cannot save new tryout evaluations." }, { status: 403 });
     }
 
     const tryoutRecord = asObject(payload?.tryoutRecord);

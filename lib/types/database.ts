@@ -111,7 +111,9 @@ export type Database = {
           created_at: string;
           gym_id: string;
           id: string;
+          invited_by_profile_id: string | null;
           license_seat_name: string | null;
+          seat_role: string;
           status: string;
           updated_at: string;
         };
@@ -120,7 +122,9 @@ export type Database = {
           created_at?: string;
           gym_id: string;
           id?: string;
+          invited_by_profile_id?: string | null;
           license_seat_name?: string | null;
+          seat_role?: string;
           status?: string;
           updated_at?: string;
         };
@@ -320,6 +324,7 @@ export type Database = {
           checkpoints: Json;
           created_at: string;
           id: string;
+          manual_entries: Json;
           notes: string;
           planner_project_id: string;
           status: string;
@@ -330,6 +335,7 @@ export type Database = {
           checkpoints?: Json;
           created_at?: string;
           id?: string;
+          manual_entries?: Json;
           notes?: string;
           planner_project_id: string;
           status?: string;

@@ -557,6 +557,7 @@ export async function savePlannerSeasonPlanCommand(
     status: string;
     notes: string;
     checkpoints: unknown[];
+    manualEntries?: unknown[];
   }
 ) {
   const workspaceRoot = await resolveWorkspaceRoot(session, scope, payload.workspaceRootId, "write");
@@ -568,7 +569,8 @@ export async function savePlannerSeasonPlanCommand(
     p_team_id: payload.teamId,
     p_status: payload.status,
     p_notes: payload.notes,
-    p_checkpoints: payload.checkpoints
+    p_checkpoints: payload.checkpoints,
+    p_manual_entries: payload.manualEntries ?? []
   });
 }
 
