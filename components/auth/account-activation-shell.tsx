@@ -119,12 +119,26 @@ export function AccountActivationShell() {
 
     setState({ mode: "submitting", message: "Activating account..." });
 
+    const supabase = createClient();
+    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+
+    if (sessionError || !sessionData.session?.access_token) {
+      setState({
+        mode: "error",
+        message: sessionError?.message ?? "This activation session is invalid or expired. Please request a new invitation."
+      });
+      return;
+    }
+
     const response = await fetch("/api/auth/activate", {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
       },
-      body: JSON.stringify({ password })
+      body: JSON.stringify({
+        password,
+        accessToken: sessionData.session.access_token
+      })
     });
     const payload = await response.json().catch(() => ({}));
 
@@ -133,7 +147,6 @@ export function AccountActivationShell() {
       return;
     }
 
-    const supabase = createClient();
     await supabase.auth.signOut();
 
     setState({ mode: "success", message: "Password saved. Redirecting to sign in..." });

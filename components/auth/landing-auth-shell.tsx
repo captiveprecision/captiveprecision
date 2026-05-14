@@ -82,8 +82,19 @@ async function readAuthResponse(response: Response): Promise<AuthResponsePayload
   }
 
   const text = await response.text().catch(() => "");
+  const trimmedText = text.trim();
+
+  if (/<!doctype html>|<html[\s>]/i.test(trimmedText)) {
+    const titleMatch = trimmedText.match(/<title>(.*?)<\/title>/i);
+    const title = titleMatch?.[1]?.replace(/\s+/g, " ").trim();
+
+    return {
+      error: title ? `${title}. Please try again in a moment.` : "The sign-in service is temporarily unavailable. Please try again in a moment."
+    };
+  }
+
   return {
-    error: text.trim() || "The server returned an unexpected response."
+    error: trimmedText || "The server returned an unexpected response."
   };
 }
 
