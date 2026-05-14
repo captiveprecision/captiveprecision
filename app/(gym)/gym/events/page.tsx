@@ -1,11 +1,12 @@
-import { WorkspacePlaceholderPage } from "@/components/layout/workspace-placeholder-page";
+import { EventsCalendarShell } from "@/components/features/events/events-calendar-shell";
 
 export default function GymEventsPage() {
   return (
-    <WorkspacePlaceholderPage
+    <EventsCalendarShell
+      workspace="gym"
       eyebrow="Gym events"
       title="Events"
-      description="Gym-wide scheduling and event coordination are planned, but this route stays intentionally minimal for now."
+      description="Gym-wide scheduling in local calendar mode, migrated from the Calendar Systems prototype."
     />
   );
 }

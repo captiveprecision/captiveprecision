@@ -2,14 +2,18 @@
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { Mail, Plus, UserRound, X } from "lucide-react";
+import { AlertTriangle, Ellipsis, Mail, Pencil, Plus, Unlink, UserRound, X } from "lucide-react";
 
 import { Button, Input, Select } from "@/components/ui";
 
 const ROLE_OPTIONS = ["Coach", "Staff", "Assistant"] as const;
+const CREDENTIAL_OPTIONS = ["Tumbling", "Building", "Special Needs", "Dance"] as const;
+const TUMBLING_LEVEL_OPTIONS = ["Level 1", "Level 2", "Level 3", "Level 4", "Level 5", "Level 6"] as const;
+const BUILDING_LEVEL_OPTIONS = ["Level 1", "Level 2", "Level 3", "Level 4", "Level 5", "Level 6", "Level 7"] as const;
 
 type ManageGymRole = (typeof ROLE_OPTIONS)[number] | "";
 type StaffSeatRole = "coach" | "staff" | "assistant";
+type StaffCredential = (typeof CREDENTIAL_OPTIONS)[number];
 type LookupStatus = "idle" | "loading" | "found" | "not-found" | "error";
 
 export type ManageGymPerson = {
@@ -69,6 +73,27 @@ function isValidEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 }
 
+function parseCredentialDetails(credentials: string[]) {
+  const tumblingPrefix = "Tumbling max:";
+  const buildingPrefix = "Building max:";
+  const tumblingLevel = credentials.find((credential) => credential.startsWith(tumblingPrefix))?.replace(tumblingPrefix, "").trim();
+  const buildingLevel = credentials.find((credential) => credential.startsWith(buildingPrefix))?.replace(buildingPrefix, "").trim();
+
+  return CREDENTIAL_OPTIONS
+    .filter((credential) => credentials.includes(credential))
+    .map((credential) => {
+      if (credential === "Tumbling" && tumblingLevel) {
+        return `Tumbling ${tumblingLevel}`;
+      }
+
+      if (credential === "Building" && buildingLevel) {
+        return `Building ${buildingLevel}`;
+      }
+
+      return credential;
+    });
+}
+
 function buildOptimisticPerson(payload: {
   accountId: string;
   email: string;
@@ -109,14 +134,22 @@ export function ManageGymPeopleTable({ initialPeople }: ManageGymPeopleTableProp
   const [inviteName, setInviteName] = useState("");
   const [inviteRole, setInviteRole] = useState<StaffSeatRole>("staff");
   const [submitting, setSubmitting] = useState(false);
+  const [actionSubmitting, setActionSubmitting] = useState(false);
+  const [editTarget, setEditTarget] = useState<ManageGymPerson | null>(null);
+  const [editRole, setEditRole] = useState<StaffSeatRole>("coach");
+  const [editCredentials, setEditCredentials] = useState<StaffCredential[]>([]);
+  const [editTumblingLevel, setEditTumblingLevel] = useState("");
+  const [editBuildingLevel, setEditBuildingLevel] = useState("");
+  const [editMembershipAssigned, setEditMembershipAssigned] = useState(true);
+  const [unlinkTarget, setUnlinkTarget] = useState<ManageGymPerson | null>(null);
   const [notice, setNotice] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
   const activePeople = useMemo(
-    () => people.filter((person) => person.role && person.membershipAssigned),
+    () => people.filter((person) => person.membershipAssigned),
     [people]
   );
   const peopleNeedingAccess = useMemo(
-    () => people.filter((person) => !person.role || !person.membershipAssigned),
+    () => people.filter((person) => !person.membershipAssigned),
     [people]
   );
 
@@ -128,11 +161,136 @@ export function ManageGymPeopleTable({ initialPeople }: ManageGymPeopleTableProp
     setPeople((current) => current.map((person) => (person.id === id ? { ...person, ...patch } : person)));
   }
 
-  function assignMembership(id: string) {
-    updatePerson(id, {
-      membershipAssigned: true,
-      membershipLabel: "Manual Membership"
-    });
+  function openEditModal(person: ManageGymPerson) {
+    const tumblingPrefix = "Tumbling max:";
+    const buildingPrefix = "Building max:";
+    const tumblingLevel = person.credentialLevels
+      .find((credential) => credential.startsWith(tumblingPrefix))
+      ?.replace(tumblingPrefix, "")
+      .trim() ?? "";
+    const buildingLevel = person.credentialLevels
+      .find((credential) => credential.startsWith(buildingPrefix))
+      ?.replace(buildingPrefix, "")
+      .trim() ?? "";
+
+    setEditTarget(person);
+    setEditRole(toSeatRole(person.role));
+    setEditCredentials(person.credentialLevels.filter((credential): credential is StaffCredential =>
+      CREDENTIAL_OPTIONS.includes(credential as StaffCredential)
+    ));
+    setEditTumblingLevel(tumblingLevel);
+    setEditBuildingLevel(buildingLevel);
+    setEditMembershipAssigned(person.membershipAssigned);
+    setNotice(null);
+  }
+
+  function toggleEditCredential(credential: StaffCredential) {
+    setEditCredentials((current) => (
+      current.includes(credential)
+        ? current.filter((item) => item !== credential)
+        : [...current, credential]
+    ));
+
+    if (credential === "Tumbling" && editCredentials.includes("Tumbling")) {
+      setEditTumblingLevel("");
+    }
+
+    if (credential === "Building" && editCredentials.includes("Building")) {
+      setEditBuildingLevel("");
+    }
+  }
+
+  async function submitEdit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!editTarget) {
+      return;
+    }
+
+    setActionSubmitting(true);
+    setNotice(null);
+
+    try {
+      const credentialLevels = [
+        ...editCredentials,
+        ...(editCredentials.includes("Tumbling") && editTumblingLevel.trim()
+          ? [`Tumbling max: ${editTumblingLevel.trim()}`]
+          : []),
+        ...(editCredentials.includes("Building") && editBuildingLevel.trim()
+          ? [`Building max: ${editBuildingLevel.trim()}`]
+          : [])
+      ];
+      const response = await fetch("/api/gym/staff", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          profileId: editTarget.id,
+          seatRole: editRole,
+          credentialLevels,
+          membershipAssigned: editMembershipAssigned
+        })
+      });
+      const payload = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(typeof payload.error === "string" ? payload.error : "Unable to update staff details.");
+      }
+
+      updatePerson(editTarget.id, {
+        role: toManageGymRole(editRole),
+        staffFunction: editRole === "staff" ? editTarget.staffFunction || "Program staff" : "",
+        credentialLevels,
+        membershipAssigned: editMembershipAssigned,
+        membershipLabel: editMembershipAssigned ? "Gym Access Active" : "View Only"
+      });
+      setNotice({ type: "success", message: payload.message ?? "Staff details updated." });
+      setEditTarget(null);
+      router.refresh();
+    } catch (error) {
+      setNotice({ type: "error", message: error instanceof Error ? error.message : "Unable to update staff details." });
+    } finally {
+      setActionSubmitting(false);
+    }
+  }
+
+  async function confirmUnlink() {
+    if (!unlinkTarget) {
+      return;
+    }
+
+    setActionSubmitting(true);
+    setNotice(null);
+
+    try {
+      const response = await fetch("/api/gym/staff", {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ profileId: unlinkTarget.id })
+      });
+      const payload = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(typeof payload.error === "string" ? payload.error : "Unable to unlink this account.");
+      }
+
+      setPeople((current) => current.filter((person) => person.id !== unlinkTarget.id));
+      setExpandedPersonIds((current) => {
+        const next = new Set(current);
+        next.delete(unlinkTarget.id);
+        return next;
+      });
+      setNotice({ type: "success", message: payload.message ?? "Account unlinked from this Gym." });
+      setUnlinkTarget(null);
+      router.refresh();
+    } catch (error) {
+      setNotice({ type: "error", message: error instanceof Error ? error.message : "Unable to unlink this account." });
+    } finally {
+      setActionSubmitting(false);
+    }
   }
 
   function toggleExpandedPerson(id: string) {
@@ -308,9 +466,8 @@ export function ManageGymPeopleTable({ initialPeople }: ManageGymPeopleTableProp
       <div className="manage-gym-card-header">
         <div>
           <div className="metric-label">Coaches And Staff</div>
-          <p>Manage gym access for coaches, assistants, and staff.</p>
         </div>
-        <Button type="button" variant="primary" leadingIcon={<Plus size={16} />} onClick={() => setModalOpen(true)}>
+        <Button type="button" variant="ghost" size="sm" leadingIcon={<Plus size={15} />} onClick={() => setModalOpen(true)}>
           Add Staff
         </Button>
       </div>
@@ -340,9 +497,9 @@ export function ManageGymPeopleTable({ initialPeople }: ManageGymPeopleTableProp
                   key={person.id}
                   person={person}
                   isExpanded={expandedPersonIds.has(person.id)}
-                  onAssignMembership={assignMembership}
+                  onEdit={openEditModal}
+                  onUnlink={setUnlinkTarget}
                   onToggleExpanded={toggleExpandedPerson}
-                  onUpdatePerson={updatePerson}
                 />
               ))
             ) : (
@@ -356,7 +513,6 @@ export function ManageGymPeopleTable({ initialPeople }: ManageGymPeopleTableProp
 
       {peopleNeedingAccess.length ? (
         <div className="manage-gym-unassigned">
-          <div className="metric-label">Staff Without Roles</div>
           <div className="settings-data-table-wrap">
             <table className="settings-data-table settings-data-table--compact">
               <colgroup>
@@ -378,11 +534,10 @@ export function ManageGymPeopleTable({ initialPeople }: ManageGymPeopleTableProp
                   <ManageGymPeopleRow
                     key={person.id}
                     person={person}
-                    isPendingAccess
                     isExpanded={expandedPersonIds.has(person.id)}
-                    onAssignMembership={assignMembership}
+                    onEdit={openEditModal}
+                    onUnlink={setUnlinkTarget}
                     onToggleExpanded={toggleExpandedPerson}
-                    onUpdatePerson={updatePerson}
                   />
                 ))}
               </tbody>
@@ -486,30 +641,147 @@ export function ManageGymPeopleTable({ initialPeople }: ManageGymPeopleTableProp
           </div>
         </div>
       ) : null}
+
+      {editTarget ? (
+        <div className="admin-account-modal-backdrop" role="presentation" onClick={() => !actionSubmitting && setEditTarget(null)}>
+          <form className="admin-account-modal manage-gym-action-modal" role="dialog" aria-modal="true" aria-labelledby="manage-gym-edit-title" onSubmit={submitEdit} onClick={(event) => event.stopPropagation()}>
+            <div className="admin-account-modal__header">
+              <div>
+                <span className="ui-section-header__eyebrow">Staff settings</span>
+                <h2 id="manage-gym-edit-title">Edit {editTarget.name}</h2>
+              </div>
+              <Button type="button" variant="ghost" iconOnly aria-label="Close edit form" onClick={() => setEditTarget(null)} disabled={actionSubmitting}>
+                <X size={18} />
+              </Button>
+            </div>
+
+            <Select id="staff-edit-role" label="Role" value={editRole} onChange={(event) => setEditRole(event.target.value as StaffSeatRole)}>
+              <option value="staff">Staff</option>
+              <option value="coach">Coach</option>
+              <option value="assistant">Assistant</option>
+            </Select>
+            <div className="manage-gym-credential-options" role="group" aria-labelledby="staff-edit-credentials-label">
+              <span id="staff-edit-credentials-label" className="ui-field__label">Credentials</span>
+              <div className="manage-gym-credential-options__grid">
+                {CREDENTIAL_OPTIONS.map((credential) => (
+                  <label key={credential} className="manage-gym-credential-option">
+                    <input
+                      type="checkbox"
+                      checked={editCredentials.includes(credential)}
+                      onChange={() => toggleEditCredential(credential)}
+                    />
+                    <span>{credential}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+            {editCredentials.includes("Tumbling") ? (
+              <div className="manage-gym-tumbling-level-field">
+                <Select
+                  id="staff-edit-tumbling-level"
+                  label="Maximum approved tumbling level"
+                  value={editTumblingLevel}
+                  onChange={(event) => setEditTumblingLevel(event.target.value)}
+                  placeholder="Select max level"
+                >
+                  {TUMBLING_LEVEL_OPTIONS.map((level) => (
+                    <option key={level} value={level}>{level}</option>
+                  ))}
+                </Select>
+              </div>
+            ) : null}
+            {editCredentials.includes("Building") ? (
+              <div className="manage-gym-tumbling-level-field">
+                <Select
+                  id="staff-edit-building-level"
+                  label="Maximum approved building level"
+                  value={editBuildingLevel}
+                  onChange={(event) => setEditBuildingLevel(event.target.value)}
+                  placeholder="Select max level"
+                >
+                  {BUILDING_LEVEL_OPTIONS.map((level) => (
+                    <option key={level} value={level}>{level}</option>
+                  ))}
+                </Select>
+              </div>
+            ) : null}
+            <label className="manage-gym-membership-toggle">
+              <input
+                type="checkbox"
+                checked={editMembershipAssigned}
+                onChange={(event) => setEditMembershipAssigned(event.target.checked)}
+              />
+              <span>
+                <strong>Membership assigned</strong>
+                <small>Allows this user to access Gym tools and functions.</small>
+              </span>
+            </label>
+
+            {!editMembershipAssigned ? (
+              <p className="manage-gym-membership-warning">
+                This user will lose access to Gym functions and tools. They will only be able to view.
+              </p>
+            ) : null}
+
+            <div className="admin-account-modal__actions">
+              <Button type="button" variant="secondary" onClick={() => setEditTarget(null)} disabled={actionSubmitting}>
+                Cancel
+              </Button>
+              <Button type="submit" leadingIcon={<Pencil size={16} />} disabled={actionSubmitting}>
+                {actionSubmitting ? "Saving..." : "Save Changes"}
+              </Button>
+            </div>
+          </form>
+        </div>
+      ) : null}
+
+      {unlinkTarget ? (
+        <div className="admin-account-modal-backdrop" role="presentation" onClick={() => !actionSubmitting && setUnlinkTarget(null)}>
+          <div className="admin-account-modal manage-gym-action-modal" role="dialog" aria-modal="true" aria-labelledby="manage-gym-unlink-title" onClick={(event) => event.stopPropagation()}>
+            <div className="manage-gym-warning-head">
+              <span className="manage-gym-warning-icon" aria-hidden="true">
+                <AlertTriangle size={22} />
+              </span>
+              <div>
+                <span className="ui-section-header__eyebrow">Warning</span>
+                <h2 id="manage-gym-unlink-title">Unlink {unlinkTarget.name}?</h2>
+                <p>This will remove this user from the Gym organization and detach them from organization team assignments. Are you sure?</p>
+              </div>
+            </div>
+
+            <div className="admin-account-modal__actions">
+              <Button type="button" variant="secondary" onClick={() => setUnlinkTarget(null)} disabled={actionSubmitting}>
+                Cancel
+              </Button>
+              <Button type="button" variant="danger" leadingIcon={<Unlink size={16} />} onClick={() => void confirmUnlink()} disabled={actionSubmitting}>
+                {actionSubmitting ? "Unlinking..." : "Unlink Account"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </>
   );
 }
 
 type ManageGymPeopleRowProps = {
   person: ManageGymPerson;
-  isPendingAccess?: boolean;
   isExpanded: boolean;
-  onAssignMembership: (id: string) => void;
+  onEdit: (person: ManageGymPerson) => void;
+  onUnlink: (person: ManageGymPerson) => void;
   onToggleExpanded: (id: string) => void;
-  onUpdatePerson: (id: string, patch: Partial<ManageGymPerson>) => void;
 };
 
 function ManageGymPeopleRow({
   person,
-  isPendingAccess = false,
   isExpanded,
-  onAssignMembership,
-  onToggleExpanded,
-  onUpdatePerson
+  onEdit,
+  onUnlink,
+  onToggleExpanded
 }: ManageGymPeopleRowProps) {
-  const membershipText = person.membershipAssigned ? person.membershipLabel : "Membership not assigned";
-  const actionLabel = person.membershipAssigned ? "Membership Assigned" : "Assign Membership";
-  const canMoveToActive = Boolean(person.role);
+  const [actionMenuOpen, setActionMenuOpen] = useState(false);
+  const actionLabel = person.membershipAssigned ? "Assigned" : "View only";
+  const credentialBullets = parseCredentialDetails(person.credentialLevels);
 
   return (
     <>
@@ -536,63 +808,94 @@ function ManageGymPeopleRow({
         <tr className="settings-data-table__detail-row">
           <td colSpan={4}>
             <div className="manage-gym-person-details">
+              <div className="manage-gym-person-actions">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  iconOnly
+                  aria-label={`Open actions for ${person.name}`}
+                  leadingIcon={<Ellipsis size={18} />}
+                  onClick={() => setActionMenuOpen((value) => !value)}
+                />
+                {actionMenuOpen ? (
+                  <div className="manage-gym-person-action-menu">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActionMenuOpen(false);
+                        onEdit(person);
+                      }}
+                    >
+                      <Pencil size={15} />
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      className="manage-gym-person-action-menu__danger"
+                      onClick={() => {
+                        setActionMenuOpen(false);
+                        onUnlink(person);
+                      }}
+                    >
+                      <Unlink size={15} />
+                      Unlink account
+                    </button>
+                  </div>
+                ) : null}
+              </div>
               <div className="manage-gym-profile-details">
-                <div>
-                  <span className="metric-label">Registered Email</span>
-                  <strong>{person.email}</strong>
-                </div>
-                <div>
-                  <span className="metric-label">Date Joined</span>
-                  <strong>{person.joinedAt}</strong>
+                <div className="manage-gym-profile-row">
+                  <div>
+                    <span className="metric-label">Email</span>
+                    <strong>{person.email}</strong>
+                  </div>
+                  <div>
+                    <span className="metric-label">Date Joined</span>
+                    <strong>{person.joinedAt}</strong>
+                  </div>
                 </div>
                 <div>
                   <span className="metric-label">USASF Credentials</span>
-                  <strong>{person.credentialLevels.length ? person.credentialLevels.join(", ") : "Not recorded"}</strong>
+                  {credentialBullets.length ? (
+                    <ul className="manage-gym-credential-bullets">
+                      {credentialBullets.map((credential) => (
+                        <li key={credential}>{credential}</li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <strong>Not recorded</strong>
+                  )}
                 </div>
               </div>
-              <div className="manage-gym-role-cell">
-                <span className="metric-label">Role</span>
-                <Select
-                  aria-label={`Role for ${person.name}`}
-                  value={person.role}
-                  placeholder="Select role"
-                  onChange={(event) => {
-                    const role = event.target.value as ManageGymRole;
-                    onUpdatePerson(person.id, {
-                      role,
-                      staffFunction: role === "Staff" ? person.staffFunction || "Program staff" : ""
-                    });
-                  }}
-                >
-                  {ROLE_OPTIONS.map((role) => (
-                    <option key={role} value={role}>
-                      {role}
-                    </option>
-                  ))}
-                </Select>
-                {person.role === "Staff" ? (
-                  <input
-                    aria-label={`Staff function for ${person.name}`}
-                    className="ui-input"
-                    value={person.staffFunction}
-                    placeholder="Staff function"
-                    onChange={(event) => onUpdatePerson(person.id, { staffFunction: event.target.value })}
-                  />
-                ) : null}
-              </div>
-              <div className="manage-gym-membership-details">
-                <div>
-                  <span className="metric-label">Membership</span>
-                  <strong>{isPendingAccess && !person.role ? "Role and membership needed" : membershipText}</strong>
+              <div className="manage-gym-person-admin-row">
+                <div className="manage-gym-membership-details">
+                  <div>
+                    <span className="metric-label">Role</span>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    className="manage-gym-status-button"
+                    disabled
+                  >
+                    {person.role || "Unassigned"}
+                  </Button>
+                  {person.role === "Staff" && person.staffFunction ? <span>{person.staffFunction}</span> : null}
                 </div>
-                <Button
-                  size="sm"
-                  variant={person.membershipAssigned ? "secondary" : "primary"}
-                  disabled={person.membershipAssigned || !canMoveToActive}
-                  onClick={() => onAssignMembership(person.id)}
-                >
-                  {actionLabel}
-                </Button>
+                <div className="manage-gym-membership-details">
+                  <div>
+                    <span className="metric-label">Membership</span>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    className="manage-gym-status-button"
+                    disabled
+                  >
+                    {actionLabel}
+                  </Button>
+                </div>
               </div>
             </div>
           </td>

@@ -1,1 +1,5 @@
-export { default } from "../../../../tools/cheer-score-calculator/page";
+import { redirect } from "next/navigation";
+
+export default function GymCheerScoreCalculatorPage() {
+  redirect("/gym");
+}

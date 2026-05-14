@@ -4,7 +4,7 @@ import Image from "next/image";
 import type { Route } from "next";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState, type ChangeEvent } from "react";
+import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 import {
   ChevronDown,
   ChevronRight,
@@ -25,6 +25,7 @@ type NavItem = {
   href: Route;
   title: string;
   icon: LucideIcon;
+  children?: NavItem[];
 };
 
 type SidebarProps = {
@@ -89,6 +90,78 @@ function SidebarLink({
   );
 }
 
+function isItemActive(pathname: string, item: NavItem, index?: number) {
+  if (typeof index === "number") {
+    return isDashboardRoute(pathname, item.href, index);
+  }
+
+  return pathname === item.href || pathname.startsWith(`${item.href}/`);
+}
+
+function SidebarLinkGroup({
+  item,
+  active,
+  open,
+  collapsed,
+  pathname,
+  onToggle,
+  onNavigate
+}: {
+  item: NavItem;
+  active: boolean;
+  open: boolean;
+  collapsed: boolean;
+  pathname: string;
+  onToggle: () => void;
+  onNavigate: () => void;
+}) {
+  const Icon = item.icon;
+
+  return (
+    <div className="sidebar-nav-group" data-open={open} data-collapsed={collapsed}>
+      <button
+        type="button"
+        className="sidebar-link sidebar-nav-group-trigger"
+        data-active={active}
+        onClick={onToggle}
+        aria-expanded={open}
+        title={collapsed ? item.title : undefined}
+      >
+        <span className="nav-bullet" aria-hidden="true">
+          <Icon />
+        </span>
+        <span className="nav-title">{item.title}</span>
+        <span className="sidebar-tools-arrow" aria-hidden="true">
+          {open ? <ChevronDown /> : <ChevronRight />}
+        </span>
+      </button>
+
+      <div className="sidebar-submenu">
+        {(item.children ?? []).map((child) => {
+          const childActive = isItemActive(pathname, child);
+          const ChildIcon = child.icon;
+
+          return (
+            <Link
+              key={child.href}
+              href={child.href}
+              className="sidebar-sublink"
+              data-active={childActive}
+              onClick={onNavigate}
+              title={collapsed ? child.title : undefined}
+            >
+              <span className="sidebar-sublink-bullet" aria-hidden="true">
+                <ChildIcon />
+              </span>
+              <span>{child.title}</span>
+            </Link>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export function WorkspaceSidebar({
   currentWorkspace,
   availableWorkspaces,
@@ -112,13 +185,34 @@ export function WorkspaceSidebar({
   const [mobileOpen, setMobileOpen] = useState(false);
   const toolsActive = Boolean(toolItems?.some((item) => pathname === item.href || pathname.startsWith(`${item.href}/`)));
   const [toolsOpen, setToolsOpen] = useState(toolsActive);
+  const [openNavGroups, setOpenNavGroups] = useState<Record<string, boolean>>({});
   const showWorkspaceSwitcher = availableWorkspaces.length > 1;
+  const navGroupActiveKeys = useMemo(
+    () => navItems
+      .filter((item) => item.children?.length && (item.children.some((child) => isItemActive(pathname, child)) || isItemActive(pathname, item)))
+      .map((item) => item.href),
+    [navItems, pathname]
+  );
 
   useEffect(() => {
     if (toolsActive) {
       setToolsOpen(true);
     }
   }, [toolsActive]);
+
+  useEffect(() => {
+    if (!navGroupActiveKeys.length) {
+      return;
+    }
+
+    setOpenNavGroups((current) => {
+      const next = { ...current };
+      for (const key of navGroupActiveKeys) {
+        next[key] = true;
+      }
+      return next;
+    });
+  }, [navGroupActiveKeys]);
 
   const handleNavigate = () => setMobileOpen(false);
 
@@ -142,6 +236,46 @@ export function WorkspaceSidebar({
 
   const itemsBeforeTools = toolItems ? navItems.slice(0, 3) : navItems;
   const itemsAfterTools = toolItems ? navItems.slice(3) : [];
+  const renderNavItem = (item: NavItem, index?: number) => {
+    const childActive = Boolean(item.children?.some((child) => isItemActive(pathname, child)));
+    const active = childActive || isItemActive(pathname, item, index);
+
+    if (item.children?.length) {
+      const hasManualOpenState = Object.prototype.hasOwnProperty.call(openNavGroups, item.href);
+      const open = hasManualOpenState ? Boolean(openNavGroups[item.href]) : active;
+
+      return (
+        <SidebarLinkGroup
+          key={item.href}
+          item={item}
+          active={active}
+          open={open}
+          collapsed={collapsed}
+          pathname={pathname}
+          onNavigate={handleNavigate}
+          onToggle={() => {
+            if (collapsed) {
+              setCollapsed(false);
+              setOpenNavGroups((current) => ({ ...current, [item.href]: true }));
+              return;
+            }
+
+            setOpenNavGroups((current) => ({ ...current, [item.href]: !open }));
+          }}
+        />
+      );
+    }
+
+    return (
+      <SidebarLink
+        key={item.href}
+        item={item}
+        active={active}
+        collapsed={collapsed}
+        onNavigate={handleNavigate}
+      />
+    );
+  };
 
   return (
     <>
@@ -238,15 +372,7 @@ export function WorkspaceSidebar({
           ) : null}
 
           <nav className="sidebar-group" aria-label="Main navigation">
-            {itemsBeforeTools.map((item, index) => (
-              <SidebarLink
-                key={item.href}
-                item={item}
-                active={isDashboardRoute(pathname, item.href, index)}
-                collapsed={collapsed}
-                onNavigate={handleNavigate}
-              />
-            ))}
+            {itemsBeforeTools.map((item, index) => renderNavItem(item, index))}
 
             {toolItems ? (
               <div className="sidebar-tools-group" data-open={toolsOpen} data-collapsed={collapsed}>
@@ -300,19 +426,7 @@ export function WorkspaceSidebar({
               </div>
             ) : null}
 
-            {itemsAfterTools.map((item) => {
-              const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
-
-              return (
-                <SidebarLink
-                  key={item.href}
-                  item={item}
-                  active={active}
-                  collapsed={collapsed}
-                  onNavigate={handleNavigate}
-                />
-              );
-            })}
+            {itemsAfterTools.map((item) => renderNavItem(item))}
           </nav>
 
           <div className="sidebar-footer">

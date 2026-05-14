@@ -3,9 +3,7 @@
 import type { Route } from "next";
 import {
   Building2,
-  Calculator,
   CalendarDays,
-  ClipboardCheck,
   ClipboardList,
   CreditCard,
   LayoutDashboard,
@@ -20,17 +18,19 @@ import type { AppRole } from "@/lib/auth/session";
 const gymNavItems = [
   { href: "/gym" as Route, title: "Dashboard", icon: LayoutDashboard },
   { href: "/gym/cheer-planner" as Route, title: "Cheer Planner", icon: ClipboardList },
-  { href: "/gym/manage-my-gym" as Route, title: "Manage My Gym", icon: Building2 },
-  { href: "/gym/profile" as Route, title: "Profile", icon: UserRound },
+  {
+    href: "/gym/manage-my-gym" as Route,
+    title: "Manage My Gym",
+    icon: Building2,
+    children: [
+      { href: "/gym/manage-my-gym" as Route, title: "Overview", icon: Building2 },
+      { href: "/gym/profile" as Route, title: "Profile", icon: UserRound },
+      { href: "/plans" as Route, title: "Plans", icon: CreditCard }
+    ]
+  },
   { href: "/gym/messages" as Route, title: "Messages", icon: MessageSquare },
   { href: "/gym/events" as Route, title: "Events", icon: CalendarDays },
-  { href: "/plans" as Route, title: "Plans", icon: CreditCard },
   { href: "/gym/settings" as Route, title: "Settings", icon: Settings }
-];
-
-const gymToolItems = [
-  { href: "/gym/tools/cheer-score-calculator" as Route, title: "Cheer Score", icon: Calculator },
-  { href: "/gym/tools/full-out-evaluator" as Route, title: "Execution Evaluator", icon: ClipboardCheck }
 ];
 
 function getGymReleaseLabel() {
@@ -63,7 +63,6 @@ export function GymSidebar({ availableWorkspaces }: { availableWorkspaces: AppRo
       availableWorkspaces={availableWorkspaces}
       brandSubtitle="Gym workspace"
       navItems={gymNavItems}
-      toolItems={gymToolItems}
       footerTitle="Early Access"
       footerCopy="Features are still being tested, refined, and improved across releases."
       footerMeta={getGymReleaseLabel()}

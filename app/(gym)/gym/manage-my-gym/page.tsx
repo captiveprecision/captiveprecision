@@ -12,7 +12,7 @@ type AthleteRow = Pick<Database["public"]["Tables"]["athletes"]["Row"], "id">;
 type AssignmentRow = Pick<Database["public"]["Tables"]["athlete_team_assignments"]["Row"], "athlete_id" | "team_id">;
 type LicenseRow = Pick<
   Database["public"]["Tables"]["gym_coach_licenses"]["Row"],
-  "id" | "coach_profile_id" | "created_at" | "license_seat_name" | "seat_role" | "status"
+  "id" | "coach_profile_id" | "created_at" | "credential_levels" | "license_seat_name" | "seat_role" | "status"
 >;
 type TeamCoachRow = Pick<Database["public"]["Tables"]["team_coaches"]["Row"], "team_id" | "coach_profile_id">;
 type ProfileRow = Pick<Database["public"]["Tables"]["profiles"]["Row"], "id" | "display_name" | "email">;
@@ -23,6 +23,10 @@ type ManageGymTeamRow = {
   athleteCount: number;
   coachNames: string;
 };
+
+function isMissingCredentialLevelsColumn(error: { message?: string; code?: string } | null | undefined) {
+  return error?.code === "42703" || /credential_levels/i.test(error?.message ?? "");
+}
 
 function formatJoinedAt(value: string | null) {
   if (!value) {
@@ -47,6 +51,39 @@ function formatSeatRole(value: string | null | undefined): ManageGymPerson["role
     default:
       return "";
   }
+}
+
+async function loadGymLicenses(admin: ReturnType<typeof createAdminClient>, gymId: string) {
+  const withCredentials = await admin
+    .from("gym_coach_licenses" as never)
+    .select("id, coach_profile_id, created_at, credential_levels, license_seat_name, seat_role, status" as never)
+    .eq("gym_id", gymId as never)
+    .in("status", ["active", "pending"] as never);
+
+  if (!withCredentials.error) {
+    return (withCredentials.data ?? []) as LicenseRow[];
+  }
+
+  if (!isMissingCredentialLevelsColumn(withCredentials.error)) {
+    console.error("[manage-my-gym] Failed to load gym licenses.", withCredentials.error);
+    return [] as LicenseRow[];
+  }
+
+  const withoutCredentials = await admin
+    .from("gym_coach_licenses" as never)
+    .select("id, coach_profile_id, created_at, license_seat_name, seat_role, status" as never)
+    .eq("gym_id", gymId as never)
+    .in("status", ["active", "pending"] as never);
+
+  if (withoutCredentials.error) {
+    console.error("[manage-my-gym] Failed to load fallback gym licenses.", withoutCredentials.error);
+    return [] as LicenseRow[];
+  }
+
+  return ((withoutCredentials.data ?? []) as Array<Omit<LicenseRow, "credential_levels">>).map((license) => ({
+    ...license,
+    credential_levels: []
+  })) as LicenseRow[];
 }
 
 async function resolveManageGymOverview(userId: string, primaryGymId: string | null) {
@@ -75,12 +112,8 @@ async function resolveManageGymOverview(userId: string, primaryGymId: string | n
     };
   }
 
-  const [licensesResult, teamsResult, gymAthletesResult] = await Promise.all([
-    admin
-      .from("gym_coach_licenses" as never)
-      .select("id, coach_profile_id, created_at, license_seat_name, seat_role, status" as never)
-      .eq("gym_id", gymId as never)
-      .in("status", ["active", "pending"] as never),
+  const [licenseRows, teamsResult, gymAthletesResult] = await Promise.all([
+    loadGymLicenses(admin, gymId),
     admin
       .from("teams" as never)
       .select("id, name, primary_coach_profile_id" as never)
@@ -92,7 +125,6 @@ async function resolveManageGymOverview(userId: string, primaryGymId: string | n
   ]);
 
   const teamRows = (teamsResult.data ?? []) as TeamRow[];
-  const licenseRows = (licensesResult.data ?? []) as LicenseRow[];
   const teamIds = teamRows.map((team) => team.id);
   const directAthleteIds = new Set(((gymAthletesResult.data ?? []) as AthleteRow[]).map((athlete) => athlete.id));
   const athleteCountsByTeamId = new Map<string, Set<string>>();
@@ -185,9 +217,11 @@ async function resolveManageGymOverview(userId: string, primaryGymId: string | n
       joinedAt: formatJoinedAt(license.created_at),
       role,
       staffFunction: role === "Staff" ? "Program staff" : "",
-      credentialLevels: [],
+      credentialLevels: Array.isArray(license.credential_levels)
+        ? license.credential_levels.filter((credential): credential is string => typeof credential === "string")
+        : [],
       membershipAssigned: license.status === "active",
-      membershipLabel: license.status === "active" ? "Gym Access Active" : "Invitation Pending",
+      membershipLabel: license.status === "active" ? "Gym Access Active" : "View Only",
       teams: teamCount ? `${teamCount} ${teamCount === 1 ? "team" : "teams"}` : "No teams",
       classes: "No classes"
     };

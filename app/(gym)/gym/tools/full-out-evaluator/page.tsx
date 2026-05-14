@@ -1,5 +1,5 @@
-import { ExecutionEvaluator } from "@/components/tools/execution-evaluator";
+import { redirect } from "next/navigation";
 
 export default function GymExecutionEvaluatorPage() {
-  return <ExecutionEvaluator />;
+  redirect("/gym");
 }

@@ -109,6 +109,7 @@ export type Database = {
         Row: {
           coach_profile_id: string;
           created_at: string;
+          credential_levels: Json;
           gym_id: string;
           id: string;
           invited_by_profile_id: string | null;
@@ -120,6 +121,7 @@ export type Database = {
         Insert: {
           coach_profile_id: string;
           created_at?: string;
+          credential_levels?: Json;
           gym_id: string;
           id?: string;
           invited_by_profile_id?: string | null;

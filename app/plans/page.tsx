@@ -14,7 +14,7 @@ export default async function PlansPage() {
   const status = session ? await resolveBillingStatus(session) : null;
   const checkoutScope = session?.roles.includes("gym") ? "gym" : "coach";
   const checkoutGymId = checkoutScope === "gym" ? session?.primaryGymId ?? null : null;
-  const toolsHref = session?.roles.includes("gym") ? "/gym/tools" : session?.roles.includes("coach") ? "/coach/tools" : "/tools";
+  const toolsHref = session?.role === "gym" ? null : session?.roles.includes("coach") ? "/coach/tools" : "/tools";
   const plannerHref = session?.roles.includes("gym") ? "/gym/cheer-planner" : session?.roles.includes("coach") ? "/coach/cheer-planner" : "/select-workspace";
   const isPremium = status?.tier === "premium";
   const canManageBilling = Boolean(status?.customerId);
@@ -37,7 +37,7 @@ export default async function PlansPage() {
           ) : (
             <ButtonLink href="/" variant="primary">Sign in to upgrade</ButtonLink>
           )}
-          <ButtonLink href={toolsHref as Route} variant="secondary">Open free tools</ButtonLink>
+          {toolsHref ? <ButtonLink href={toolsHref as Route} variant="secondary">Open free tools</ButtonLink> : null}
         </div>
       </PageHero>
 
@@ -56,7 +56,7 @@ export default async function PlansPage() {
                 <li>View and download previous Cheer Planner work</li>
               </ul>
               <div className="plans-card__footer">
-                <ButtonLink href={toolsHref as Route} variant="secondary">Open free tools</ButtonLink>
+                {toolsHref ? <ButtonLink href={toolsHref as Route} variant="secondary">Open free tools</ButtonLink> : null}
                 <span>Saving team records is premium.</span>
               </div>
             </CardContent>

@@ -1,11 +1,12 @@
-import { WorkspacePlaceholderPage } from "@/components/layout/workspace-placeholder-page";
+import { EventsCalendarShell } from "@/components/features/events/events-calendar-shell";
 
 export default function CoachEventsPage() {
   return (
-    <WorkspacePlaceholderPage
+    <EventsCalendarShell
+      workspace="coach"
       eyebrow="Events"
       title="Events"
-      description="Coach events and scheduling are planned next, but this route is intentionally kept lightweight for now."
+      description="Coach scheduling in local calendar mode, migrated from the Calendar Systems prototype."
     />
   );
 }

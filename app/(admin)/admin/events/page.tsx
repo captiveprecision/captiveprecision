@@ -1,11 +1,12 @@
-import { WorkspacePlaceholderPage } from "@/components/layout/workspace-placeholder-page";
+import { EventsCalendarShell } from "@/components/features/events/events-calendar-shell";
 
 export default function AdminEventsPage() {
   return (
-    <WorkspacePlaceholderPage
+    <EventsCalendarShell
+      workspace="admin"
       eyebrow="Admin events"
       title="Events"
-      description="Administrative events and scheduling are not live yet, but this route stays available in the current workspace map."
+      description="Administrative scheduling in local calendar mode, migrated from the Calendar Systems prototype."
     />
   );
 }
