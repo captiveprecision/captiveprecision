@@ -88,17 +88,26 @@ export function AccountActivationShell() {
 
     setState({ mode: "submitting", message: "Activating account..." });
 
-    const supabase = createClient();
-    const { error } = await supabase.auth.updateUser({ password });
+    const response = await fetch("/api/auth/activate", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ password })
+    });
+    const payload = await response.json().catch(() => ({}));
 
-    if (error) {
-      setState({ mode: "error", message: error.message });
+    if (!response.ok) {
+      setState({ mode: "error", message: typeof payload.error === "string" ? payload.error : "Unable to activate account." });
       return;
     }
 
+    const supabase = createClient();
+    await supabase.auth.signOut();
+
     setState({ mode: "success", message: "Password saved. Redirecting to workspace selection..." });
     window.setTimeout(() => {
-      window.location.assign("/select-workspace");
+      window.location.assign("/");
     }, 600);
   }
 
