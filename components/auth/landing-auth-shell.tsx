@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { PwaInstallPrompt, usePwa } from "@/components/pwa/pwa-provider";
 import {
@@ -114,6 +114,19 @@ export function LandingAuthShell() {
   const [betaPassword, setBetaPassword] = useState("");
   const [showBetaPassword, setShowBetaPassword] = useState(false);
   const [betaRole, setBetaRole] = useState<"coach" | "gym">("coach");
+
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const hashParams = new URLSearchParams(url.hash.replace(/^#/, ""));
+    const type = url.searchParams.get("type") ?? hashParams.get("type");
+    const hasRecoveryToken = type === "recovery" || Boolean(hashParams.get("access_token")) || Boolean(url.searchParams.get("code"));
+
+    if (!hasRecoveryToken) {
+      return;
+    }
+
+    window.location.replace(`/auth/reset-password${url.search}${url.hash}`);
+  }, []);
 
   function scrollToAccess() {
     window.setTimeout(() => {

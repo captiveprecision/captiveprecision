@@ -101,8 +101,9 @@ export function PasswordResetShell() {
     setState({ mode: "submitting", message: "Sending reset email..." });
 
     const supabase = createClient();
+    const resetRedirectUrl = `${process.env.NEXT_PUBLIC_APP_URL ?? window.location.origin}/auth/reset-password`;
     const { error } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
-      redirectTo: `${window.location.origin}/auth/reset-password`
+      redirectTo: resetRedirectUrl
     });
 
     if (error) {
