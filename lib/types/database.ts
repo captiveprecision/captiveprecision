@@ -157,6 +157,108 @@ export type Database = {
         };
         Update: Partial<Database["public"]["Tables"]["gyms"]["Insert"]>;
       };
+      gym_seasons: {
+        Row: {
+          created_at: string;
+          created_by_profile_id: string | null;
+          end_date: string;
+          gym_id: string;
+          id: string;
+          label: string;
+          metadata: Json;
+          season_number: number;
+          start_date: string;
+          status: string;
+          updated_at: string;
+        };
+        Insert: {
+          created_at?: string;
+          created_by_profile_id?: string | null;
+          end_date: string;
+          gym_id: string;
+          id?: string;
+          label: string;
+          metadata?: Json;
+          season_number: number;
+          start_date: string;
+          status?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["gym_seasons"]["Insert"]>;
+      };
+      gym_team_season_profiles: {
+        Row: {
+          category: string | null;
+          created_at: string;
+          created_by_profile_id: string | null;
+          division: string | null;
+          gym_id: string;
+          gym_season_id: string;
+          id: string;
+          level_label: string | null;
+          metadata: Json;
+          name_snapshot: string;
+          status: string;
+          team_id: string;
+          updated_at: string;
+        };
+        Insert: {
+          category?: string | null;
+          created_at?: string;
+          created_by_profile_id?: string | null;
+          division?: string | null;
+          gym_id: string;
+          gym_season_id: string;
+          id?: string;
+          level_label?: string | null;
+          metadata?: Json;
+          name_snapshot: string;
+          status?: string;
+          team_id: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["gym_team_season_profiles"]["Insert"]>;
+      };
+      gym_team_season_coaches: {
+        Row: {
+          coach_profile_id: string;
+          created_at: string;
+          gym_id: string;
+          gym_season_id: string;
+          id: string;
+          role: string;
+          team_id: string;
+        };
+        Insert: {
+          coach_profile_id: string;
+          created_at?: string;
+          gym_id: string;
+          gym_season_id: string;
+          id?: string;
+          role?: string;
+          team_id: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["gym_team_season_coaches"]["Insert"]>;
+      };
+      gym_team_season_roster: {
+        Row: {
+          athlete_id: string;
+          created_at: string;
+          gym_id: string;
+          gym_season_id: string;
+          id: string;
+          team_id: string;
+        };
+        Insert: {
+          athlete_id: string;
+          created_at?: string;
+          gym_id: string;
+          gym_season_id: string;
+          id?: string;
+          team_id: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["gym_team_season_roster"]["Insert"]>;
+      };
       membership_plans: {
         Row: {
           active: boolean;
@@ -303,6 +405,58 @@ export type Database = {
           updated_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["scoring_systems"]["Insert"]>;
+      };
+      usasf_age_category_grids: {
+        Row: {
+          created_at: string;
+          created_by_profile_id: string | null;
+          id: string;
+          label: string;
+          notes: string | null;
+          season_label: string;
+          source_name: string | null;
+          status: string;
+          updated_at: string;
+        };
+        Insert: {
+          created_at?: string;
+          created_by_profile_id?: string | null;
+          id?: string;
+          label: string;
+          notes?: string | null;
+          season_label: string;
+          source_name?: string | null;
+          status?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["usasf_age_category_grids"]["Insert"]>;
+      };
+      usasf_age_category_rules: {
+        Row: {
+          category_key: string;
+          category_name: string;
+          created_at: string;
+          grid_id: string;
+          id: string;
+          max_birth_year: number;
+          min_birth_year: number;
+          sort_order: number;
+          status: string;
+          updated_at: string;
+        };
+        Insert: {
+          category_key: string;
+          category_name: string;
+          created_at?: string;
+          grid_id: string;
+          id?: string;
+          max_birth_year: number;
+          min_birth_year: number;
+          sort_order?: number;
+          status?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["usasf_age_category_rules"]["Insert"]>;
       };
       team_coaches: {
         Row: {

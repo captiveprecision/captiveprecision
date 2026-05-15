@@ -6,12 +6,35 @@ export type CalendarEventColorId = "yellow" | "black" | "graphite" | "stone";
 
 export type CalendarDayViewMode = "timeline" | "list";
 
-export type CalendarGuestMode = "none" | "registered" | "manual";
+export type CalendarEventSource = "seed" | "local" | "planner-season";
 
-export type CalendarGuest = {
+export type CalendarPlannerSeasonSource = {
+  type: "season-planner";
+  plannerProjectId: string;
+  seasonPlanId: string;
+  teamId: string;
+  teamName: string;
+  itemId: string;
+  itemType: "checkpoint" | "manual-entry";
+};
+
+export type CalendarCoach = {
   id: string;
   name: string;
   email: string;
+  role: string;
+};
+
+export type CalendarTeam = {
+  id: string;
+  name: string;
+  level: string;
+  assignedCoachIds: string[];
+};
+
+export type EventsCalendarDirectory = {
+  teams: CalendarTeam[];
+  coaches: CalendarCoach[];
 };
 
 export type CalendarEvent = {
@@ -25,14 +48,15 @@ export type CalendarEvent = {
   location: string;
   colorId: CalendarEventColorId;
   reminderMinutes: number;
-  guestMode: CalendarGuestMode;
-  guestId: string;
-  guestName: string;
-  guestEmail: string;
+  allTeams: boolean;
+  teamIds: string[];
+  allStaff: boolean;
+  coachIds: string[];
   status: CalendarEventStatus;
   cancellationReason: string;
   cancelledAt: string;
-  source: "seed" | "local";
+  source: CalendarEventSource;
+  plannerSeasonSource: CalendarPlannerSeasonSource | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -51,10 +75,10 @@ export type CalendarEventDraft = {
   location: string;
   colorId: CalendarEventColorId;
   reminderMinutes: number;
-  guestMode: CalendarGuestMode;
-  guestId: string;
-  guestName: string;
-  guestEmail: string;
+  allTeams: boolean;
+  teamIds: string[];
+  allStaff: boolean;
+  coachIds: string[];
 };
 
 export type CalendarWeek = {
@@ -110,45 +134,134 @@ export const REMINDER_OPTIONS = [
   { value: 120, label: "2 hours before" }
 ] as const;
 
-export const REGISTERED_GUESTS: CalendarGuest[] = [
-  { id: "guest-sofia-tirado", name: "Sofia Tirado", email: "sofia.tirado@example.com" },
-  { id: "guest-aria-ortega", name: "Aria Ortega", email: "aria.ortega@example.com" },
-  { id: "guest-juanita-rios", name: "Juanita Rios", email: "juanita.rios@example.com" },
-  { id: "guest-eva-santos", name: "Eva Santos", email: "eva.santos@example.com" },
-  { id: "guest-claudia-medina", name: "Claudia Medina", email: "claudia.medina@example.com" }
-];
-
-const WORKSPACE_LABELS: Record<EventsCalendarWorkspace, string> = {
-  coach: "Coach",
-  gym: "Gym",
-  admin: "Admin"
-};
-
-const WORKSPACE_SEED_TITLES: Record<EventsCalendarWorkspace, string[]> = {
-  coach: [
-    "Team practice block",
-    "Private lesson window",
-    "Routine review",
-    "Athlete check-in",
-    "Open gym coverage"
-  ],
-  gym: [
-    "Facility training block",
-    "Staff floor rotation",
-    "Team room reservation",
-    "Parent communication window",
-    "Open gym coverage"
-  ],
-  admin: [
-    "Operations review",
-    "Billing follow-up block",
-    "Staff planning",
-    "Calendar QA review",
-    "Leadership sync"
-  ]
+export const EMPTY_EVENTS_CALENDAR_DIRECTORY: EventsCalendarDirectory = {
+  teams: [],
+  coaches: []
 };
 
 const colorIds = CALENDAR_COLOR_OPTIONS.map((option) => option.id);
+
+function resolveDirectory(directory?: EventsCalendarDirectory) {
+  return directory ?? EMPTY_EVENTS_CALENDAR_DIRECTORY;
+}
+
+export function getCalendarCoaches(_workspace: EventsCalendarWorkspace, directory?: EventsCalendarDirectory) {
+  return resolveDirectory(directory).coaches;
+}
+
+export function getCalendarTeams(_workspace: EventsCalendarWorkspace, directory?: EventsCalendarDirectory) {
+  return resolveDirectory(directory).teams;
+}
+
+function normalizeStringArray(value: unknown) {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && item.length > 0) : [];
+}
+
+function uniqueStrings(values: string[]) {
+  return Array.from(new Set(values));
+}
+
+function getKnownTeamIds(workspace: EventsCalendarWorkspace, directory?: EventsCalendarDirectory) {
+  return new Set(getCalendarTeams(workspace, directory).map((team) => team.id));
+}
+
+function getKnownCoachIds(workspace: EventsCalendarWorkspace, directory?: EventsCalendarDirectory) {
+  return new Set(getCalendarCoaches(workspace, directory).map((coach) => coach.id));
+}
+
+export function getSelectedCalendarTeamIds(
+  selection: Pick<CalendarEventDraft | CalendarEvent, "allTeams" | "teamIds">,
+  workspace: EventsCalendarWorkspace,
+  directory?: EventsCalendarDirectory
+) {
+  if (selection.allTeams) {
+    return getCalendarTeams(workspace, directory).map((team) => team.id);
+  }
+
+  const knownTeamIds = getKnownTeamIds(workspace, directory);
+  return uniqueStrings(selection.teamIds).filter((teamId) => knownTeamIds.has(teamId));
+}
+
+export function getAutoIncludedCoachIdsForTeams(
+  teamIds: string[],
+  workspace: EventsCalendarWorkspace,
+  directory?: EventsCalendarDirectory
+) {
+  const selectedTeamIds = new Set(teamIds);
+  return uniqueStrings(
+    getCalendarTeams(workspace, directory)
+      .filter((team) => selectedTeamIds.has(team.id))
+      .flatMap((team) => team.assignedCoachIds)
+  );
+}
+
+export function getSelectedCalendarCoachIds(
+  selection: Pick<CalendarEventDraft | CalendarEvent, "allStaff" | "coachIds">,
+  workspace: EventsCalendarWorkspace,
+  directory?: EventsCalendarDirectory
+) {
+  if (selection.allStaff) {
+    return getCalendarCoaches(workspace, directory).map((coach) => coach.id);
+  }
+
+  const knownCoachIds = getKnownCoachIds(workspace, directory);
+  return uniqueStrings(selection.coachIds).filter((coachId) => knownCoachIds.has(coachId));
+}
+
+export function resolveCalendarRecipients(
+  selection: Pick<CalendarEventDraft | CalendarEvent, "allTeams" | "teamIds" | "allStaff" | "coachIds">,
+  workspace: EventsCalendarWorkspace,
+  directory?: EventsCalendarDirectory
+) {
+  const selectedTeamIds = getSelectedCalendarTeamIds(selection, workspace, directory);
+  const autoCoachIds = getAutoIncludedCoachIdsForTeams(selectedTeamIds, workspace, directory);
+  const explicitCoachIds = getSelectedCalendarCoachIds(selection, workspace, directory);
+  const selectedCoachIds = uniqueStrings([...autoCoachIds, ...explicitCoachIds]);
+  const teams = getCalendarTeams(workspace, directory).filter((team) => selectedTeamIds.includes(team.id));
+  const coaches = getCalendarCoaches(workspace, directory).filter((coach) => selectedCoachIds.includes(coach.id));
+
+  return {
+    teams,
+    coaches,
+    autoCoachIds,
+    explicitCoachIds,
+    selectedTeamIds,
+    selectedCoachIds
+  };
+}
+
+export function getCalendarRecipientSummary(
+  selection: Pick<CalendarEventDraft | CalendarEvent, "allTeams" | "teamIds" | "allStaff" | "coachIds"> & Partial<Pick<CalendarEvent, "plannerSeasonSource">>,
+  workspace: EventsCalendarWorkspace,
+  directory?: EventsCalendarDirectory
+) {
+  if (selection.plannerSeasonSource) {
+    return `${selection.plannerSeasonSource.teamName} · Season Planner`;
+  }
+
+  if (selection.allTeams && selection.allStaff) {
+    return "All teams and all staff";
+  }
+
+  if (selection.allTeams) {
+    const { coaches } = resolveCalendarRecipients(selection, workspace, directory);
+    return `All teams · ${coaches.length} coach/staff included`;
+  }
+
+  if (selection.allStaff) {
+    const { teams } = resolveCalendarRecipients(selection, workspace, directory);
+    return teams.length ? `${teams.length} team(s) · all staff` : "All staff";
+  }
+
+  const { teams, coaches } = resolveCalendarRecipients(selection, workspace, directory);
+  if (!teams.length && !coaches.length) {
+    return "No teams or staff selected";
+  }
+
+  const teamLabel = teams.length === 1 ? teams[0]?.name : `${teams.length} teams`;
+  const coachLabel = coaches.length === 1 ? coaches[0]?.name : `${coaches.length} coach/staff`;
+  return [teamLabel, coachLabel].filter(Boolean).join(" · ");
+}
 
 export function getEventsCalendarStorageKey(workspace: EventsCalendarWorkspace) {
   return `${LOCAL_STORAGE_KEY_PREFIX}:${workspace}`;
@@ -300,13 +413,6 @@ export function normalizeEventStatus(value: unknown): CalendarEventStatus {
   return value === "cancelled" ? "cancelled" : "confirmed";
 }
 
-export function normalizeGuestMode(value: unknown): CalendarGuestMode {
-  if (value === "registered" || value === "manual") {
-    return value;
-  }
-  return "none";
-}
-
 export function normalizeEvent(value: unknown, workspace: EventsCalendarWorkspace): CalendarEvent | null {
   if (!value || typeof value !== "object") {
     return null;
@@ -323,7 +429,9 @@ export function normalizeEvent(value: unknown, workspace: EventsCalendarWorkspac
     return null;
   }
 
-  const guestMode = normalizeGuestMode(event.guestMode);
+  const rawTeamIds = normalizeStringArray(event.teamIds);
+  const rawCoachIds = normalizeStringArray(event.coachIds);
+  const source = event.source === "seed" || event.source === "planner-season" ? event.source : "local";
   return {
     id: event.id,
     workspace,
@@ -335,16 +443,46 @@ export function normalizeEvent(value: unknown, workspace: EventsCalendarWorkspac
     location: typeof event.location === "string" && event.location.trim() ? event.location : DEFAULT_EVENT_LOCATION,
     colorId: normalizeEventColorId(event.colorId),
     reminderMinutes: normalizeReminderMinutes(event.reminderMinutes),
-    guestMode,
-    guestId: guestMode === "registered" && typeof event.guestId === "string" ? event.guestId : "",
-    guestName: guestMode === "manual" && typeof event.guestName === "string" ? event.guestName : "",
-    guestEmail: guestMode === "manual" && typeof event.guestEmail === "string" ? event.guestEmail : "",
+    allTeams: event.allTeams === true,
+    teamIds: rawTeamIds,
+    allStaff: event.allStaff === true,
+    coachIds: rawCoachIds,
     status: normalizeEventStatus(event.status),
     cancellationReason: typeof event.cancellationReason === "string" ? event.cancellationReason : "",
     cancelledAt: typeof event.cancelledAt === "string" ? event.cancelledAt : "",
-    source: event.source === "seed" ? "seed" : "local",
+    source,
+    plannerSeasonSource: normalizePlannerSeasonSource(event.plannerSeasonSource),
     createdAt: typeof event.createdAt === "string" ? event.createdAt : new Date().toISOString(),
     updatedAt: typeof event.updatedAt === "string" ? event.updatedAt : new Date().toISOString()
+  };
+}
+
+function normalizePlannerSeasonSource(value: unknown): CalendarPlannerSeasonSource | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const source = value as Partial<CalendarPlannerSeasonSource>;
+  if (
+    source.type !== "season-planner" ||
+    typeof source.plannerProjectId !== "string" ||
+    typeof source.seasonPlanId !== "string" ||
+    typeof source.teamId !== "string" ||
+    typeof source.teamName !== "string" ||
+    typeof source.itemId !== "string" ||
+    (source.itemType !== "checkpoint" && source.itemType !== "manual-entry")
+  ) {
+    return null;
+  }
+
+  return {
+    type: "season-planner",
+    plannerProjectId: source.plannerProjectId,
+    seasonPlanId: source.seasonPlanId,
+    teamId: source.teamId,
+    teamName: source.teamName,
+    itemId: source.itemId,
+    itemType: source.itemType
   };
 }
 
@@ -357,10 +495,10 @@ export function buildEmptyEventDraft(date: string): CalendarEventDraft {
     location: DEFAULT_EVENT_LOCATION,
     colorId: DEFAULT_EVENT_COLOR_ID,
     reminderMinutes: 30,
-    guestMode: "none",
-    guestId: "",
-    guestName: "",
-    guestEmail: ""
+    allTeams: false,
+    teamIds: [],
+    allStaff: false,
+    coachIds: []
   };
 }
 
@@ -373,14 +511,18 @@ export function buildDraftFromEvent(event: CalendarEvent): CalendarEventDraft {
     location: event.location,
     colorId: event.colorId,
     reminderMinutes: event.reminderMinutes,
-    guestMode: event.guestMode,
-    guestId: event.guestId,
-    guestName: event.guestName,
-    guestEmail: event.guestEmail
+    allTeams: event.allTeams,
+    teamIds: event.teamIds,
+    allStaff: event.allStaff,
+    coachIds: event.coachIds
   };
 }
 
-export function validateEventDraft(draft: CalendarEventDraft) {
+export function validateEventDraft(
+  draft: CalendarEventDraft,
+  workspace: EventsCalendarWorkspace,
+  directory?: EventsCalendarDirectory
+) {
   if (!draft.title.trim()) {
     return "Add a title before saving the event.";
   }
@@ -389,12 +531,9 @@ export function validateEventDraft(draft: CalendarEventDraft) {
     return "End time must be later than the start time.";
   }
 
-  if (draft.guestMode === "manual" && !draft.guestEmail.trim()) {
-    return "Add an email for the manual guest.";
-  }
-
-  if (draft.guestMode === "registered" && !draft.guestId) {
-    return "Select a registered user from the search results.";
+  const { selectedTeamIds, selectedCoachIds } = resolveCalendarRecipients(draft, workspace, directory);
+  if (!selectedTeamIds.length && !selectedCoachIds.length) {
+    return "Select at least one team or staff member.";
   }
 
   return "";
@@ -403,11 +542,12 @@ export function validateEventDraft(draft: CalendarEventDraft) {
 export function createCalendarEvent(
   workspace: EventsCalendarWorkspace,
   date: string,
-  draft: CalendarEventDraft
+  draft: CalendarEventDraft,
+  directory?: EventsCalendarDirectory
 ): CalendarEvent {
   const timestamp = Date.now();
   const now = new Date().toISOString();
-  const guestMode = normalizeGuestMode(draft.guestMode);
+  const { selectedTeamIds, explicitCoachIds } = resolveCalendarRecipients(draft, workspace, directory);
   return {
     id: `${workspace}-${date}-local-${timestamp}`,
     workspace,
@@ -419,21 +559,26 @@ export function createCalendarEvent(
     location: draft.location.trim() || DEFAULT_EVENT_LOCATION,
     colorId: normalizeEventColorId(draft.colorId),
     reminderMinutes: normalizeReminderMinutes(draft.reminderMinutes),
-    guestMode,
-    guestId: guestMode === "registered" ? draft.guestId : "",
-    guestName: guestMode === "manual" ? draft.guestName.trim() : "",
-    guestEmail: guestMode === "manual" ? draft.guestEmail.trim() : "",
+    allTeams: draft.allTeams,
+    teamIds: draft.allTeams ? [] : selectedTeamIds,
+    allStaff: draft.allStaff,
+    coachIds: draft.allStaff ? [] : explicitCoachIds,
     status: "confirmed",
     cancellationReason: "",
     cancelledAt: "",
     source: "local",
+    plannerSeasonSource: null,
     createdAt: now,
     updatedAt: now
   };
 }
 
-export function updateCalendarEventFromDraft(event: CalendarEvent, draft: CalendarEventDraft): CalendarEvent {
-  const guestMode = normalizeGuestMode(draft.guestMode);
+export function updateCalendarEventFromDraft(
+  event: CalendarEvent,
+  draft: CalendarEventDraft,
+  directory?: EventsCalendarDirectory
+): CalendarEvent {
+  const { selectedTeamIds, explicitCoachIds } = resolveCalendarRecipients(draft, event.workspace, directory);
   return {
     ...event,
     title: draft.title.trim(),
@@ -443,10 +588,10 @@ export function updateCalendarEventFromDraft(event: CalendarEvent, draft: Calend
     location: draft.location.trim() || DEFAULT_EVENT_LOCATION,
     colorId: normalizeEventColorId(draft.colorId),
     reminderMinutes: normalizeReminderMinutes(draft.reminderMinutes),
-    guestMode,
-    guestId: guestMode === "registered" ? draft.guestId : "",
-    guestName: guestMode === "manual" ? draft.guestName.trim() : "",
-    guestEmail: guestMode === "manual" ? draft.guestEmail.trim() : "",
+    allTeams: draft.allTeams,
+    teamIds: draft.allTeams ? [] : selectedTeamIds,
+    allStaff: draft.allStaff,
+    coachIds: draft.allStaff ? [] : explicitCoachIds,
     updatedAt: new Date().toISOString()
   };
 }
@@ -590,51 +735,12 @@ export function formatActivityTime(createdAt: string) {
   }).format(parsed);
 }
 
-export function createSeedEvents(workspace: EventsCalendarWorkspace, today = new Date()) {
-  const weekStart = startOfWeek(today);
-  const titles = WORKSPACE_SEED_TITLES[workspace];
-  const now = new Date().toISOString();
-  const seedSpecs = [
-    { dayOffset: 0, start: "16:00", end: "18:00", colorId: "yellow" as const },
-    { dayOffset: 1, start: "09:00", end: "10:00", colorId: "stone" as const },
-    { dayOffset: 2, start: "17:30", end: "19:00", colorId: "black" as const },
-    { dayOffset: 3, start: "13:00", end: "14:00", colorId: "graphite" as const },
-    { dayOffset: 5, start: "10:00", end: "12:00", colorId: "yellow" as const }
-  ];
-
-  return seedSpecs.map((spec, index): CalendarEvent => {
-    const date = toIsoDate(addDays(weekStart, spec.dayOffset));
-    const title = titles[index] ?? `${WORKSPACE_LABELS[workspace]} event`;
-    return {
-      id: `${workspace}-${date}-seed-${index + 1}`,
-      workspace,
-      date,
-      title,
-      start: spec.start,
-      end: spec.end,
-      note: `${WORKSPACE_LABELS[workspace]} calendar sample event.`,
-      location: DEFAULT_EVENT_LOCATION,
-      colorId: spec.colorId,
-      reminderMinutes: 30,
-      guestMode: "none",
-      guestId: "",
-      guestName: "",
-      guestEmail: "",
-      status: "confirmed",
-      cancellationReason: "",
-      cancelledAt: "",
-      source: "seed",
-      createdAt: now,
-      updatedAt: now
-    };
-  });
+export function createSeedEvents(_workspace: EventsCalendarWorkspace, _today = new Date()): CalendarEvent[] {
+  return [];
 }
 
-export function createInitialActivity(workspace: EventsCalendarWorkspace): CalendarActivityEntry[] {
-  return [
-    buildActivityEntry(`${WORKSPACE_LABELS[workspace]} Events is running in local calendar mode.`),
-    buildActivityEntry("The Calendar Systems layout is migrated without Google sync for this milestone.")
-  ];
+export function createInitialActivity(_workspace: EventsCalendarWorkspace): CalendarActivityEntry[] {
+  return [];
 }
 
 export function parseStoredEventsCalendarState(
@@ -656,7 +762,7 @@ export function parseStoredEventsCalendarState(
   const normalizedEvents = Array.isArray(stored.events)
     ? stored.events
         .map((event) => normalizeEvent(event, workspace))
-        .filter((event): event is CalendarEvent => Boolean(event))
+        .filter((event): event is CalendarEvent => event !== null && event.source !== "seed")
     : [];
   const activityLog = Array.isArray(stored.activityLog)
     ? stored.activityLog
@@ -677,11 +783,74 @@ export function parseStoredEventsCalendarState(
     viewDate: stored.viewDate,
     selectedDate: stored.selectedDate,
     selectedWeekStart,
-    weekSummaryOpen: stored.weekSummaryOpen !== false,
+    weekSummaryOpen: true,
     dayViewMode: stored.dayViewMode === "list" ? "list" : "timeline",
     events: normalizedEvents.length ? normalizedEvents : createSeedEvents(workspace, parseIsoDate(stored.selectedDate)),
     activityLog
   };
+}
+
+export function createDefaultEventsCalendarState(
+  workspace: EventsCalendarWorkspace,
+  selectedDate = toIsoDate(new Date())
+): StoredEventsCalendarState {
+  const parsedDate = parseIsoDate(selectedDate);
+  return {
+    version: 1,
+    viewDate: toIsoDate(startOfMonth(parsedDate)),
+    selectedDate,
+    selectedWeekStart: getWeekStartIso(selectedDate),
+    weekSummaryOpen: true,
+    dayViewMode: "timeline",
+    events: createSeedEvents(workspace, parsedDate),
+    activityLog: createInitialActivity(workspace)
+  };
+}
+
+export function readEventsCalendarStateFromStorage(workspace: EventsCalendarWorkspace) {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  try {
+    const raw = window.localStorage.getItem(getEventsCalendarStorageKey(workspace));
+    const stored = raw ? parseStoredEventsCalendarState(JSON.parse(raw), workspace) : null;
+    return stored ?? createDefaultEventsCalendarState(workspace);
+  } catch {
+    return createDefaultEventsCalendarState(workspace);
+  }
+}
+
+export function writeEventsCalendarStateToStorage(workspace: EventsCalendarWorkspace, state: StoredEventsCalendarState) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.localStorage.setItem(getEventsCalendarStorageKey(workspace), JSON.stringify(state));
+}
+
+export function upsertEventsCalendarEventsInStorage(
+  workspace: EventsCalendarWorkspace,
+  nextEvents: CalendarEvent[],
+  shouldReplaceExisting: (event: CalendarEvent) => boolean,
+  activityMessage?: string
+) {
+  const currentState = readEventsCalendarStateFromStorage(workspace);
+  if (!currentState) {
+    return;
+  }
+
+  const nextEventIds = new Set(nextEvents.map((event) => event.id));
+  const retainedEvents = currentState.events.filter((event) => !shouldReplaceExisting(event) && !nextEventIds.has(event.id));
+  const activityLog = activityMessage
+    ? [buildActivityEntry(activityMessage), ...currentState.activityLog].slice(0, 12)
+    : currentState.activityLog;
+
+  writeEventsCalendarStateToStorage(workspace, {
+    ...currentState,
+    events: [...retainedEvents, ...nextEvents].sort(sortCalendarEvents),
+    activityLog
+  });
 }
 
 export function sortCalendarEvents(left: CalendarEvent, right: CalendarEvent) {

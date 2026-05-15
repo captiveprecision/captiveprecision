@@ -2,18 +2,25 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { getAuthSession } from "@/lib/auth/session";
 import { getServerEnv } from "@/lib/config/env";
+import { canManageGymAdministration, normalizeGymSeatRole, resolveGymAccessContext } from "@/lib/services/gym-access";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Database } from "@/lib/types/database";
 
 export const dynamic = "force-dynamic";
 
-type StaffSeatRole = "coach" | "staff" | "assistant";
+type StaffSeatRole = "program_director" | "coach" | "staff" | "assistant";
 type GymRow = Pick<Database["public"]["Tables"]["gyms"]["Row"], "id" | "name" | "owner_profile_id">;
 type ProfileRow = Pick<
   Database["public"]["Tables"]["profiles"]["Row"],
   "id" | "email" | "display_name" | "role" | "beta_access_status" | "primary_gym_id" | "membership_type" | "gym_name"
 >;
 type LicenseRow = Pick<Database["public"]["Tables"]["gym_coach_licenses"]["Row"], "id" | "status" | "seat_role">;
+type WorkspaceRootRow = {
+  id: string;
+  scope_type: "coach" | "gym";
+  gym_id: string | null;
+  owner_profile_id: string | null;
+};
 
 function normalizeEmail(value: unknown) {
   return typeof value === "string" ? value.trim().toLowerCase() : "";
@@ -24,7 +31,7 @@ function normalizeText(value: unknown) {
 }
 
 function normalizeSeatRole(value: unknown): StaffSeatRole | null {
-  return value === "coach" || value === "staff" || value === "assistant" ? value : null;
+  return normalizeGymSeatRole(value);
 }
 
 function normalizeCredentialLevels(value: unknown) {
@@ -36,6 +43,12 @@ function normalizeCredentialLevels(value: unknown) {
     .flatMap((item) => typeof item === "string" ? [item.trim()] : [])
     .filter(Boolean)))
     .slice(0, 20);
+}
+
+function normalizeIdArray(value: unknown) {
+  return Array.isArray(value)
+    ? Array.from(new Set(value.flatMap((item) => typeof item === "string" && item.trim() ? [item.trim()] : [])))
+    : [];
 }
 
 function isMissingCredentialLevelsColumn(error: { message?: string; code?: string } | null | undefined) {
@@ -156,17 +169,54 @@ async function findLicense(admin: ReturnType<typeof createAdminClient>, gymId: s
   return data as LicenseRow | null;
 }
 
-async function resolveGymTeamIds(admin: ReturnType<typeof createAdminClient>, gymId: string) {
-  const { data, error } = await admin
+async function resolveGymTeamIds(admin: ReturnType<typeof createAdminClient>, gym: GymRow) {
+  const { data: roots } = await admin
+    .from("workspace_roots" as never)
+    .select("id, scope_type, gym_id, owner_profile_id" as never)
+    .or(`gym_id.eq.${gym.id},owner_profile_id.eq.${gym.owner_profile_id}` as never);
+  const relatedRootIds = ((roots ?? []) as WorkspaceRootRow[])
+    .filter((root) => (
+      (root.scope_type === "gym" && root.gym_id === gym.id)
+      || (root.scope_type === "coach" && root.owner_profile_id === gym.owner_profile_id)
+    ))
+    .map((root) => root.id);
+  const { data: gymTeams, error: gymError } = await admin
     .from("teams" as never)
     .select("id" as never)
-    .eq("gym_id", gymId as never);
+    .eq("gym_id", gym.id as never);
 
-  if (error) {
+  if (gymError) {
     throw new Error("Unable to load Gym teams.");
   }
 
-  return ((data ?? []) as Array<{ id: string }>).map((team) => team.id);
+  const { data: rootTeams, error: rootError } = relatedRootIds.length
+    ? await admin
+      .from("teams" as never)
+      .select("id" as never)
+      .in("workspace_root_id", relatedRootIds as never)
+    : { data: [], error: null };
+
+  if (rootError) {
+    throw new Error("Unable to load Gym teams.");
+  }
+
+  return Array.from(new Set([
+    ...((gymTeams ?? []) as Array<{ id: string }>).map((team) => team.id),
+    ...((rootTeams ?? []) as Array<{ id: string }>).map((team) => team.id)
+  ]));
+}
+
+async function requireGymAdminAccess(session: NonNullable<Awaited<ReturnType<typeof getAuthSession>>>) {
+  const access = await resolveGymAccessContext(session, { ensureOwnerSeat: true });
+
+  if (!access || !canManageGymAdministration(access)) {
+    return {
+      gym: null,
+      error: NextResponse.json({ error: "Program Director access is required." }, { status: 403 })
+    };
+  }
+
+  return { gym: access.gym, error: null };
 }
 
 export async function GET(request: NextRequest) {
@@ -184,7 +234,13 @@ export async function GET(request: NextRequest) {
     }
 
     const admin = createAdminClient();
-    const gym = await ensureGymForSession(admin, session.userId, session.primaryGymId, session.primaryGymName ?? session.displayName);
+    const access = await requireGymAdminAccess(session);
+
+    if (access.error || !access.gym) {
+      return access.error!;
+    }
+
+    const gym = access.gym;
 
     const profile = await findProfileByEmail(admin, email);
 
@@ -232,7 +288,13 @@ export async function POST(request: NextRequest) {
     }
 
     const admin = createAdminClient();
-    const gym = await ensureGymForSession(admin, session.userId, session.primaryGymId, session.primaryGymName ?? session.displayName);
+    const access = await requireGymAdminAccess(session);
+
+    if (access.error || !access.gym) {
+      return access.error!;
+    }
+
+    const gym = access.gym;
 
     const reviewedAt = new Date().toISOString();
     let profile = await findProfileByEmail(admin, email);
@@ -341,6 +403,7 @@ export async function PATCH(request: NextRequest) {
     const profileId = normalizeText(payload?.profileId);
     const seatRole = normalizeSeatRole(payload?.seatRole);
     const credentialLevels = normalizeCredentialLevels(payload?.credentialLevels);
+    const teamIds = normalizeIdArray(payload?.teamIds);
     const membershipAssigned = typeof payload?.membershipAssigned === "boolean" ? payload.membershipAssigned : true;
 
     if (!profileId) {
@@ -352,13 +415,21 @@ export async function PATCH(request: NextRequest) {
     }
 
     const admin = createAdminClient();
-    const gym = await ensureGymForSession(admin, session.userId, session.primaryGymId, session.primaryGymName ?? session.displayName);
+    const access = await requireGymAdminAccess(session);
+
+    if (access.error || !access.gym) {
+      return access.error!;
+    }
+
+    const gym = access.gym;
 
     const updatePayload = {
       seat_role: seatRole,
       credential_levels: credentialLevels,
       status: membershipAssigned ? "active" : "pending"
     };
+    let responseCredentialLevels = credentialLevels;
+    let responseMessage = "Staff details updated.";
 
     const { error } = await admin
       .from("gym_coach_licenses" as never)
@@ -380,25 +451,55 @@ export async function PATCH(request: NextRequest) {
         return NextResponse.json({ error: "Unable to update staff details." }, { status: 500 });
       }
 
-      return NextResponse.json({
-        profileId,
-        seatRole,
-        credentialLevels: [],
-        membershipAssigned,
-        message: "Staff details updated. Credentials will be available after the credentials migration is applied."
-      });
+      responseCredentialLevels = [];
+      responseMessage = "Staff details updated. Credentials will be available after the credentials migration is applied.";
     }
 
-    if (error) {
+    if (error && !isMissingCredentialLevelsColumn(error)) {
       return NextResponse.json({ error: "Unable to update staff details." }, { status: 500 });
+    }
+
+    const gymTeamIds = await resolveGymTeamIds(admin, gym);
+    const allowedTeamIds = new Set(gymTeamIds);
+    const selectedTeamIds = teamIds.filter((teamId) => allowedTeamIds.has(teamId));
+
+    if (gymTeamIds.length) {
+      await admin
+        .from("team_coaches" as never)
+        .delete()
+        .eq("coach_profile_id", profileId as never)
+        .in("team_id", gymTeamIds as never);
+
+      await admin
+        .from("teams" as never)
+        .update({ primary_coach_profile_id: null } as never)
+        .eq("primary_coach_profile_id", profileId as never)
+        .in("id", gymTeamIds as never);
+    }
+
+    if (selectedTeamIds.length) {
+      await admin
+        .from("team_coaches" as never)
+        .insert(selectedTeamIds.map((teamId, index) => ({
+          team_id: teamId,
+          coach_profile_id: profileId,
+          role: index === 0 ? "head" : "assistant"
+        })) as never);
+
+      await admin
+        .from("teams" as never)
+        .update({ primary_coach_profile_id: profileId } as never)
+        .in("id", selectedTeamIds as never)
+        .is("primary_coach_profile_id", null);
     }
 
     return NextResponse.json({
       profileId,
       seatRole,
-      credentialLevels,
+      credentialLevels: responseCredentialLevels,
+      teamIds: selectedTeamIds,
       membershipAssigned,
-      message: "Staff details updated."
+      message: responseMessage
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unexpected staff update failure.";
@@ -426,7 +527,13 @@ export async function DELETE(request: NextRequest) {
     }
 
     const admin = createAdminClient();
-    const gym = await ensureGymForSession(admin, session.userId, session.primaryGymId, session.primaryGymName ?? session.displayName);
+    const access = await requireGymAdminAccess(session);
+
+    if (access.error || !access.gym) {
+      return access.error!;
+    }
+
+    const gym = access.gym;
 
     if (gym.owner_profile_id === profileId) {
       return NextResponse.json({ error: "The Gym owner account cannot be unlinked from this organization." }, { status: 409 });
@@ -448,7 +555,7 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: "Unable to unlink this account from the Gym." }, { status: 500 });
     }
 
-    const gymTeamIds = await resolveGymTeamIds(admin, gym.id);
+    const gymTeamIds = await resolveGymTeamIds(admin, gym);
 
     if (gymTeamIds.length) {
       await admin

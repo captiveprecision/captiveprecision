@@ -1828,6 +1828,228 @@
   gap: 10px;
 }
 
+.manage-gym-compact-editor {
+  display: grid;
+  gap: 8px;
+}
+
+.manage-gym-compact-table {
+  display: grid;
+  overflow: hidden;
+  border: 1px solid var(--cp-border);
+  border-radius: var(--cp-radius-control);
+  background: var(--cp-color-white);
+}
+
+.manage-gym-compact-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 10px;
+  align-items: center;
+  min-height: 42px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--cp-border);
+  color: var(--cp-text-strong);
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.manage-gym-compact-row:last-child {
+  border-bottom: 0;
+}
+
+.manage-gym-compact-row small {
+  color: var(--cp-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.manage-gym-compact-row input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--cp-color-black);
+}
+
+.manage-gym-compact-empty {
+  padding: 12px;
+  color: var(--cp-muted);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.manage-gym-team-detail-grid {
+  padding-right: 48px;
+}
+
+.manage-gym-team-detail-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding: 16px 48px 0 0;
+}
+
+.manage-gym-athlete-scores-modal {
+  max-width: 920px;
+}
+
+.manage-gym-athlete-scores-table td,
+.manage-gym-athlete-scores-table th {
+  white-space: nowrap;
+}
+
+.manage-gym-form-grid,
+.manage-gym-parent-contact-row,
+.manage-gym-history-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.manage-gym-parent-contact-list {
+  display: grid;
+  gap: 10px;
+}
+
+.manage-gym-parent-contact-row {
+  grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+  align-items: end;
+  padding: 12px;
+  border: 1px solid var(--cp-border);
+  border-radius: var(--cp-radius-control);
+  background: var(--cp-surface-subtle);
+}
+
+.manage-gym-history-list {
+  display: grid;
+  gap: 8px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.manage-gym-history-list li {
+  display: grid;
+  gap: 2px;
+  padding: 10px 12px;
+  border: 1px solid var(--cp-border);
+  border-radius: var(--cp-radius-control);
+  background: var(--cp-color-white);
+}
+
+.manage-gym-history-list span {
+  color: var(--cp-muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.age-category-admin-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.age-category-rule-list,
+.age-category-grid-list {
+  display: grid;
+  gap: 10px;
+}
+
+.age-category-admin-layout {
+  grid-template-columns: minmax(0, 1.75fr) minmax(260px, 0.65fr);
+}
+
+.age-category-rule-row {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--cp-border);
+  border-radius: var(--cp-radius-card);
+  background: var(--cp-surface-subtle);
+}
+
+.age-category-rule-row__main,
+.age-category-rule-row__meta {
+  display: grid;
+  min-width: 0;
+  gap: 10px;
+  align-items: end;
+}
+
+.age-category-rule-row__main {
+  grid-template-columns: minmax(180px, 1fr) minmax(140px, 0.8fr);
+}
+
+.age-category-rule-row__meta {
+  grid-template-columns: repeat(2, minmax(128px, 1fr)) minmax(70px, 0.45fr) minmax(130px, 0.7fr) 42px;
+}
+
+.age-category-rule-row .ui-field,
+.age-category-rule-row .ui-input,
+.age-category-rule-row .ui-select {
+  min-width: 0;
+  width: 100%;
+}
+
+.age-category-grid-card {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  padding: 12px;
+  border: 1px solid var(--cp-border);
+  border-radius: var(--cp-radius-control);
+  background: var(--cp-color-white);
+  color: var(--cp-text-strong);
+  text-align: left;
+  cursor: pointer;
+}
+
+.age-category-grid-card--active {
+  border-color: var(--cp-color-black);
+  box-shadow: inset 4px 0 0 var(--cp-color-yellow);
+}
+
+.age-category-grid-card span {
+  font-weight: 900;
+}
+
+.age-category-grid-card small {
+  color: var(--cp-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.age-eligibility-card {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--cp-border);
+  border-radius: var(--cp-radius-control);
+  background: var(--cp-surface-subtle);
+}
+
+.age-eligibility-card__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: var(--cp-color-white);
+  color: var(--cp-text-strong);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.status-pill--accent {
+  background: var(--cp-color-yellow);
+}
+
 .manage-gym-credential-options__grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1983,6 +2205,47 @@
   color: #a3342c;
 }
 
+.gym-seasons-layout {
+  display: grid;
+  gap: 20px;
+}
+
+.gym-seasons-current {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.gym-seasons-current h2,
+.manage-gym-card-header h2 {
+  margin: 0;
+}
+
+.gym-season-form {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.55fr) repeat(4, minmax(0, 1fr)) auto;
+  align-items: end;
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.gym-season-form__actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.gym-seasons-table td:first-child {
+  display: grid;
+  gap: 4px;
+}
+
+.gym-seasons-table td:first-child span {
+  color: var(--cp-muted);
+  font-size: 12px;
+  font-weight: var(--cp-font-weight-semibold);
+}
+
 @media (max-width: 1180px) {
   .dashboard-top-grid,
   .dashboard-main-grid,
@@ -1992,6 +2255,20 @@
 }
 
 @media (max-width: 767px) {
+  .gym-seasons-current,
+  .gym-season-form {
+    grid-template-columns: 1fr;
+  }
+
+  .gym-seasons-current {
+    display: grid;
+  }
+
+  .gym-season-form__actions,
+  .gym-season-form__actions > * {
+    width: 100%;
+  }
+
   .dashboard-summary-grid,
   .dashboard-chart-stats,
   .dashboard-chart-labels {
@@ -2035,7 +2312,14 @@
   .manage-gym-profile-details,
   .manage-gym-profile-row,
   .manage-gym-person-admin-row,
-  .manage-gym-membership-details {
+  .manage-gym-membership-details,
+  .manage-gym-form-grid,
+  .manage-gym-parent-contact-row,
+  .manage-gym-history-grid,
+  .age-category-rule-row,
+  .age-category-rule-row__main,
+  .age-category-rule-row__meta,
+  .age-category-admin-layout {
     grid-template-columns: 1fr;
   }
 

@@ -6,13 +6,13 @@ import { AlertTriangle, Ellipsis, Mail, Pencil, Plus, Unlink, UserRound, X } fro
 
 import { Button, Input, Select } from "@/components/ui";
 
-const ROLE_OPTIONS = ["Coach", "Staff", "Assistant"] as const;
+const ROLE_OPTIONS = ["Program Director", "Coach", "Staff", "Assistant"] as const;
 const CREDENTIAL_OPTIONS = ["Tumbling", "Building", "Special Needs", "Dance"] as const;
 const TUMBLING_LEVEL_OPTIONS = ["Level 1", "Level 2", "Level 3", "Level 4", "Level 5", "Level 6"] as const;
 const BUILDING_LEVEL_OPTIONS = ["Level 1", "Level 2", "Level 3", "Level 4", "Level 5", "Level 6", "Level 7"] as const;
 
 type ManageGymRole = (typeof ROLE_OPTIONS)[number] | "";
-type StaffSeatRole = "coach" | "staff" | "assistant";
+type StaffSeatRole = "program_director" | "coach" | "staff" | "assistant";
 type StaffCredential = (typeof CREDENTIAL_OPTIONS)[number];
 type LookupStatus = "idle" | "loading" | "found" | "not-found" | "error";
 
@@ -26,12 +26,14 @@ export type ManageGymPerson = {
   credentialLevels: string[];
   membershipAssigned: boolean;
   membershipLabel: string;
+  assignedTeamIds: string[];
   teams: string;
   classes: string;
 };
 
 type ManageGymPeopleTableProps = {
   initialPeople: ManageGymPerson[];
+  availableTeams: Array<{ id: string; name: string }>;
 };
 
 type StaffLookupProfile = {
@@ -44,6 +46,9 @@ type StaffLookupProfile = {
 
 function toSeatRole(value: ManageGymRole | StaffSeatRole): StaffSeatRole {
   switch (value) {
+    case "Program Director":
+    case "program_director":
+      return "program_director";
     case "Staff":
     case "staff":
       return "staff";
@@ -59,6 +64,8 @@ function toSeatRole(value: ManageGymRole | StaffSeatRole): StaffSeatRole {
 
 function toManageGymRole(value: StaffSeatRole): ManageGymRole {
   switch (value) {
+    case "program_director":
+      return "Program Director";
     case "staff":
       return "Staff";
     case "assistant":
@@ -115,12 +122,13 @@ function buildOptimisticPerson(payload: {
     credentialLevels: [],
     membershipAssigned: true,
     membershipLabel: payload.invitationSent ? "Invitation Sent" : "Gym Access Active",
+    assignedTeamIds: [],
     teams: "No teams",
     classes: "No classes"
   };
 }
 
-export function ManageGymPeopleTable({ initialPeople }: ManageGymPeopleTableProps) {
+export function ManageGymPeopleTable({ initialPeople, availableTeams }: ManageGymPeopleTableProps) {
   const router = useRouter();
   const [people, setPeople] = useState(initialPeople);
   const [expandedPersonIds, setExpandedPersonIds] = useState<Set<string>>(new Set());
@@ -140,6 +148,7 @@ export function ManageGymPeopleTable({ initialPeople }: ManageGymPeopleTableProp
   const [editCredentials, setEditCredentials] = useState<StaffCredential[]>([]);
   const [editTumblingLevel, setEditTumblingLevel] = useState("");
   const [editBuildingLevel, setEditBuildingLevel] = useState("");
+  const [editTeamIds, setEditTeamIds] = useState<string[]>([]);
   const [editMembershipAssigned, setEditMembershipAssigned] = useState(true);
   const [unlinkTarget, setUnlinkTarget] = useState<ManageGymPerson | null>(null);
   const [notice, setNotice] = useState<{ type: "success" | "error"; message: string } | null>(null);
@@ -180,6 +189,7 @@ export function ManageGymPeopleTable({ initialPeople }: ManageGymPeopleTableProp
     ));
     setEditTumblingLevel(tumblingLevel);
     setEditBuildingLevel(buildingLevel);
+    setEditTeamIds(person.assignedTeamIds);
     setEditMembershipAssigned(person.membershipAssigned);
     setNotice(null);
   }
@@ -198,6 +208,14 @@ export function ManageGymPeopleTable({ initialPeople }: ManageGymPeopleTableProp
     if (credential === "Building" && editCredentials.includes("Building")) {
       setEditBuildingLevel("");
     }
+  }
+
+  function toggleEditTeam(teamId: string) {
+    setEditTeamIds((current) => (
+      current.includes(teamId)
+        ? current.filter((id) => id !== teamId)
+        : [...current, teamId]
+    ));
   }
 
   async function submitEdit(event: FormEvent<HTMLFormElement>) {
@@ -229,6 +247,7 @@ export function ManageGymPeopleTable({ initialPeople }: ManageGymPeopleTableProp
           profileId: editTarget.id,
           seatRole: editRole,
           credentialLevels,
+          teamIds: editTeamIds,
           membershipAssigned: editMembershipAssigned
         })
       });
@@ -242,6 +261,8 @@ export function ManageGymPeopleTable({ initialPeople }: ManageGymPeopleTableProp
         role: toManageGymRole(editRole),
         staffFunction: editRole === "staff" ? editTarget.staffFunction || "Program staff" : "",
         credentialLevels,
+        assignedTeamIds: editTeamIds,
+        teams: editTeamIds.length ? `${editTeamIds.length} ${editTeamIds.length === 1 ? "team" : "teams"}` : "No teams",
         membershipAssigned: editMembershipAssigned,
         membershipLabel: editMembershipAssigned ? "Gym Access Active" : "View Only"
       });
@@ -588,6 +609,7 @@ export function ManageGymPeopleTable({ initialPeople }: ManageGymPeopleTableProp
                   onChange={(event) => setExistingSeatRole(event.target.value as StaffSeatRole)}
                   disabled={lookupProfile.alreadyLinked || submitting}
                 >
+                  <option value="program_director">Program Director</option>
                   <option value="staff">Staff</option>
                   <option value="coach">Coach</option>
                   <option value="assistant">Assistant</option>
@@ -622,6 +644,7 @@ export function ManageGymPeopleTable({ initialPeople }: ManageGymPeopleTableProp
                 <Input id="staff-invite-email" type="email" label="Email" value={email} onChange={(event) => setEmail(event.target.value)} required />
                 <Input id="staff-invite-name" label="Name" value={inviteName} onChange={(event) => setInviteName(event.target.value)} required />
                 <Select id="staff-invite-role" label="Role" value={inviteRole} onChange={(event) => setInviteRole(event.target.value as StaffSeatRole)}>
+                  <option value="program_director">Program Director</option>
                   <option value="staff">Staff</option>
                   <option value="coach">Coach</option>
                   <option value="assistant">Assistant</option>
@@ -656,21 +679,25 @@ export function ManageGymPeopleTable({ initialPeople }: ManageGymPeopleTableProp
             </div>
 
             <Select id="staff-edit-role" label="Role" value={editRole} onChange={(event) => setEditRole(event.target.value as StaffSeatRole)}>
+              <option value="program_director">Program Director</option>
               <option value="staff">Staff</option>
               <option value="coach">Coach</option>
               <option value="assistant">Assistant</option>
             </Select>
-            <div className="manage-gym-credential-options" role="group" aria-labelledby="staff-edit-credentials-label">
+            {editRole === "program_director" ? (
+              <p className="manage-gym-staff-search-state">Full gym access. Team assignment only marks coaching responsibility.</p>
+            ) : null}
+            <div className="manage-gym-compact-editor" role="group" aria-labelledby="staff-edit-credentials-label">
               <span id="staff-edit-credentials-label" className="ui-field__label">Credentials</span>
-              <div className="manage-gym-credential-options__grid">
+              <div className="manage-gym-compact-table">
                 {CREDENTIAL_OPTIONS.map((credential) => (
-                  <label key={credential} className="manage-gym-credential-option">
+                  <label key={credential} className="manage-gym-compact-row">
+                    <span>{credential}</span>
                     <input
                       type="checkbox"
                       checked={editCredentials.includes(credential)}
                       onChange={() => toggleEditCredential(credential)}
                     />
-                    <span>{credential}</span>
                   </label>
                 ))}
               </div>
@@ -705,6 +732,25 @@ export function ManageGymPeopleTable({ initialPeople }: ManageGymPeopleTableProp
                 </Select>
               </div>
             ) : null}
+            <div className="manage-gym-compact-editor" role="group" aria-labelledby="staff-edit-teams-label">
+              <span id="staff-edit-teams-label" className="ui-field__label">Teams</span>
+              <div className="manage-gym-compact-table">
+                {availableTeams.length ? (
+                  availableTeams.map((team) => (
+                    <label key={team.id} className="manage-gym-compact-row">
+                      <span>{team.name}</span>
+                      <input
+                        type="checkbox"
+                        checked={editTeamIds.includes(team.id)}
+                        onChange={() => toggleEditTeam(team.id)}
+                      />
+                    </label>
+                  ))
+                ) : (
+                  <div className="manage-gym-compact-empty">No teams available.</div>
+                )}
+              </div>
+            </div>
             <label className="manage-gym-membership-toggle">
               <input
                 type="checkbox"

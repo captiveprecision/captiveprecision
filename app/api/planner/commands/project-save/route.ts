@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { requireCheerPlannerPremium } from "@/lib/access/membership";
-import { getPlannerScopeContext, requirePlannerSession } from "@/lib/services/planner-api-access";
+import { canAdministerPlannerGymScope, getPlannerScopeContext, requirePlannerSession } from "@/lib/services/planner-api-access";
 import { getPlannerCommandError, savePlannerProjectCommand } from "@/lib/services/planner-command-service";
 
 function asString(value: unknown) {
@@ -28,6 +28,10 @@ export async function POST(request: NextRequest) {
 
     if (premiumError) {
       return premiumError;
+    }
+
+    if (!(await canAdministerPlannerGymScope(session, scope))) {
+      return NextResponse.json({ error: "Only the Gym owner or Program Director can update Gym planner settings." }, { status: 403 });
     }
 
     const result = await savePlannerProjectCommand(session, scope.scope, {

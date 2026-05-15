@@ -4,7 +4,9 @@ import { ChevronDown, ChevronUp, Eraser, Eye, Pencil, Plus, Save, Trash2, X } fr
 import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 
 import { Badge, Button, Card, CardContent, EmptyState, Input, SectionHeader, Tabs, Textarea } from "@/components/ui";
+import type { AgeCategoryEligibilityResult } from "@/lib/domain/age-category";
 import type { CheerPlannerCapabilities } from "@/lib/services/planner-capabilities";
+import type { GymRegistrationNumberMode } from "@/lib/services/gym-registration-settings";
 import type {
   AthleteDraftState,
   CheerPlannerIntegration,
@@ -13,6 +15,9 @@ import type {
 import type {
   PlannerTryoutBucketEvaluation,
   PlannerTryoutRecord,
+  PlannerStuntBaseRole,
+  PlannerStuntPosition,
+  PlannerStuntRoleEvaluation,
   PlannerTryoutTemplate
 } from "@/lib/tools/cheer-planner-tryouts";
 
@@ -26,6 +31,19 @@ const TRYOUT_SPORT_TABS: { value: PlannerSportTab; label: string }[] = [
 const ATHLETE_INTAKE_TABS: { value: AthleteIntakeMode; label: string }[] = [
   { value: "registered", label: "Registered Athlete" },
   { value: "new", label: "New Athlete" }
+];
+
+type StuntPositionTabValue = PlannerStuntPosition | "unset";
+type StuntBaseRoleTabValue = PlannerStuntBaseRole | "unset";
+
+const STUNT_POSITION_TABS: { value: StuntPositionTabValue; label: string }[] = [
+  { value: "flyer", label: "Flyer" },
+  { value: "base", label: "Base" }
+];
+
+const STUNT_BASE_ROLE_TABS: { value: StuntBaseRoleTabValue; label: string }[] = [
+  { value: "main-side", label: "Main Side" },
+  { value: "back", label: "Back" }
 ];
 
 const ATHLETE_SEARCH_LETTER_PATTERN = /\p{L}/u;
@@ -92,8 +110,73 @@ function formatSelectedAthleteBirthDate(dateOfBirth: string) {
   });
 }
 
+function formatStuntRoleLabel(stuntRole?: PlannerStuntRoleEvaluation | null) {
+  if (stuntRole?.position === "flyer") {
+    return "Flyer";
+  }
+
+  if (stuntRole?.position === "base") {
+    if (stuntRole.baseRole === "main-side") {
+      return "Base / Main Side";
+    }
+
+    if (stuntRole.baseRole === "back") {
+      return "Base / Back";
+    }
+
+    return "Base";
+  }
+
+  return null;
+}
+
+function buildMissingBirthDateEligibility(): AgeCategoryEligibilityResult {
+  return {
+    status: "missing-birth-date",
+    seasonLabel: null,
+    gridId: null,
+    gridLabel: null,
+    birthYear: null,
+    categories: []
+  };
+}
+
+function AgeEligibilityBlock({ eligibility }: { eligibility: AgeCategoryEligibilityResult }) {
+  if (eligibility.status === "missing-birth-date") {
+    return <p className="metric-subtext">Birth date required to calculate eligible categories.</p>;
+  }
+
+  if (eligibility.status === "invalid-birth-date") {
+    return <p className="metric-subtext">Birth date is not valid enough to calculate eligible categories.</p>;
+  }
+
+  if (eligibility.status === "missing-season") {
+    return <p className="metric-subtext">No active Gym season is available yet.</p>;
+  }
+
+  if (eligibility.status === "missing-grid") {
+    return <p className="metric-subtext">No active USASF age grid found for {eligibility.seasonLabel ?? "this season"}.</p>;
+  }
+
+  if (!eligibility.categories.length) {
+    return <p className="metric-subtext">No matching categories for birth year {eligibility.birthYear ?? "-"}.</p>;
+  }
+
+  return (
+    <div className="age-eligibility-card">
+      <span className="metric-subtext">{eligibility.seasonLabel} / birth year {eligibility.birthYear}</span>
+      <div className="age-eligibility-card__badges">
+        {eligibility.categories.map((category) => (
+          <span key={category.id} className="status-pill status-pill--accent">{category.categoryName}</span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 type TryoutsSurfaceProps = {
   capabilities: CheerPlannerCapabilities;
+  registrationNumberMode: GymRegistrationNumberMode;
   athleteDraft: AthleteDraftState;
   athletePool: CheerPlannerIntegration["athletePool"];
   updateAthleteDraft: (field: keyof AthleteDraftState, value: string) => void;
@@ -122,11 +205,14 @@ type TryoutsSurfaceProps = {
   cancelTemplateChanges: () => void;
   isSavingAction: (actionKey: string) => boolean;
   levelsDraft: PlannerTryoutBucketEvaluation[];
+  stuntRoleDraft: PlannerStuntRoleEvaluation;
   openLevels: string[];
   toggleLevel: (bucketKey: string) => void;
   summary: CheerPlannerIntegration["summary"];
   updateSkillName: (bucketKey: string, skillId: string, value: string) => void;
   updateSkillOption: (bucketKey: string, skillId: string, optionId: string) => void;
+  updateStuntPosition: (position: PlannerStuntPosition) => void;
+  updateStuntBaseRole: (baseRole: PlannerStuntBaseRole) => void;
   addExtraSkill: (bucketKey: string) => void;
   saveTryoutRecord: () => void;
   recentTryoutRecords: PlannerTryoutRecord[];
@@ -139,6 +225,7 @@ type TryoutsSurfaceProps = {
 export function TryoutsSurface(props: TryoutsSurfaceProps) {
   const {
     capabilities,
+    registrationNumberMode,
     athleteDraft,
     athletePool,
     updateAthleteDraft,
@@ -167,11 +254,14 @@ export function TryoutsSurface(props: TryoutsSurfaceProps) {
     cancelTemplateChanges,
     isSavingAction,
     levelsDraft,
+    stuntRoleDraft,
     openLevels,
     toggleLevel,
     summary,
     updateSkillName,
     updateSkillOption,
+    updateStuntPosition,
+    updateStuntBaseRole,
     addExtraSkill,
     saveTryoutRecord,
     recentTryoutRecords,
@@ -186,6 +276,7 @@ export function TryoutsSurface(props: TryoutsSurfaceProps) {
   const [previewTryoutRecord, setPreviewTryoutRecord] = useState<PlannerTryoutRecord | null>(null);
   const [scoringOpen, setScoringOpen] = useState(true);
   const [openTemplateLevels, setOpenTemplateLevels] = useState<string[]>([]);
+  const [ageEligibility, setAgeEligibility] = useState<AgeCategoryEligibilityResult>(buildMissingBirthDateEligibility);
   const previousRegisteredAthleteId = useRef<string | null>(null);
   const normalizedRegisteredSearch = registeredSearch.trim();
   const hasRegisteredSearchQuery = ATHLETE_SEARCH_LETTER_PATTERN.test(normalizedRegisteredSearch);
@@ -232,6 +323,9 @@ export function TryoutsSurface(props: TryoutsSurfaceProps) {
       })
     ));
   }, [formatScore, previewTryoutRecord, template.options]);
+  const previewStuntRoleLabel = previewTryoutRecord?.rawData.sport === "stunts"
+    ? formatStuntRoleLabel(previewTryoutRecord.rawData.stuntRole)
+    : null;
   const showSelectedAthleteSummary = athleteIntakeMode === "registered" && Boolean(athleteDraft.athleteId);
   const isSearchShowingSelectedAthlete = showSelectedAthleteSummary && normalizedRegisteredSearch === selectedAthleteSearchLabel;
 
@@ -271,12 +365,44 @@ export function TryoutsSurface(props: TryoutsSurfaceProps) {
     previousRegisteredAthleteId.current = nextRegisteredAthleteId;
   }, [athleteDraft.athleteId, athleteDraft.firstName, athleteDraft.lastName, athleteDraft.registrationNumber, athleteIntakeMode]);
 
+  useEffect(() => {
+    const trimmedBirthDate = athleteDraft.dateOfBirth.trim();
+
+    if (!trimmedBirthDate) {
+      setAgeEligibility(buildMissingBirthDateEligibility());
+      return;
+    }
+
+    const controller = new AbortController();
+
+    void fetch(`/api/age-categories/eligibility?dateOfBirth=${encodeURIComponent(trimmedBirthDate)}`, {
+      cache: "no-store",
+      signal: controller.signal
+    })
+      .then((response) => response.ok ? response.json() : null)
+      .then((payload) => {
+        if (payload?.eligibility) {
+          setAgeEligibility(payload.eligibility as AgeCategoryEligibilityResult);
+        }
+      })
+      .catch((error) => {
+        if ((error as Error).name !== "AbortError") {
+          setAgeEligibility({ ...buildMissingBirthDateEligibility(), status: "missing-grid" });
+        }
+      });
+
+    return () => controller.abort();
+  }, [athleteDraft.dateOfBirth]);
+
   const showAthleteView = athleteIntakeMode === "registered" && showSelectedAthleteSummary && registeredAthleteDetailMode === "view";
   const showAthleteForm = athleteIntakeMode === "new" || (showSelectedAthleteSummary && registeredAthleteDetailMode === "edit");
   const canSaveAthleteRecord = athleteIntakeMode === "new" || Boolean(athleteDraft.athleteId);
   const athleteFieldsReadOnly = athleteIntakeMode === "registered" && registeredAthleteDetailMode === "view";
   const canManageAthleteDetails = capabilities.canManageAthletes && !athleteFieldsReadOnly;
+  const canEditRegistrationNumber = canManageAthleteDetails && registrationNumberMode === "manual";
   const canEditTryoutScores = capabilities.canSaveTryoutRecords;
+  const isGymTryoutSettingsOnly = !capabilities.canSaveTryoutRecords;
+  const shouldShowSettingsEditor = settingsOpen || isGymTryoutSettingsOnly;
 
   const selectNewAthleteMode = () => {
     setAthleteIntakeMode("new");
@@ -314,8 +440,9 @@ export function TryoutsSurface(props: TryoutsSurfaceProps) {
 
   return (
     <>
-      <div className="planner-layout-grid">
+      <div className={`planner-layout-grid${isGymTryoutSettingsOnly ? " planner-layout-grid--single" : ""}`}>
       <div className="planner-main-column">
+        {!isGymTryoutSettingsOnly ? (
         <Card radius="panel" className="planner-panel-stack">
           <CardContent className="planner-panel-stack">
             <SectionHeader
@@ -440,6 +567,10 @@ export function TryoutsSurface(props: TryoutsSurfaceProps) {
                       <span>Date Of Birth</span>
                       <strong>{selectedAthleteBirthDate}</strong>
                     </div>
+                    <div className="planner-athlete-detail-row">
+                      <span>Eligible Categories</span>
+                      <AgeEligibilityBlock eligibility={ageEligibility} />
+                    </div>
                     {athleteDraft.notes.trim() ? (
                       <div className="planner-athlete-detail-row">
                         <span>Notes</span>
@@ -487,7 +618,12 @@ export function TryoutsSurface(props: TryoutsSurfaceProps) {
               {showAthleteForm ? (
                 <div className="planner-panel-stack">
                   <div className="planner-athlete-grid">
-                    <Input label="Registration #" value={athleteDraft.registrationNumber || "Auto-assigned on Save"} readOnly />
+                    <Input
+                      label="Registration #"
+                      value={canEditRegistrationNumber ? athleteDraft.registrationNumber : athleteDraft.registrationNumber || "Auto-assigned on Save"}
+                      readOnly={!canEditRegistrationNumber}
+                      onChange={(event) => updateAthleteDraft("registrationNumber", event.target.value)}
+                    />
                     <Input
                       label="First Name"
                       value={athleteDraft.firstName}
@@ -507,6 +643,10 @@ export function TryoutsSurface(props: TryoutsSurfaceProps) {
                       readOnly={!canManageAthleteDetails}
                       onChange={(event) => updateAthleteDraft("dateOfBirth", event.target.value)}
                     />
+                    <div className="planner-athlete-grid-wide">
+                      <span className="ui-field__label">Eligible Categories</span>
+                      <AgeEligibilityBlock eligibility={ageEligibility} />
+                    </div>
                     <Textarea
                       label="Notes"
                       rows={3}
@@ -585,22 +725,43 @@ export function TryoutsSurface(props: TryoutsSurfaceProps) {
             </div>
           </CardContent>
         </Card>
+        ) : null}
 
         <>
             <Card radius="panel" className="planner-panel-stack">
               <CardContent className="planner-panel-stack">
+                {isGymTryoutSettingsOnly ? (
+                  <>
+                    <div className="planner-panel-stack">
+                      <SectionHeader title="Tryout Track" />
+                      <Tabs
+                        className="planner-sport-tabs"
+                        items={TRYOUT_SPORT_TABS}
+                        value={activeSport}
+                        onValueChange={(value) => {
+                          if (isPlannerSportTab(value)) {
+                            setActiveSport(value);
+                          }
+                        }}
+                        ariaLabel="Planner sport"
+                      />
+                    </div>
+                    <div className="planner-panel-divider" aria-hidden="true" />
+                  </>
+                ) : null}
+
                 <SectionHeader
                   className="planner-settings-header"
                   eyebrow="Template"
                   title="Tryout Settings"
-                  actions={
+                  actions={!isGymTryoutSettingsOnly ? (
                     <Button variant="ghost" size="sm" leadingIcon={settingsOpen ? undefined : <Pencil />} onClick={() => setSettingsOpen((current) => !current)}>
                       {settingsOpen ? "Hide" : "Edit"}
                     </Button>
-                  }
+                  ) : undefined}
                 />
 
-                {settingsOpen ? (
+                {shouldShowSettingsEditor ? (
                   <div className="planner-settings-stack">
                     <Card variant="subtle" className="planner-template-level-card">
                       <CardContent className="planner-template-level-card__content">
@@ -686,7 +847,7 @@ export function TryoutsSurface(props: TryoutsSurfaceProps) {
                               >
                                 <span className="planner-template-level-title">{bucket.label}</span>
                                 <div className="planner-template-level-meta">
-                                  <span>{bucket.skills.length} skills</span>
+                                  <span>{bucket.kind === "item" ? "Item" : `${bucket.skills.length} skills`}</span>
                                   {isOpen ? <ChevronUp /> : <ChevronDown />}
                                 </div>
                               </Button>
@@ -711,25 +872,22 @@ export function TryoutsSurface(props: TryoutsSurfaceProps) {
                                         />
                                       </CardContent>
                                     </Card>
-                                  ) : null}
-                                  {bucket.skills.map((skill, index) => (
+                                  ) : bucket.skills.map((skill, index) => (
                                     <Card key={skill.id} variant="subtle" className="planner-template-skill-card">
                                       <CardContent className="planner-template-skill-card__content">
                                         <span className="planner-field-label">{`Skill Name ${index + 1}`}</span>
                                         <div className="planner-template-skill-card__grid">
                                           <Input value={skill.name} onChange={(event) => updateTemplateSkill(bucket.key, skill.id, event.target.value)} />
                                         </div>
-                                        {bucket.kind !== "item" ? (
-                                          <Button
-                                            type="button"
-                                            variant="ghost"
-                                            size="sm"
-                                            iconOnly
-                                            leadingIcon={<Eraser />}
-                                            aria-label={`Delete skill ${index + 1}`}
-                                            onClick={() => removeTemplateSkill(bucket.key, skill.id)}
-                                          />
-                                        ) : null}
+                                        <Button
+                                          type="button"
+                                          variant="ghost"
+                                          size="sm"
+                                          iconOnly
+                                          leadingIcon={<Eraser />}
+                                          aria-label={`Delete skill ${index + 1}`}
+                                          onClick={() => removeTemplateSkill(bucket.key, skill.id)}
+                                        />
                                       </CardContent>
                                     </Card>
                                   ))}
@@ -787,6 +945,7 @@ export function TryoutsSurface(props: TryoutsSurfaceProps) {
               </CardContent>
             </Card>
 
+            {!isGymTryoutSettingsOnly ? (
             <Card radius="panel" className="planner-panel-stack">
               <CardContent className="planner-panel-stack">
                 <SectionHeader
@@ -799,6 +958,57 @@ export function TryoutsSurface(props: TryoutsSurfaceProps) {
                     </div>
                   }
                 />
+
+                {activeSport === "stunts" ? (
+                  <Card variant="subtle" className="planner-stunt-role-card">
+                    <CardContent className="planner-stunt-role-card__content">
+                      <SectionHeader
+                        eyebrow="Stunt Role"
+                        title="Position"
+                        description="This is a role tag for team building, not part of the score."
+                      />
+                      <div className="planner-stunt-role-grid">
+                        <div className="planner-stunt-role-field">
+                          <span className="planner-field-label">Athlete Type</span>
+                          <Tabs
+                            className="planner-stunt-role-tabs"
+                            ariaLabel="Stunt athlete type"
+                            value={stuntRoleDraft.position ?? "unset"}
+                            onValueChange={(value) => {
+                              if (value === "flyer" || value === "base") {
+                                updateStuntPosition(value);
+                              }
+                            }}
+                            items={STUNT_POSITION_TABS.map((item) => ({
+                              ...item,
+                              disabled: !canEditTryoutScores
+                            }))}
+                          />
+                        </div>
+
+                        {stuntRoleDraft.position === "base" ? (
+                          <div className="planner-stunt-role-field">
+                            <span className="planner-field-label">Primary Base Role</span>
+                            <Tabs
+                              className="planner-stunt-role-tabs"
+                              ariaLabel="Primary base role"
+                              value={stuntRoleDraft.baseRole ?? "unset"}
+                              onValueChange={(value) => {
+                                if (value === "main-side" || value === "back") {
+                                  updateStuntBaseRole(value);
+                                }
+                              }}
+                              items={STUNT_BASE_ROLE_TABS.map((item) => ({
+                                ...item,
+                                disabled: !canEditTryoutScores
+                              }))}
+                            />
+                          </div>
+                        ) : null}
+                      </div>
+                    </CardContent>
+                  </Card>
+                ) : null}
 
                 <div className="planner-level-stack">
                   {activeSport === "dance" ? (
@@ -974,9 +1184,11 @@ export function TryoutsSurface(props: TryoutsSurfaceProps) {
                 </div>
               </CardContent>
             </Card>
+            ) : null}
         </>
       </div>
 
+      {!isGymTryoutSettingsOnly ? (
       <aside className="planner-side-column">
         <Card radius="panel" className="planner-panel-stack">
           <CardContent className="planner-panel-stack">
@@ -1014,6 +1226,7 @@ export function TryoutsSurface(props: TryoutsSurfaceProps) {
           </CardContent>
         </Card>
       </aside>
+      ) : null}
       </div>
 
       {previewTryoutRecord ? (
@@ -1051,6 +1264,18 @@ export function TryoutsSurface(props: TryoutsSurfaceProps) {
             </div>
 
             <div className="planner-evaluation-sheet__body">
+              {previewStuntRoleLabel ? (
+                <div className="planner-evaluation-sheet__row planner-evaluation-sheet__row--stunt-role">
+                  <div className="planner-evaluation-sheet__row-copy">
+                    <strong>Stunt Role</strong>
+                    <span>Non-score profile answer</span>
+                  </div>
+                  <div className="planner-evaluation-sheet__row-score">
+                    <span>{previewStuntRoleLabel}</span>
+                  </div>
+                </div>
+              ) : null}
+
               {previewTryoutRecordSkills.length ? (
                 <div className="planner-evaluation-sheet__list">
                   {previewTryoutRecordSkills.map((skill) => (

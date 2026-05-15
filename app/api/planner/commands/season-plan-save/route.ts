@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { requireCheerPlannerPremium } from "@/lib/access/membership";
-import { getPlannerScopeContext, requirePlannerSession } from "@/lib/services/planner-api-access";
+import { canEditTeamForSession, getPlannerScopeContext, requirePlannerSession } from "@/lib/services/planner-api-access";
 import { getPlannerCommandError, savePlannerSeasonPlanCommand } from "@/lib/services/planner-command-service";
 
 function asString(value: unknown) {
@@ -24,10 +24,16 @@ export async function POST(request: NextRequest) {
       return premiumError;
     }
 
+    const teamId = asString(payload?.teamId);
+
+    if (scope.scope === "gym" && !(await canEditTeamForSession(teamId, session, scope))) {
+      return NextResponse.json({ error: "You do not have permission to update this Gym team's season plan." }, { status: 403 });
+    }
+
     const result = await savePlannerSeasonPlanCommand(session, scope.scope, {
       workspaceRootId: typeof payload?.workspaceRootId === "string" ? payload.workspaceRootId : null,
       expectedLockVersion: typeof payload?.expectedLockVersion === "number" ? payload.expectedLockVersion : null,
-      teamId: asString(payload?.teamId),
+      teamId,
       status: asString(payload?.status) || "draft",
       notes: asString(payload?.notes),
       checkpoints: Array.isArray(payload?.checkpoints) ? payload.checkpoints : [],

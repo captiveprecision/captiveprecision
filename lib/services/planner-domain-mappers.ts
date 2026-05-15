@@ -418,6 +418,10 @@ export function normalizePlannerTryoutRecord(
     scoringSystemVersionId: raw.scoringSystemVersionId ?? null,
     season: raw.season ?? null,
     seasonLabel: raw.seasonLabel ?? null,
+    gymSeasonId: raw.gymSeasonId ?? null,
+    gymSeasonNumber: typeof raw.gymSeasonNumber === "number" && Number.isFinite(raw.gymSeasonNumber) ? raw.gymSeasonNumber : null,
+    gymSeasonLabel: raw.gymSeasonLabel ?? null,
+    gymSeasonAutoCreated: raw.gymSeasonAutoCreated === true,
     occurredAt,
     rawData: {
       ...rawData,

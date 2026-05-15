@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { requireCheerPlannerPremium } from "@/lib/access/membership";
-import { getPlannerScopeContext, requirePlannerSession } from "@/lib/services/planner-api-access";
+import { canAdministerPlannerGymScope, getPlannerScopeContext, requirePlannerSession } from "@/lib/services/planner-api-access";
 import { getPlannerCommandError, softDeletePlannerAthleteCommand } from "@/lib/services/planner-command-service";
 
 function asString(value: unknown) {
@@ -22,6 +22,10 @@ export async function POST(request: NextRequest) {
 
     if (premiumError) {
       return premiumError;
+    }
+
+    if (!(await canAdministerPlannerGymScope(session, scope))) {
+      return NextResponse.json({ error: "Only the Gym owner or Program Director can remove Gym athlete records." }, { status: 403 });
     }
 
     const result = await softDeletePlannerAthleteCommand(session, scope.scope, {

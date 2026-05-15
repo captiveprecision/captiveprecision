@@ -98,6 +98,20 @@ function isItemActive(pathname: string, item: NavItem, index?: number) {
   return pathname === item.href || pathname.startsWith(`${item.href}/`);
 }
 
+function isChildItemActive(pathname: string, item: NavItem, siblings: NavItem[]) {
+  const hasMoreSpecificSibling = siblings.some((sibling) => (
+    sibling.href !== item.href
+    && sibling.href.startsWith(`${item.href}/`)
+    && (pathname === sibling.href || pathname.startsWith(`${sibling.href}/`))
+  ));
+
+  if (hasMoreSpecificSibling) {
+    return false;
+  }
+
+  return isItemActive(pathname, item);
+}
+
 function SidebarLinkGroup({
   item,
   active,
@@ -138,7 +152,7 @@ function SidebarLinkGroup({
 
       <div className="sidebar-submenu">
         {(item.children ?? []).map((child) => {
-          const childActive = isItemActive(pathname, child);
+          const childActive = isChildItemActive(pathname, child, item.children ?? []);
           const ChildIcon = child.icon;
 
           return (

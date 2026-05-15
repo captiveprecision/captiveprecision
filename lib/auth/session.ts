@@ -148,25 +148,71 @@ export async function getAuthSession(): Promise<AuthSession | null> {
     }
 
     const authorizedProfile = profile;
+    let linkedGymId: string | null = authorizedProfile.primary_gym_id ?? null;
     let linkedGymName: string | null = null;
 
-    if (authorizedProfile.primary_gym_id) {
+    if (linkedGymId) {
       const { data: gymData } = await admin
         .from("gyms" as never)
         .select("name" as never)
-        .eq("id", authorizedProfile.primary_gym_id as never)
+        .eq("id", linkedGymId as never)
         .maybeSingle();
 
       linkedGymName = (gymData as Pick<GymRow, "name"> | null)?.name ?? null;
     }
+
+    if (!linkedGymId) {
+      const { data: ownedGym } = await admin
+        .from("gyms" as never)
+        .select("id, name" as never)
+        .eq("owner_profile_id", user.id as never)
+        .maybeSingle();
+      const ownedGymRow = ownedGym as Pick<GymRow, "id" | "name"> | null;
+
+      if (ownedGymRow?.id) {
+        linkedGymId = ownedGymRow.id;
+        linkedGymName = ownedGymRow.name;
+      }
+    }
+
+    if (!linkedGymId) {
+      const { data: license } = await admin
+        .from("gym_coach_licenses" as never)
+        .select("gym_id" as never)
+        .eq("coach_profile_id", user.id as never)
+        .eq("status", "active" as never)
+        .order("created_at", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      const licensedGymId = (license as { gym_id?: string } | null)?.gym_id ?? null;
+
+      if (licensedGymId) {
+        const { data: gymData } = await admin
+          .from("gyms" as never)
+          .select("id, name" as never)
+          .eq("id", licensedGymId as never)
+          .maybeSingle();
+        const gymRow = gymData as Pick<GymRow, "id" | "name"> | null;
+
+        if (gymRow?.id) {
+          linkedGymId = gymRow.id;
+          linkedGymName = gymRow.name;
+        }
+      }
+    }
+
+    const effectiveRoles = Array.from(new Set([
+      ...getEffectiveRoles(access.role),
+      ...(linkedGymId ? ["gym" as AppRole] : [])
+    ]));
 
     return {
       userId: user.id,
       email: authorizedProfile.email ?? user.email ?? "",
       displayName: authorizedProfile.display_name ?? user.user_metadata.display_name ?? user.email ?? "User",
       role: access.role,
-      roles: getEffectiveRoles(access.role),
-      primaryGymId: authorizedProfile.primary_gym_id ?? null,
+      roles: effectiveRoles,
+      primaryGymId: linkedGymId,
       primaryGymName: authorizedProfile.gym_name ?? linkedGymName,
       city: authorizedProfile.city ?? null,
       state: authorizedProfile.state ?? null,

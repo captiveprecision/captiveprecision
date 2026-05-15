@@ -1,18 +1,49 @@
-﻿import { BillingPortalButton, CheckoutButton } from "@/components/billing/checkout-button";
-import { Badge, ButtonLink, Card, CardContent, SectionHeader } from "@/components/ui";
-import { getAuthSession } from "@/lib/auth/session";
+import { revalidatePath } from "next/cache";
+
+import { BillingPortalButton, CheckoutButton } from "@/components/billing/checkout-button";
+import { Badge, Button, ButtonLink, Card, CardContent, SectionHeader } from "@/components/ui";
+import { getAuthSession, requireAuthSession } from "@/lib/auth/session";
 import { resolveBillingStatus } from "@/lib/billing/stripe";
+import { canManageGymAdministration, resolveGymAccessContext } from "@/lib/services/gym-access";
+import {
+  getGymRegistrationNumberModeByGymId,
+  normalizeGymRegistrationNumberMode,
+  saveGymRegistrationNumberMode
+} from "@/lib/services/gym-registration-settings";
+
+export const dynamic = "force-dynamic";
 
 function formatPeriodEnd(value: string | null) {
   return value ? new Date(value).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "Not scheduled";
 }
 
+async function updateRegistrationNumberMode(formData: FormData) {
+  "use server";
+
+  const session = await requireAuthSession("gym");
+  const access = await resolveGymAccessContext(session, { ensureOwnerSeat: true });
+
+  if (!access || !canManageGymAdministration(access)) {
+    throw new Error("Program Director access is required.");
+  }
+
+  const mode = normalizeGymRegistrationNumberMode(formData.get("registrationNumberMode"));
+  await saveGymRegistrationNumberMode(access.gym.id, mode);
+
+  revalidatePath("/gym/settings");
+  revalidatePath("/gym/cheer-planner");
+  revalidatePath("/gym/manage-my-gym/athletes");
+}
+
 export default async function GymSettingsPage() {
   const session = await getAuthSession();
   const billingStatus = session ? await resolveBillingStatus(session) : null;
+  const gymAccess = session ? await resolveGymAccessContext(session) : null;
   const isPremium = billingStatus?.tier === "premium";
   const canManageBilling = Boolean(billingStatus?.customerId);
   const gymId = session?.primaryGymId ?? null;
+  const registrationNumberMode = await getGymRegistrationNumberModeByGymId(gymAccess?.gym.id ?? gymId);
+  const canManageRegistrationSettings = canManageGymAdministration(gymAccess);
 
   const gymMembershipItems = [
     { label: "Plan", value: isPremium ? "Premium" : "Free" },
@@ -55,6 +86,52 @@ export default async function GymSettingsPage() {
                   <p className="settings-row-copy">Assigned coaches keep their own coach workspace while also gaining gym-linked premium visibility.</p>
                 </div>
               </div>
+            </CardContent>
+          </Card>
+
+          <Card radius="panel" className="settings-section">
+            <CardContent className="settings-section">
+              <SectionHeader
+                eyebrow="Athletes"
+                title="Registration numbers"
+                description="Choose whether athlete registration numbers are generated automatically or entered manually during athlete intake."
+              />
+              <form action={updateRegistrationNumberMode} className="settings-security-list">
+                <label className="settings-security-item">
+                  <div className="settings-card-topline">
+                    <span className="settings-row-title">Auto assign</span>
+                    <Badge variant={registrationNumberMode === "auto" ? "accent" : "subtle"}>Default</Badge>
+                  </div>
+                  <p className="settings-row-copy">Captive Precision assigns the next registration number when the athlete is saved.</p>
+                  <input
+                    type="radio"
+                    name="registrationNumberMode"
+                    value="auto"
+                    defaultChecked={registrationNumberMode === "auto"}
+                    disabled={!canManageRegistrationSettings}
+                  />
+                </label>
+                <label className="settings-security-item">
+                  <div className="settings-card-topline">
+                    <span className="settings-row-title">Manual entry</span>
+                    <Badge variant={registrationNumberMode === "manual" ? "accent" : "subtle"}>Gym choice</Badge>
+                  </div>
+                  <p className="settings-row-copy">Allow staff to enter a registration number manually. Blank values still fall back to auto-assignment.</p>
+                  <input
+                    type="radio"
+                    name="registrationNumberMode"
+                    value="manual"
+                    defaultChecked={registrationNumberMode === "manual"}
+                    disabled={!canManageRegistrationSettings}
+                  />
+                </label>
+                <div className="settings-inline-actions">
+                  <Button type="submit" disabled={!canManageRegistrationSettings}>Save registration settings</Button>
+                  {!canManageRegistrationSettings ? (
+                    <span className="metric-subtext">Program Director access is required to change this setting.</span>
+                  ) : null}
+                </div>
+              </form>
             </CardContent>
           </Card>
         </div>

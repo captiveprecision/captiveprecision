@@ -1,6 +1,7 @@
 import type { AthleteRecord } from "@/lib/domain/athlete";
 import type {
   PlannerTryoutSummaryBucket,
+  PlannerStuntRoleEvaluation,
   PlannerTryoutTemplate,
   PlannerTryoutTemplateBucket,
   PlannerTryoutBucketEvaluation,
@@ -35,6 +36,24 @@ export type TryoutScoringContext = {
   seasonLabel?: string | null;
   createdById: string | null;
 };
+
+function normalizeStuntRoleEvaluation(value?: PlannerStuntRoleEvaluation | null): PlannerStuntRoleEvaluation | null {
+  if (!value?.position) {
+    return null;
+  }
+
+  if (value.position === "flyer") {
+    return {
+      position: "flyer",
+      baseRole: null
+    };
+  }
+
+  return {
+    position: "base",
+    baseRole: value.baseRole === "main-side" || value.baseRole === "back" ? value.baseRole : null
+  };
+}
 
 export type TryoutAthletePoolItem = AthleteRecord & {
   age: number | null;
@@ -276,9 +295,10 @@ export function buildTryoutRecord(input: {
   buckets: PlannerTryoutBucketEvaluation[];
   resultSummary: PlannerTryoutSummary;
   scoringContext: TryoutScoringContext;
+  stuntRole?: PlannerStuntRoleEvaluation | null;
   occurredAt: string;
 }): TryoutRecord {
-  const { athlete, occurredAt, project, buckets, resultSummary, scoringContext, sport, template } = input;
+  const { athlete, occurredAt, project, buckets, resultSummary, scoringContext, sport, template, stuntRole } = input;
 
   return {
     id: createTryoutRecordId("tryout-record"),
@@ -318,7 +338,8 @@ export function buildTryoutRecord(input: {
       buckets: buckets.map((bucket) => ({
         ...bucket,
         skills: bucket.skills.map((skill) => ({ ...skill }))
-      }))
+      })),
+      ...(sport === "stunts" ? { stuntRole: normalizeStuntRoleEvaluation(stuntRole) } : {})
     },
     resultSummary: {
       ...resultSummary,

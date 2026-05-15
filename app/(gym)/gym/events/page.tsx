@@ -1,12 +1,20 @@
 import { EventsCalendarShell } from "@/components/features/events/events-calendar-shell";
+import { getAuthSession } from "@/lib/auth/session";
+import { buildEventsCalendarDirectory } from "@/lib/events/events-directory";
 
-export default function GymEventsPage() {
+export const dynamic = "force-dynamic";
+
+export default async function GymEventsPage() {
+  const session = await getAuthSession();
+  const directory = await buildEventsCalendarDirectory("gym", session);
+
   return (
     <EventsCalendarShell
       workspace="gym"
       eyebrow="Gym events"
       title="Events"
-      description="Gym-wide scheduling in local calendar mode, migrated from the Calendar Systems prototype."
+      description="Coordinate gym-wide events across teams, coaches, and staff."
+      directory={directory}
     />
   );
 }

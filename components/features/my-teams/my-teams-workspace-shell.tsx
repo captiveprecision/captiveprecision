@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { MyTeamsSurface } from "@/components/features/cheer-planner/my-teams/my-teams-surface";
 import { Badge, Button, Card, CardContent, EmptyState, Input, SectionHeader, Tabs, Textarea } from "@/components/ui";
 import type { PlannerTrashItem, RestorePreview } from "@/lib/domain/planner-versioning";
+import type { GymRegistrationNumberMode } from "@/lib/services/gym-registration-settings";
 import type { AthleteDraftState } from "@/lib/services/planner-integration";
 import type { LinkedCoachOption } from "@/lib/services/team-coach-directory";
 import { useCheerPlannerIntegration } from "@/lib/services/planner-integration";
@@ -270,7 +271,13 @@ function DeleteDialog({
   );
 }
 
-export function MyTeamsWorkspaceShell({ coachOptions }: { coachOptions: LinkedCoachOption[] }) {
+export function MyTeamsWorkspaceShell({
+  coachOptions,
+  registrationNumberMode = "auto"
+}: {
+  coachOptions: LinkedCoachOption[];
+  registrationNumberMode?: GymRegistrationNumberMode;
+}) {
   const integration = useCheerPlannerIntegration("coach");
   const { loadTrash } = integration;
   const [tab, setTab] = useState<MyTeamsTab>("teams");
@@ -285,6 +292,7 @@ export function MyTeamsWorkspaceShell({ coachOptions }: { coachOptions: LinkedCo
   const [trashFilter, setTrashFilter] = useState<TrashFilter>("all");
   const [trashQuery, setTrashQuery] = useState("");
 
+  const canEditRegistrationNumber = registrationNumberMode === "manual";
   const isAthleteFormOpen = createAthleteOpen || Boolean(editingAthleteId);
   const hasUnsavedAthleteChanges = useMemo(() => (
     isAthleteFormOpen
@@ -553,7 +561,14 @@ export function MyTeamsWorkspaceShell({ coachOptions }: { coachOptions: LinkedCo
                     title={editingAthleteId ? "Update Athlete Record" : "Create Athlete Record"}
                   />
                   <div className="planner-athlete-grid">
-                    <Input label="Registration #" value={integration.athleteDraft.registrationNumber || "Auto-assigned on Save"} readOnly />
+                    <Input
+                      label="Registration #"
+                      value={canEditRegistrationNumber
+                        ? integration.athleteDraft.registrationNumber
+                        : integration.athleteDraft.registrationNumber || "Auto-assigned on Save"}
+                      readOnly={!canEditRegistrationNumber}
+                      onChange={(event) => integration.updateAthleteDraft("registrationNumber", event.target.value)}
+                    />
                     <Input
                       label="First Name"
                       value={integration.athleteDraft.firstName}

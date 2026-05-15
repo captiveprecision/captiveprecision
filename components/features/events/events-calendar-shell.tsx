@@ -6,8 +6,8 @@ import {
   CALENDAR_COLOR_OPTIONS,
   DAY_NAMES,
   DEFAULT_EVENT_LOCATION,
+  EMPTY_EVENTS_CALENDAR_DIRECTORY,
   HOURS,
-  REGISTERED_GUESTS,
   REMINDER_OPTIONS,
   addDays,
   buildActivityEntry,
@@ -26,6 +26,10 @@ import {
   formatMinutesAsTime,
   formatWorkWeekRange,
   getActiveWorkWeekDays,
+  getAutoIncludedCoachIdsForTeams,
+  getCalendarCoaches,
+  getCalendarRecipientSummary,
+  getCalendarTeams,
   getCountableWeekEvents,
   getDayEvents,
   getEventBlockCount,
@@ -35,6 +39,7 @@ import {
   getMonthEvents,
   getVisibleRange,
   getVisibleWeeks,
+  getSelectedCalendarTeamIds,
   getWeekStartIso,
   isEventCancelled,
   parseIsoDate,
@@ -48,7 +53,7 @@ import {
   type CalendarDayViewMode,
   type CalendarEvent,
   type CalendarEventDraft,
-  type CalendarGuestMode,
+  type EventsCalendarDirectory,
   type EventsCalendarWorkspace,
   type StoredEventsCalendarState
 } from "@/lib/events/events-calendar";
@@ -60,6 +65,7 @@ type EventsCalendarShellProps = {
   eyebrow: string;
   title: string;
   description?: string;
+  directory?: EventsCalendarDirectory;
 };
 
 type IconName = "calendar" | "chevron-left" | "chevron-right" | "close" | "copy" | "plus" | "settings" | "save";
@@ -127,19 +133,6 @@ function buildInitialSelectedDate() {
   return toIsoDate(new Date());
 }
 
-function getGuestLabel(event: CalendarEvent) {
-  if (event.guestMode === "registered") {
-    const record = REGISTERED_GUESTS.find((guest) => guest.id === event.guestId);
-    return record ? `${record.name} (${record.email})` : "";
-  }
-
-  if (event.guestMode === "manual" && event.guestEmail) {
-    return event.guestName ? `${event.guestName} (${event.guestEmail})` : event.guestEmail;
-  }
-
-  return "";
-}
-
 function getInitialState(workspace: EventsCalendarWorkspace) {
   const selectedDate = buildInitialSelectedDate();
   const today = parseIsoDate(selectedDate);
@@ -154,12 +147,12 @@ function getInitialState(workspace: EventsCalendarWorkspace) {
   };
 }
 
-export function EventsCalendarShell({ workspace, eyebrow, title, description }: EventsCalendarShellProps) {
+export function EventsCalendarShell({ workspace, eyebrow, title, description, directory }: EventsCalendarShellProps) {
+  const eventsDirectory = directory ?? EMPTY_EVENTS_CALENDAR_DIRECTORY;
   const initialState = useMemo(() => getInitialState(workspace), [workspace]);
   const [viewDate, setViewDate] = useState(initialState.viewDate);
   const [selectedDate, setSelectedDate] = useState(initialState.selectedDate);
   const [selectedWeekStart, setSelectedWeekStart] = useState(initialState.selectedWeekStart);
-  const [weekSummaryOpen, setWeekSummaryOpen] = useState(initialState.weekSummaryOpen);
   const [dayViewMode, setDayViewMode] = useState<CalendarDayViewMode>(initialState.dayViewMode);
   const [events, setEvents] = useState<CalendarEvent[]>(initialState.events);
   const [activityLog, setActivityLog] = useState<CalendarActivityEntry[]>(initialState.activityLog);
@@ -172,7 +165,7 @@ export function EventsCalendarShell({ workspace, eyebrow, title, description }: 
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [cancelingEventId, setCancelingEventId] = useState<string | null>(null);
   const [cancelReasonDraft, setCancelReasonDraft] = useState("");
-  const [guestSearch, setGuestSearch] = useState("");
+  const [coachSearch, setCoachSearch] = useState("");
   const [weekCopied, setWeekCopied] = useState(false);
   const [draft, setDraft] = useState<CalendarEventDraft>(() => buildEmptyEventDraft(initialState.selectedDate));
 
@@ -194,16 +187,30 @@ export function EventsCalendarShell({ workspace, eyebrow, title, description }: 
     () => selectedDayEvents.find((event) => event.id === selectedEventId) ?? null,
     [selectedDayEvents, selectedEventId]
   );
-  const registeredGuestMatches = useMemo(() => {
-    const query = guestSearch.trim().toLowerCase();
+  const availableTeams = useMemo(() => getCalendarTeams(workspace, eventsDirectory), [workspace, eventsDirectory]);
+  const availableCoaches = useMemo(() => getCalendarCoaches(workspace, eventsDirectory), [workspace, eventsDirectory]);
+  const draftSelectedTeamIds = useMemo(
+    () => getSelectedCalendarTeamIds(draft, workspace, eventsDirectory),
+    [draft, workspace, eventsDirectory]
+  );
+  const draftAutoCoachIds = useMemo(
+    () => new Set(getAutoIncludedCoachIdsForTeams(draftSelectedTeamIds, workspace, eventsDirectory)),
+    [draftSelectedTeamIds, workspace, eventsDirectory]
+  );
+  const coachMatches = useMemo(() => {
+    const query = coachSearch.trim().toLowerCase();
     if (!query) {
-      return REGISTERED_GUESTS;
+      return availableCoaches;
     }
 
-    return REGISTERED_GUESTS.filter((guest) => {
-      return guest.name.toLowerCase().includes(query) || guest.email.toLowerCase().includes(query);
+    return availableCoaches.filter((coach) => {
+      return (
+        coach.name.toLowerCase().includes(query) ||
+        coach.email.toLowerCase().includes(query) ||
+        coach.role.toLowerCase().includes(query)
+      );
     });
-  }, [guestSearch]);
+  }, [availableCoaches, coachSearch]);
 
   useEffect(() => {
     const baseState = getInitialState(workspace);
@@ -217,7 +224,7 @@ export function EventsCalendarShell({ workspace, eyebrow, title, description }: 
         viewDate: toIsoDate(baseState.viewDate),
         selectedDate: baseState.selectedDate,
         selectedWeekStart: baseState.selectedWeekStart,
-        weekSummaryOpen: baseState.weekSummaryOpen,
+        weekSummaryOpen: true,
         dayViewMode: baseState.dayViewMode,
         events: baseState.events,
         activityLog: baseState.activityLog
@@ -226,7 +233,6 @@ export function EventsCalendarShell({ workspace, eyebrow, title, description }: 
       setViewDate(startOfMonth(parseIsoDate(nextState.viewDate)));
       setSelectedDate(nextState.selectedDate);
       setSelectedWeekStart(nextState.selectedWeekStart);
-      setWeekSummaryOpen(nextState.weekSummaryOpen);
       setDayViewMode(nextState.dayViewMode);
       setEvents(nextState.events);
       setActivityLog(nextState.activityLog);
@@ -235,7 +241,6 @@ export function EventsCalendarShell({ workspace, eyebrow, title, description }: 
       setViewDate(baseState.viewDate);
       setSelectedDate(baseState.selectedDate);
       setSelectedWeekStart(baseState.selectedWeekStart);
-      setWeekSummaryOpen(baseState.weekSummaryOpen);
       setDayViewMode(baseState.dayViewMode);
       setEvents(baseState.events);
       setActivityLog(baseState.activityLog);
@@ -255,7 +260,7 @@ export function EventsCalendarShell({ workspace, eyebrow, title, description }: 
       viewDate: toIsoDate(viewDate),
       selectedDate,
       selectedWeekStart,
-      weekSummaryOpen,
+      weekSummaryOpen: true,
       dayViewMode,
       events,
       activityLog
@@ -274,7 +279,6 @@ export function EventsCalendarShell({ workspace, eyebrow, title, description }: 
     selectedDate,
     selectedWeekStart,
     viewDate,
-    weekSummaryOpen,
     workspace
   ]);
 
@@ -325,7 +329,7 @@ export function EventsCalendarShell({ workspace, eyebrow, title, description }: 
     setCancelingEventId(null);
     setCancelReasonDraft("");
     setDraft(buildEmptyEventDraft(selectedDate));
-    setGuestSearch("");
+    setCoachSearch("");
     setComposerStatus("");
     setComposerOpen((open) => !open);
   }
@@ -336,7 +340,7 @@ export function EventsCalendarShell({ workspace, eyebrow, title, description }: 
     setCancelReasonDraft("");
     setEditingEventId(event.id);
     setDraft(buildDraftFromEvent(event));
-    setGuestSearch("");
+    setCoachSearch("");
     setComposerStatus("");
     setComposerOpen(true);
     setDrawerOpen(true);
@@ -440,20 +444,55 @@ export function EventsCalendarShell({ workspace, eyebrow, title, description }: 
     });
   }
 
-  function setGuestMode(mode: CalendarGuestMode) {
+  function toggleAllTeams() {
     setDraft((current) => ({
       ...current,
-      guestMode: mode,
-      guestId: mode === "registered" ? current.guestId : "",
-      guestName: mode === "manual" ? current.guestName : "",
-      guestEmail: mode === "manual" ? current.guestEmail : ""
+      allTeams: !current.allTeams,
+      teamIds: !current.allTeams ? [] : current.teamIds
     }));
-    setGuestSearch("");
+  }
+
+  function toggleTeam(teamId: string) {
+    setDraft((current) => {
+      const teamIds = current.teamIds.includes(teamId)
+        ? current.teamIds.filter((id) => id !== teamId)
+        : [...current.teamIds, teamId];
+      return {
+        ...current,
+        allTeams: false,
+        teamIds
+      };
+    });
+  }
+
+  function toggleAllStaff() {
+    setDraft((current) => ({
+      ...current,
+      allStaff: !current.allStaff,
+      coachIds: !current.allStaff ? [] : current.coachIds
+    }));
+  }
+
+  function toggleCoach(coachId: string) {
+    if (draftAutoCoachIds.has(coachId)) {
+      return;
+    }
+
+    setDraft((current) => {
+      const coachIds = current.coachIds.includes(coachId)
+        ? current.coachIds.filter((id) => id !== coachId)
+        : [...current.coachIds, coachId];
+      return {
+        ...current,
+        allStaff: false,
+        coachIds
+      };
+    });
   }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const validationMessage = validateEventDraft(draft);
+    const validationMessage = validateEventDraft(draft, workspace, eventsDirectory);
     if (validationMessage) {
       setComposerStatus(validationMessage);
       return;
@@ -463,16 +502,16 @@ export function EventsCalendarShell({ workspace, eyebrow, title, description }: 
       const editedId = editingEventId;
       setEvents((current) =>
         current.map((calendarEvent) =>
-          calendarEvent.id === editedId ? updateCalendarEventFromDraft(calendarEvent, draft) : calendarEvent
+          calendarEvent.id === editedId ? updateCalendarEventFromDraft(calendarEvent, draft, eventsDirectory) : calendarEvent
         )
       );
       setSelectedEventId(editedId);
       pushActivity(`Event updated on ${formatLongDate(selectedDate)}: ${draft.title.trim()}.`);
     } else {
-      const nextEvent = createCalendarEvent(workspace, selectedDate, draft);
+      const nextEvent = createCalendarEvent(workspace, selectedDate, draft, eventsDirectory);
       setEvents((current) => [...current, nextEvent]);
       setSelectedEventId(nextEvent.id);
-      pushActivity(`Manual event added on ${formatLongDate(selectedDate)}: ${nextEvent.title}.`);
+      pushActivity(`Event added on ${formatLongDate(selectedDate)}: ${nextEvent.title}.`);
     }
 
     setComposerOpen(false);
@@ -554,7 +593,7 @@ export function EventsCalendarShell({ workspace, eyebrow, title, description }: 
   }
 
   function renderEventMeta(event: CalendarEvent, noteClassName: string) {
-    const guestLabel = getGuestLabel(event);
+    const recipientLabel = getCalendarRecipientSummary(event, workspace, eventsDirectory);
     const showCancelPanel = cancelingEventId === event.id && !isEventCancelled(event);
 
     return (
@@ -562,7 +601,7 @@ export function EventsCalendarShell({ workspace, eyebrow, title, description }: 
         {isEventCancelled(event) ? <span className={styles.eventCancelledBadge}>Cancelled</span> : null}
         <span className={noteClassName}>{event.note || "No additional notes."}</span>
         {event.location ? <span className={noteClassName}>{event.location}</span> : null}
-        {guestLabel ? <span className={noteClassName}>Guest: {guestLabel}</span> : null}
+        <span className={noteClassName}>Recipients: {recipientLabel}</span>
         {event.cancellationReason ? (
           <span className={noteClassName}>Reason: {event.cancellationReason}</span>
         ) : null}
@@ -575,7 +614,6 @@ export function EventsCalendarShell({ workspace, eyebrow, title, description }: 
                 rows={3}
                 value={cancelReasonDraft}
                 onChange={(inputEvent) => setCancelReasonDraft(inputEvent.target.value)}
-                placeholder="Optional reason to include in the local record."
               />
             </label>
             <div className={styles.cancelActions}>
@@ -596,8 +634,8 @@ export function EventsCalendarShell({ workspace, eyebrow, title, description }: 
     if (!selectedDayEvents.length) {
       return (
         <div className={styles.drawerEmpty}>
-          <strong>No events for this day.</strong>
-          <p>The bottom drawer is ready for local scheduling. Google sync is intentionally disabled here.</p>
+          <strong>No scheduled events.</strong>
+          <p>Select Add event to schedule teams and staff.</p>
         </div>
       );
     }
@@ -630,8 +668,8 @@ export function EventsCalendarShell({ workspace, eyebrow, title, description }: 
     if (!selectedDayEvents.length) {
       return (
         <div className={styles.drawerEmpty}>
-          <strong>No events for this day.</strong>
-          <p>The by-hour agenda is empty until an event is added locally.</p>
+          <strong>No scheduled events.</strong>
+          <p>Select Add event to schedule teams and staff.</p>
         </div>
       );
     }
@@ -752,7 +790,6 @@ export function EventsCalendarShell({ workspace, eyebrow, title, description }: 
                     className={cx(
                       styles.calendarWeekRow,
                       isSelectedWeek && styles.weekSelected,
-                      weekSummaryOpen && !isSelectedWeek && styles.weekCollapsed
                     )}
                     key={weekStartIso}
                   >
@@ -804,18 +841,11 @@ export function EventsCalendarShell({ workspace, eyebrow, title, description }: 
 
           <div className={styles.weeklyViewSection} aria-label="Weekly view">
             <div className={styles.weeklyViewHeader}>
-              <button
-                className={styles.ghostButton}
-                type="button"
-                aria-expanded={weekSummaryOpen}
-                onClick={() => setWeekSummaryOpen((open) => !open)}
-              >
-                Weekly View
-              </button>
+              <p className={styles.eyebrow}>Weekly View</p>
             </div>
             <section
-              className={cx(styles.weeklySummaryPanel, weekSummaryOpen && styles.weeklySummaryOpen)}
-              aria-hidden={!weekSummaryOpen}
+              className={cx(styles.weeklySummaryPanel, styles.weeklySummaryOpen)}
+              aria-hidden={false}
             >
               <div className={styles.weeklySummaryHeader}>
                 <button
@@ -913,21 +943,11 @@ export function EventsCalendarShell({ workspace, eyebrow, title, description }: 
             </button>
             <div className={styles.panelHeader}>
               <p className={styles.eyebrow}>Options</p>
-              <strong>Local calendar mode</strong>
+              <strong>Calendar settings</strong>
             </div>
             <p className={styles.optionsStatus}>
-              This milestone migrates the Calendar Systems prototype as a local UI flow. Google Calendar connection,
-              OAuth, and production persistence are intentionally unavailable here.
+              Events created here are available in this workspace calendar and can target teams, assigned coaches, or staff.
             </p>
-            <button className={styles.ghostButton} type="button" disabled>
-              Connect Google account
-            </button>
-            <label className={styles.fieldGroup}>
-              <span className={styles.fieldLabel}>Destination calendar</span>
-              <select className={styles.fieldInput} disabled>
-                <option>Local Events workspace</option>
-              </select>
-            </label>
             <div className={styles.panelHeader}>
               <p className={styles.eyebrow}>Activity</p>
               <strong>Recent activity</strong>
@@ -954,7 +974,7 @@ export function EventsCalendarShell({ workspace, eyebrow, title, description }: 
             <p className={styles.drawerSubtitle}>
               {selectedDayEvents.length
                 ? `${selectedDayEvents.length} event(s) on this day.`
-                : "There are no events on this date."}
+                : "No scheduled events."}
             </p>
           </div>
           <button
@@ -1003,7 +1023,6 @@ export function EventsCalendarShell({ workspace, eyebrow, title, description }: 
                     className={styles.fieldInput}
                     type="text"
                     maxLength={60}
-                    placeholder="Manual event title"
                     value={draft.title}
                     onChange={(event) => setDraftField("title", event.target.value)}
                     required
@@ -1035,7 +1054,6 @@ export function EventsCalendarShell({ workspace, eyebrow, title, description }: 
                     className={styles.fieldInput}
                     type="text"
                     maxLength={80}
-                    placeholder="Optional note"
                     value={draft.note}
                     onChange={(event) => setDraftField("note", event.target.value)}
                   />
@@ -1079,79 +1097,91 @@ export function EventsCalendarShell({ workspace, eyebrow, title, description }: 
                   </select>
                 </label>
                 <div className={cx(styles.fieldGroup, styles.fieldSpan2)}>
-                  <span className={styles.fieldLabel}>Guest</span>
-                  <div className={styles.viewToggle} role="group" aria-label="Guest mode">
-                    {(["none", "registered", "manual"] as CalendarGuestMode[]).map((mode) => (
-                      <button
-                        className={styles.toggleButton}
-                        type="button"
-                        aria-pressed={draft.guestMode === mode}
-                        key={mode}
-                        onClick={() => setGuestMode(mode)}
-                      >
-                        {mode === "none" ? "No guest" : mode === "registered" ? "Registered user" : "Manual entry"}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                {draft.guestMode === "registered" ? (
-                  <div className={cx(styles.fieldGroup, styles.fieldSpan2)}>
-                    <span className={styles.fieldLabel}>Registered user</span>
-                    <input
-                      className={styles.fieldInput}
-                      type="text"
-                      maxLength={120}
-                      placeholder="Search users by name or email"
-                      value={guestSearch}
-                      onChange={(event) => setGuestSearch(event.target.value)}
-                    />
-                    <div className={styles.registeredGuestResults} role="listbox" aria-label="Registered users">
-                      {registeredGuestMatches.map((guest) => (
-                        <button
-                          className={cx(
-                            styles.registeredGuestButton,
-                            draft.guestId === guest.id && styles.registeredGuestButtonSelected
-                          )}
-                          type="button"
-                          key={guest.id}
-                          onClick={() => {
-                            setDraftField("guestId", guest.id);
-                            setGuestSearch(guest.name);
-                          }}
+                  <span className={styles.fieldLabel}>Teams</span>
+                  {availableTeams.length ? (
+                  <div className={styles.recipientList}>
+                    <label className={cx(styles.recipientOption, draft.allTeams && styles.recipientOptionSelected)}>
+                      <input type="checkbox" checked={draft.allTeams} onChange={toggleAllTeams} />
+                      <span>
+                        <strong>All teams</strong>
+                        <small>Includes every team in this workspace.</small>
+                      </span>
+                    </label>
+                    {availableTeams.map((team) => {
+                      const checked = draft.allTeams || draft.teamIds.includes(team.id);
+                      return (
+                        <label
+                          className={cx(styles.recipientOption, checked && styles.recipientOptionSelected)}
+                          key={team.id}
                         >
-                          <strong>{guest.name}</strong>
-                          <span>{guest.email}</span>
-                        </button>
-                      ))}
-                    </div>
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            disabled={draft.allTeams}
+                            onChange={() => toggleTeam(team.id)}
+                          />
+                          <span>
+                            <strong>{team.name}</strong>
+                            <small>{team.level}</small>
+                          </span>
+                        </label>
+                      );
+                    })}
                   </div>
-                ) : null}
-                {draft.guestMode === "manual" ? (
-                  <div className={cx(styles.fieldGroup, styles.fieldSpan2)}>
-                    <label className={styles.fieldGroup}>
-                      <span className={styles.fieldLabel}>Guest name</span>
-                      <input
-                        className={styles.fieldInput}
-                        type="text"
-                        maxLength={80}
-                        placeholder="Optional guest name"
-                        value={draft.guestName}
-                        onChange={(event) => setDraftField("guestName", event.target.value)}
-                      />
+                  ) : (
+                    <p className={styles.recipientSummary}>No teams are available for this workspace yet.</p>
+                  )}
+                </div>
+                <div className={cx(styles.fieldGroup, styles.fieldSpan2)}>
+                  <span className={styles.fieldLabel}>Coaches and staff</span>
+                  {availableCoaches.length ? (
+                  <>
+                  <input
+                    className={styles.fieldInput}
+                    type="text"
+                    maxLength={120}
+                    value={coachSearch}
+                    onChange={(event) => setCoachSearch(event.target.value)}
+                    aria-label="Search coaches and staff"
+                  />
+                  <div className={styles.recipientList}>
+                    <label className={cx(styles.recipientOption, draft.allStaff && styles.recipientOptionSelected)}>
+                      <input type="checkbox" checked={draft.allStaff} onChange={toggleAllStaff} />
+                      <span>
+                        <strong>All staff</strong>
+                        <small>Includes every coach and staff member.</small>
+                      </span>
                     </label>
-                    <label className={styles.fieldGroup}>
-                      <span className={styles.fieldLabel}>Guest email</span>
-                      <input
-                        className={styles.fieldInput}
-                        type="email"
-                        maxLength={120}
-                        placeholder="guest@example.com"
-                        value={draft.guestEmail}
-                        onChange={(event) => setDraftField("guestEmail", event.target.value)}
-                      />
-                    </label>
+                    {coachMatches.map((coach) => {
+                      const autoIncluded = draftAutoCoachIds.has(coach.id);
+                      const checked = draft.allStaff || draft.coachIds.includes(coach.id) || autoIncluded;
+                      return (
+                        <label
+                          className={cx(styles.recipientOption, checked && styles.recipientOptionSelected)}
+                          key={coach.id}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            disabled={draft.allStaff || autoIncluded}
+                            onChange={() => toggleCoach(coach.id)}
+                          />
+                          <span>
+                            <strong>{coach.name}</strong>
+                            <small>{autoIncluded ? `${coach.role} · included by selected team` : coach.role}</small>
+                          </span>
+                        </label>
+                      );
+                    })}
                   </div>
-                ) : null}
+                  </>
+                  ) : (
+                    <p className={styles.recipientSummary}>No gym staff is available for this workspace yet.</p>
+                  )}
+                  <p className={styles.recipientSummary}>
+                    Recipients: {getCalendarRecipientSummary(draft, workspace, eventsDirectory)}
+                  </p>
+                </div>
               </div>
               <div className={styles.composerFooter}>
                 <p className={styles.composerStatus}>{composerStatus}</p>

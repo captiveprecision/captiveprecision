@@ -79,7 +79,8 @@ export async function POST(request: NextRequest) {
       lastChangeSetId: typeof result.changeSetId === "string" ? result.changeSetId : asOptionalString(entity.last_change_set_id),
       archivedAt: asOptionalString(entity.archived_at),
       deletedAt: asOptionalString(entity.deleted_at),
-      restoredFromVersionId: asOptionalString(entity.restored_from_version_id)
+      restoredFromVersionId: asOptionalString(entity.restored_from_version_id),
+      gymSeasonAutoCreated: result.gymSeasonAutoCreated === true
     });
 
     return NextResponse.json({

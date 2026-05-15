@@ -64,7 +64,7 @@ export function SeasonPlannerSurface(props: SeasonPlannerSurfaceProps) {
           <SectionHeader
             eyebrow="Season Planner"
             title="Team Season Checkpoints"
-            description="Track target dates, completion status, and manual season milestones for each team."
+            description="Track season progress by team. Dated checkpoints and manual entries are published into Events, which is the operational calendar for the gym and coaches."
           />
           <div className="planner-team-card-list">
             {teams.length ? teams.map((team) => {
@@ -245,7 +245,7 @@ export function SeasonPlannerSurface(props: SeasonPlannerSurfaceProps) {
                             </CardContent>
                           </Card>
                         )) : (
-                          <EmptyState title="No Manual Entries Yet." description="Add evaluations, choreography notes, or events for this team's season timeline." />
+                          <EmptyState title="No Manual Entries Yet." description="Add dated evaluations, choreography notes, or events to publish them into Events for this team." />
                         )
                       ) : persistedManualEntries.length ? persistedManualEntries.map((entry) => (
                         <div key={entry.id} className="planner-team-member-row">
@@ -262,7 +262,7 @@ export function SeasonPlannerSurface(props: SeasonPlannerSurfaceProps) {
                           </div>
                         </div>
                       )) : (
-                        <EmptyState title="No Manual Entries Yet." description="Evaluations, choreography notes, and events will appear here." />
+                        <EmptyState title="No Manual Entries Yet." description="Dated evaluations, choreography notes, and events will appear in Events after saving." />
                       )}
                     </div>
                   </CardContent>

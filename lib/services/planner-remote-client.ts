@@ -25,6 +25,8 @@ type PlannerCommandResult<TEntity> = {
   latestVersionNumber: number;
   versionId?: string;
   restoredRelations?: Record<string, number>;
+  gymSeasonAutoCreated?: boolean;
+  gymSeasonLabel?: string;
 };
 
 type PlannerRestoreResult = {
@@ -232,7 +234,12 @@ export async function savePlannerTryoutRecord(scope: PlannerWorkspaceScope, tryo
     record: tryoutRecord
   });
 
-  return buildPlannerTryoutRecordFromRow(buildCommandEntityRow(result.entity, result) as never, tryoutRecord.workspaceId);
+  const savedTryoutRecord = buildPlannerTryoutRecordFromRow(buildCommandEntityRow(result.entity, result) as never, tryoutRecord.workspaceId);
+
+  return {
+    ...savedTryoutRecord,
+    gymSeasonAutoCreated: result.gymSeasonAutoCreated === true
+  };
 }
 
 export async function savePlannerSkillPlan(scope: PlannerWorkspaceScope, plan: TeamSkillPlan) {

@@ -4,11 +4,13 @@ import type { Route } from "next";
 import {
   Building2,
   CalendarDays,
+  CalendarSync,
   ClipboardList,
   CreditCard,
   LayoutDashboard,
   MessageSquare,
   Settings,
+  UsersRound,
   UserRound
 } from "lucide-react";
 
@@ -24,6 +26,8 @@ const gymNavItems = [
     icon: Building2,
     children: [
       { href: "/gym/manage-my-gym" as Route, title: "Overview", icon: Building2 },
+      { href: "/gym/manage-my-gym/athletes" as Route, title: "Athletes", icon: UsersRound },
+      { href: "/gym/manage-my-gym/seasons" as Route, title: "Seasons", icon: CalendarSync },
       { href: "/gym/profile" as Route, title: "Profile", icon: UserRound },
       { href: "/plans" as Route, title: "Plans", icon: CreditCard }
     ]
@@ -56,19 +60,25 @@ function getGymReleaseLabel() {
   }).format(parsed)}`;
 }
 
-export function GymSidebar({ availableWorkspaces }: { availableWorkspaces: AppRole[] }) {
+export function GymSidebar({
+  activeSeasonLabel,
+  availableWorkspaces,
+  gymName
+}: {
+  activeSeasonLabel?: string | null;
+  availableWorkspaces: AppRole[];
+  gymName?: string | null;
+}) {
   return (
     <WorkspaceSidebar
       currentWorkspace="gym"
       availableWorkspaces={availableWorkspaces}
-      brandSubtitle="Gym workspace"
+      brandTitle={gymName?.trim() || "Captive Precision"}
+      brandSubtitle={activeSeasonLabel?.trim() || "Gym workspace"}
       navItems={gymNavItems}
       footerTitle="Early Access"
       footerCopy="Features are still being tested, refined, and improved across releases."
       footerMeta={getGymReleaseLabel()}
-      secondaryActionHref="/plans"
-      secondaryActionLabel="View plans"
-      
       logoutHref="/api/auth/logout"
     />
   );

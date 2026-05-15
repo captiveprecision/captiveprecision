@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { getAuthSession, type AuthSession } from "@/lib/auth/session";
+import { canManageGymAdministration, resolveGymAccessContext } from "@/lib/services/gym-access";
 import { parsePlannerWorkspaceScope, resolvePlannerScopeContext, type PlannerScopeContext, type PlannerWorkspaceScope } from "@/lib/services/planner-workspace";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Database } from "@/lib/types/database";
@@ -46,7 +47,36 @@ export async function canEditTeamForSession(teamId: string, session: AuthSession
   }
 
   if (scope.scopeType === "gym") {
-    return Boolean(team.gym_id && team.gym_id === (scope.gymId ?? session.primaryGymId ?? null));
+    const access = await resolveGymAccessContext(session);
+
+    if (!access || access.gym.id !== (scope.gymId ?? session.primaryGymId ?? access.gym.id)) {
+      return false;
+    }
+
+    if (team.gym_id && team.gym_id !== access.gym.id) {
+      return false;
+    }
+
+    if (canManageGymAdministration(access)) {
+      return true;
+    }
+
+    if (access.accessLevel !== "team-write") {
+      return false;
+    }
+
+    if (team.primary_coach_profile_id === session.userId) {
+      return true;
+    }
+
+    const { data: linkedCoach } = await admin
+      .from("team_coaches" as never)
+      .select("id" as never)
+      .eq("team_id", teamId as never)
+      .eq("coach_profile_id", session.userId as never)
+      .maybeSingle();
+
+    return Boolean(linkedCoach);
   }
 
   if (team.primary_coach_profile_id === session.userId) {
@@ -61,6 +91,23 @@ export async function canEditTeamForSession(teamId: string, session: AuthSession
     .maybeSingle();
 
   return Boolean(linkedCoach);
+}
+
+export async function canAdministerPlannerGymScope(session: AuthSession, scope: PlannerScopeContext) {
+  if (session.role === "admin") {
+    return true;
+  }
+
+  if (scope.scopeType !== "gym") {
+    return true;
+  }
+
+  const access = await resolveGymAccessContext(session, { ensureOwnerSeat: true });
+  if (!access || !canManageGymAdministration(access)) {
+    return false;
+  }
+
+  return access.gym.id === (scope.gymId ?? session.primaryGymId ?? access.gym.id);
 }
 
 export async function getEditableAthleteRow(athleteId: string, session: AuthSession, scope: PlannerScopeContext) {
@@ -82,7 +129,13 @@ export async function getEditableAthleteRow(athleteId: string, session: AuthSess
   }
 
   if (scope.scopeType === "gym") {
-    return athlete.gym_id && athlete.gym_id === (scope.gymId ?? session.primaryGymId ?? null) ? athlete : null;
+    const access = await resolveGymAccessContext(session);
+
+    if (!canManageGymAdministration(access)) {
+      return null;
+    }
+
+    return athlete.gym_id && athlete.gym_id === (scope.gymId ?? session.primaryGymId ?? access?.gym.id ?? null) ? athlete : null;
   }
 
   return athlete.created_by_profile_id === session.userId ? athlete : null;

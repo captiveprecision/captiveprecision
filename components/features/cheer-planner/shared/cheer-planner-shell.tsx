@@ -9,6 +9,7 @@ import { SkillPlannerSurface } from "@/components/features/cheer-planner/skill-p
 import { Badge, Card, CardContent, SectionHeader, Tabs } from "@/components/ui";
 import type { PlannerPipelineStage } from "@/lib/domain/planner-levels";
 import type { CheerPlannerCapabilities } from "@/lib/services/planner-capabilities";
+import type { GymRegistrationNumberMode } from "@/lib/services/gym-registration-settings";
 import type { CheerPlannerIntegration } from "@/lib/services/planner-integration";
 
 const PLANNER_WORKSPACE_TABS: { value: PlannerPipelineStage; label: string }[] = [
@@ -26,9 +27,10 @@ function isPlannerWorkspaceTab(value: string): value is PlannerPipelineStage {
 type CheerPlannerShellProps = {
   integration: CheerPlannerIntegration;
   capabilities: CheerPlannerCapabilities;
+  registrationNumberMode: GymRegistrationNumberMode;
 };
 
-export function CheerPlannerShell({ integration, capabilities }: CheerPlannerShellProps) {
+export function CheerPlannerShell({ integration, capabilities, registrationNumberMode }: CheerPlannerShellProps) {
   const workspaceTab = integration.plannerState.pipelineStage;
 
   return (
@@ -63,6 +65,7 @@ export function CheerPlannerShell({ integration, capabilities }: CheerPlannerShe
       {workspaceTab === "tryouts" ? (
         <TryoutsSurface
           capabilities={capabilities}
+          registrationNumberMode={registrationNumberMode}
           athleteDraft={integration.athleteDraft}
           athletePool={integration.athletePool}
           updateAthleteDraft={integration.updateAthleteDraft}
@@ -91,11 +94,14 @@ export function CheerPlannerShell({ integration, capabilities }: CheerPlannerShe
           cancelTemplateChanges={integration.cancelTemplateChanges}
           isSavingAction={integration.isSavingAction}
           levelsDraft={integration.levelsDraft}
+          stuntRoleDraft={integration.stuntRoleDraft}
           openLevels={integration.openLevels}
           toggleLevel={integration.toggleLevel}
           summary={integration.summary}
           updateSkillName={integration.updateSkillName}
           updateSkillOption={integration.updateSkillOption}
+          updateStuntPosition={integration.updateStuntPosition}
+          updateStuntBaseRole={integration.updateStuntBaseRole}
           addExtraSkill={integration.addExtraSkill}
           saveTryoutRecord={integration.saveTryoutRecord}
           recentTryoutRecords={integration.recentTryoutRecords}

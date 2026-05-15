@@ -7,6 +7,7 @@ import type { TeamSkillPlan } from "@/lib/domain/skill-plan";
 import type { TeamRecord } from "@/lib/domain/team";
 import type { ChangeSet, EntityVersion, PlannerTrashItem, RestorePreview, SyncMetadata, VersionedEntityType, WorkspaceBackup, WorkspaceRoot } from "@/lib/domain/planner-versioning";
 import type { AuthSession } from "@/lib/auth/session";
+import { ensureActiveGymSeasonForTryout } from "@/lib/services/gym-seasons";
 import type { PlannerWorkspaceScope } from "@/lib/services/planner-workspace";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -20,6 +21,8 @@ type CommandEnvelope<T extends PlannerCommandEntity = PlannerCommandEntity> = {
   latestVersionNumber: number;
   versionId?: string;
   restoredRelations?: Record<string, number>;
+  gymSeasonAutoCreated?: boolean;
+  gymSeasonLabel?: string;
 };
 
 type WorkspaceRootRow = {
@@ -91,8 +94,17 @@ async function resolveWorkspaceRoot(
       throw new Error("WORKSPACE_ROOT_NOT_FOUND");
     }
 
+    const rootRow = data as WorkspaceRootRow;
+    const scopeMismatch = rootRow.scope_type !== scope;
+    const missingGymRoot = scope === "gym" && !rootRow.gym_id;
+    const wrongGymRoot = scope === "gym" && session.primaryGymId && rootRow.gym_id !== session.primaryGymId;
+
+    if (scopeMismatch || missingGymRoot || wrongGymRoot) {
+      return resolveWorkspaceRoot(session, scope, null, requiredAccess);
+    }
+
     await assertWorkspaceAccess(session.userId, workspaceRootId, requiredAccess);
-    return mapWorkspaceRoot(data as WorkspaceRootRow);
+    return mapWorkspaceRoot(rootRow);
   }
 
   const { data, error } = await admin.rpc("planner_resolve_workspace_root" as never, {
@@ -429,16 +441,31 @@ export async function savePlannerTryoutRecordCommand(
   }
 ) {
   const workspaceRoot = await resolveWorkspaceRoot(session, scope, payload.workspaceRootId, "write");
+  const activeGymSeason = await ensureActiveGymSeasonForTryout(session);
+  const record = activeGymSeason
+    ? {
+      ...payload.record,
+      gymSeasonId: activeGymSeason.season.id,
+      gymSeasonNumber: activeGymSeason.season.seasonNumber,
+      gymSeasonLabel: activeGymSeason.season.label
+    }
+    : payload.record;
 
-  return executePlannerCommand<TryoutRecord>("planner_command_tryout_save", {
+  const result = await executePlannerCommand<TryoutRecord>("planner_command_tryout_save", {
     p_actor_profile_id: session.userId,
     p_workspace_root_id: workspaceRoot.id,
     p_expected_lock_version: payload.expectedLockVersion ?? null,
     p_tryout_record_id: payload.tryoutRecordId,
     p_athlete_id: payload.athleteId,
     p_occurred_at: payload.occurredAt ?? null,
-    p_record: payload.record
+    p_record: record
   });
+
+  return {
+    ...result,
+    gymSeasonAutoCreated: activeGymSeason?.autoCreated ?? false,
+    gymSeasonLabel: activeGymSeason?.season.label
+  };
 }
 
 export async function savePlannerTeamCommand(

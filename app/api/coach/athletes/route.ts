@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import type { AthleteParentContact } from "@/lib/domain/athlete";
 import { getPlannerScopeContext, requirePlannerSession } from "@/lib/services/planner-api-access";
 import { requireCheerPlannerPremium } from "@/lib/access/membership";
+import { findDuplicateAthleteRegistrationNumberByWorkspaceRoot } from "@/lib/services/athlete-registration-numbers";
 import { isUuidString, type PlannerWorkspaceScope } from "@/lib/services/planner-workspace";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getPlannerCommandError, resolveWorkspaceRoot, savePlannerAthleteCommand } from "@/lib/services/planner-command-service";
@@ -43,27 +44,6 @@ function normalizeParentContacts(value: unknown): AthleteParentContact[] {
   });
 }
 
-async function findExistingAthleteByRegistration(
-  registrationNumber: string,
-  workspaceRootId: string
-) {
-  if (!registrationNumber) {
-    return null;
-  }
-
-  const admin = createAdminClient();
-  const query = admin
-    .from("athletes" as never)
-    .select("*" as never)
-    .eq("registration_number", registrationNumber as never)
-    .eq("workspace_root_id", workspaceRootId as never)
-    .is("deleted_at" as never, null)
-    .limit(1);
-
-  const { data } = await query.maybeSingle();
-  return data as { id: string } | null;
-}
-
 async function saveAthlete(request: NextRequest) {
   try {
     const { session, error } = await requirePlannerSession();
@@ -91,15 +71,27 @@ async function saveAthlete(request: NextRequest) {
     if (!firstName || !lastName) {
       return NextResponse.json({ error: "First name and last name are required." }, { status: 400 });
     }
-    const matchedAthlete = !athleteId
-      ? await findExistingAthleteByRegistration(registrationNumber, workspaceRoot.id)
-      : null;
+
+    const canonicalAthleteId = isUuidString(athleteId) ? athleteId : null;
+    const duplicateRegistration = await findDuplicateAthleteRegistrationNumberByWorkspaceRoot(
+      createAdminClient(),
+      workspaceRoot.id,
+      registrationNumber,
+      canonicalAthleteId
+    );
+
+    if (duplicateRegistration) {
+      return NextResponse.json({
+        error: "That registration number is already assigned to another athlete."
+      }, { status: 409 });
+    }
+
     const result = await savePlannerAthleteCommand(session, scope.scope, {
       workspaceRootId: workspaceRoot.id,
       expectedLockVersion: typeof (payload as Record<string, unknown> | null)?.expectedLockVersion === "number"
         ? (payload as Record<string, unknown>).expectedLockVersion as number
         : null,
-      athleteId: isUuidString(athleteId) ? athleteId : matchedAthlete?.id ?? null,
+      athleteId: canonicalAthleteId,
       firstName,
       lastName,
       dateOfBirth,

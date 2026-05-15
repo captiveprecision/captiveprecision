@@ -12,6 +12,7 @@ import {
   type FoundationRequestContext,
   type FoundationSnapshotDecision
 } from "@/lib/services/planner-foundation-sync";
+import { syncSeasonPlannerEventsToEventsCalendar } from "@/lib/events/planner-season-events";
 import { buildMyTeamsTeamSummaries } from "@/lib/services/planner-my-teams";
 import { mergeRemoteFoundationIntoProject, type PlannerRemoteFoundationSnapshot } from "@/lib/services/planner-supabase-foundation";
 import {
@@ -84,6 +85,9 @@ import {
   type CheerPlannerState,
   type PlannerLevelLabel,
   type PlannerTemplateSkill,
+  type PlannerStuntBaseRole,
+  type PlannerStuntPosition,
+  type PlannerStuntRoleEvaluation,
   type PlannerTeamRecord,
   type PlannerTryoutBucketEvaluation,
   type PlannerTryoutRecord,
@@ -99,6 +103,29 @@ export {
 };
 
 export type PlannerSportTab = "tumbling" | "dance" | "jumps" | "stunts";
+
+const EMPTY_STUNT_ROLE_DRAFT: PlannerStuntRoleEvaluation = {
+  position: null,
+  baseRole: null
+};
+
+function normalizeStuntRoleDraft(value?: PlannerStuntRoleEvaluation | null): PlannerStuntRoleEvaluation {
+  if (value?.position === "flyer") {
+    return {
+      position: "flyer",
+      baseRole: null
+    };
+  }
+
+  if (value?.position === "base") {
+    return {
+      position: "base",
+      baseRole: value.baseRole === "main-side" || value.baseRole === "back" ? value.baseRole : null
+    };
+  }
+
+  return { ...EMPTY_STUNT_ROLE_DRAFT };
+}
 
 export type AthleteDraftState = {
   athleteId: string | null;
@@ -996,6 +1023,7 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
   const [athleteDraft, setAthleteDraft] = useState<AthleteDraftState>(buildEmptyAthleteDraft());
   const [templateDrafts, setTemplateDrafts] = useState<Record<PlannerSportTab, PlannerTryoutTemplate>>(() => buildTemplateDraftsBySport(defaultTryoutTemplates));
   const [evaluationDrafts, setEvaluationDrafts] = useState<Record<PlannerSportTab, PlannerTryoutBucketEvaluation[]>>(() => buildEvaluationDraftsBySport(defaultTryoutTemplates));
+  const [stuntRoleDraft, setStuntRoleDraft] = useState<PlannerStuntRoleEvaluation>(() => ({ ...EMPTY_STUNT_ROLE_DRAFT }));
   const [openBuckets, setOpenBuckets] = useState<Record<PlannerSportTab, string[]>>({
     tumbling: [],
     stunts: [],
@@ -1716,6 +1744,7 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
 
   const startNewAthlete = () => {
     setAthleteDraft(buildEmptyAthleteDraft());
+    setStuntRoleDraft({ ...EMPTY_STUNT_ROLE_DRAFT });
     setEvaluationDrafts((current) => ({
       ...current,
       [activeSport]: buildBucketEvaluations(getActiveTryoutTemplate(plannerStateRef.current, activeSport))
@@ -1726,6 +1755,7 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
 
   const resetAthleteDraft = () => {
     setAthleteDraft(buildEmptyAthleteDraft());
+    setStuntRoleDraft({ ...EMPTY_STUNT_ROLE_DRAFT });
     setEvaluationDrafts((current) => ({
       ...current,
       [activeSport]: buildBucketEvaluations(getActiveTryoutTemplate(plannerStateRef.current, activeSport))
@@ -1752,6 +1782,7 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
       notes: athlete.notes,
       parentContacts: athlete.parentContacts.length ? athlete.parentContacts.map((contact) => ({ ...contact })) : [buildEmptyParentContact()]
     });
+    setStuntRoleDraft({ ...EMPTY_STUNT_ROLE_DRAFT });
     setEvaluationDrafts((current) => ({
       ...current,
       [activeSport]: buildBucketEvaluations(getActiveTryoutTemplate(plannerStateRef.current, activeSport))
@@ -2010,6 +2041,24 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
     }));
   };
 
+  const updateStuntPosition = (position: PlannerStuntPosition) => {
+    setStuntRoleDraft((current) => (
+      current.position === position
+        ? { ...EMPTY_STUNT_ROLE_DRAFT }
+        : {
+            position,
+            baseRole: position === "base" ? current.baseRole : null
+          }
+    ));
+  };
+
+  const updateStuntBaseRole = (baseRole: PlannerStuntBaseRole) => {
+    setStuntRoleDraft((current) => ({
+      position: "base",
+      baseRole: current.baseRole === baseRole ? null : baseRole
+    }));
+  };
+
   const removeSkill = (bucketKey: string, skillId: string) => {
     setEvaluationDrafts((current) => ({
       ...current,
@@ -2134,6 +2183,7 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
           template: activeTemplate,
           buckets: levelsDraft,
           resultSummary: summary,
+          stuntRole: activeSport === "stunts" ? stuntRoleDraft : null,
           scoringContext: {
             scoringSystemId: activeScoringSystem.id,
             scoringSystemVersionId: activeScoringVersion.id,
@@ -2158,7 +2208,9 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
           registrationNumber: remoteAthlete.registrationNumber
         }));
         setSaveState("tryout-record", "saved");
-        setSaveMessage(`Saved tryout record for ${remoteAthlete.name}. Registration ${remoteAthlete.registrationNumber}.`);
+        setSaveMessage(remoteTryoutRecord.gymSeasonAutoCreated
+          ? `Saved tryout record for ${remoteAthlete.name}. ${remoteTryoutRecord.gymSeasonLabel ?? "A Gym season"} was created automatically; review it in Manage My Gym > Seasons.`
+          : `Saved tryout record for ${remoteAthlete.name}. Registration ${remoteAthlete.registrationNumber}.`);
       } catch (error) {
         const offlineTryoutRecord = buildTryoutRecord({
           project: plannerState,
@@ -2186,6 +2238,7 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
           template: activeTemplate,
           buckets: levelsDraft,
           resultSummary: summary,
+          stuntRole: activeSport === "stunts" ? stuntRoleDraft : null,
           scoringContext: {
             scoringSystemId: activeScoringSystem.id,
             scoringSystemVersionId: activeScoringVersion.id,
@@ -2236,6 +2289,7 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
         skills: bucket.skills.map((skill) => ({ ...skill }))
       }))
     }));
+    setStuntRoleDraft(nextSport === "stunts" ? normalizeStuntRoleDraft(tryoutRecord.rawData.stuntRole) : { ...EMPTY_STUNT_ROLE_DRAFT });
     setOpenBuckets((current) => ({
       ...current,
       [nextSport]: options?.expandLevels === false ? [] : tryoutRecord.rawData.buckets.map((bucket) => bucket.bucketKey)
@@ -3524,9 +3578,16 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
           ...current,
           seasonPlans: upsertTeamScopedRecord(current.seasonPlans, remotePlan)
         }), remotePlan, remotePlan.updatedAt);
+        syncSeasonPlannerEventsToEventsCalendar(scope, {
+          plannerProjectId: plannerState.id,
+          teamId: seasonPlannerEditingTeam.teamId,
+          teamName: seasonPlannerEditingTeam.teamName,
+          seasonPlan: remotePlan,
+          occurredAt: remotePlan.updatedAt
+        });
         setSeasonPlannerDraft(null);
         setSaveState("season-plan", "saved");
-        setSaveMessage(`Saved Season Planner checkpoints for ${seasonPlannerEditingTeam.teamName}.`);
+        setSaveMessage(`Saved Season Planner checkpoints for ${seasonPlannerEditingTeam.teamName} and updated Events.`);
       } catch (error) {
         handleWriteFailure(
           "season-plan",
@@ -3564,6 +3625,7 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
     startNewAthlete,
     loadRegisteredAthlete,
     levelsDraft,
+    stuntRoleDraft,
     openLevels,
     toggleLevel,
     settingsOpen,
@@ -3598,6 +3660,8 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
     setPipelineStage,
     updateSkillName,
     updateSkillOption,
+    updateStuntPosition,
+    updateStuntBaseRole,
     removeSkill,
     addExtraSkill,
     qualificationOpen,

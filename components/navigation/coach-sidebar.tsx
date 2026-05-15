@@ -76,9 +76,6 @@ export function CoachSidebar({
       footerTitle="Early Access"
       footerCopy="Features are still being tested, refined, and improved across releases."
       footerMeta={getCoachReleaseLabel()}
-      secondaryActionHref="/plans"
-      secondaryActionLabel="View plans"
-      
       logoutHref="/api/auth/logout"
     />
   );

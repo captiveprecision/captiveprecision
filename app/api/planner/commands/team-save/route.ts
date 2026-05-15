@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { requireCheerPlannerPremium } from "@/lib/access/membership";
-import { getPlannerScopeContext, requirePlannerSession } from "@/lib/services/planner-api-access";
+import { canAdministerPlannerGymScope, canEditTeamForSession, getPlannerScopeContext, requirePlannerSession } from "@/lib/services/planner-api-access";
 import { getPlannerCommandError, savePlannerTeamCommand } from "@/lib/services/planner-command-service";
 
 function asString(value: unknown) {
@@ -32,10 +32,22 @@ export async function POST(request: NextRequest) {
       return premiumError;
     }
 
+    const teamId = asString(payload?.teamId) || null;
+
+    if (scope.scope === "gym") {
+      const canSaveTeam = teamId
+        ? await canEditTeamForSession(teamId, session, scope)
+        : await canAdministerPlannerGymScope(session, scope);
+
+      if (!canSaveTeam) {
+        return NextResponse.json({ error: "You do not have permission to save this Gym team." }, { status: 403 });
+      }
+    }
+
     const result = await savePlannerTeamCommand(session, scope.scope, {
       workspaceRootId: typeof payload?.workspaceRootId === "string" ? payload.workspaceRootId : null,
       expectedLockVersion: typeof payload?.expectedLockVersion === "number" ? payload.expectedLockVersion : null,
-      teamId: asString(payload?.teamId) || null,
+      teamId,
       name: asString(payload?.name),
       teamLevel: asString(payload?.teamLevel),
       teamType: asString(payload?.teamType),

@@ -49,6 +49,14 @@ export type PlannerSkillEvaluation = {
   isExtra: boolean;
 };
 
+export type PlannerStuntPosition = "flyer" | "base";
+export type PlannerStuntBaseRole = "main-side" | "back";
+
+export type PlannerStuntRoleEvaluation = {
+  position: PlannerStuntPosition | null;
+  baseRole: PlannerStuntBaseRole | null;
+};
+
 export type PlannerTryoutBucketEvaluation = {
   bucketKey: string;
   bucketLabel: string;
@@ -98,6 +106,7 @@ export type PlannerTryoutRawData = {
     updatedAt: string;
   };
   buckets: PlannerTryoutBucketEvaluation[];
+  stuntRole?: PlannerStuntRoleEvaluation | null;
 };
 
 export type TryoutRecordStatus = Extract<DomainEntityStatus, "active" | "archived">;
@@ -116,6 +125,10 @@ export type TryoutRecord = TimestampedEntity & {
   scoringSystemVersionId: string | null;
   season?: string | null;
   seasonLabel?: string | null;
+  gymSeasonId?: string | null;
+  gymSeasonNumber?: number | null;
+  gymSeasonLabel?: string | null;
+  gymSeasonAutoCreated?: boolean;
   occurredAt: string | null;
   rawData: PlannerTryoutRawData;
   resultSummary: PlannerTryoutSummary;

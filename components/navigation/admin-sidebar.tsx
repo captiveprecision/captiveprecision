@@ -3,6 +3,7 @@
 import type { Route } from "next";
 import {
   CalendarDays,
+  CalendarRange,
   LayoutDashboard,
   MessageSquare,
   Settings,
@@ -17,6 +18,7 @@ import type { AppRole } from "@/lib/auth/session";
 const adminNavItems = [
   { href: "/admin" as Route, title: "Dashboard", icon: LayoutDashboard },
   { href: "/admin/accounts" as Route, title: "Accounts", icon: UsersRound },
+  { href: "/admin/age-categories" as Route, title: "Age Categories", icon: CalendarRange },
   { href: "/admin/scoring-systems" as Route, title: "Scoring Systems", icon: SlidersHorizontal },
   { href: "/admin/messages" as Route, title: "Messages", icon: MessageSquare },
   { href: "/admin/profile" as Route, title: "Profile", icon: UserRound },

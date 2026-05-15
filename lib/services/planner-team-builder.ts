@@ -1,5 +1,5 @@
 import type { AthleteRecord } from "@/lib/domain/athlete";
-import type { TryoutRecord } from "@/lib/domain/evaluation-record";
+import type { PlannerStuntRoleEvaluation, TryoutRecord } from "@/lib/domain/evaluation-record";
 import type { PlannerLevelLabel, PlannerQualifiedLevel, PlannerSportKey } from "@/lib/domain/planner-levels";
 import type { PlannerProject } from "@/lib/domain/planner-project";
 import { buildDefaultTeamSelectionProfile, type TeamRecord, type TeamSelectionJumpsGroup, type TeamSelectionProfile } from "@/lib/domain/team";
@@ -22,6 +22,7 @@ export type TeamBuilderSportCapability = {
   bestGroupScores: Record<string, number>;
   bestItemScores: Record<string, number>;
   bestTotalScore: number;
+  stuntRole: PlannerStuntRoleEvaluation | null;
 };
 
 export type AthleteCapabilityProfile = {
@@ -122,8 +123,29 @@ function createEmptyCapability(sport: PlannerSportKey): TeamBuilderSportCapabili
     levelScores: {},
     bestGroupScores: {},
     bestItemScores: {},
-    bestTotalScore: 0
+    bestTotalScore: 0,
+    stuntRole: null
   };
+}
+
+function formatStuntRoleLabel(stuntRole?: PlannerStuntRoleEvaluation | null) {
+  if (stuntRole?.position === "flyer") {
+    return "Flyer";
+  }
+
+  if (stuntRole?.position === "base") {
+    if (stuntRole.baseRole === "main-side") {
+      return "Base / Main Side";
+    }
+
+    if (stuntRole.baseRole === "back") {
+      return "Base / Back";
+    }
+
+    return "Base";
+  }
+
+  return null;
 }
 
 function createEmptySportAverages(): TeamSportAverages {
@@ -231,6 +253,7 @@ function buildSportCapability(
   const latestTryoutRecord = sortedByTime[0] ?? null;
   const capability = createEmptyCapability(sport);
   capability.latestTryoutRecord = latestTryoutRecord;
+  capability.stuntRole = sport === "stunts" ? latestTryoutRecord?.rawData.stuntRole ?? null : null;
 
   if (sport === "tumbling" || sport === "stunts") {
     for (const tryoutRecord of tryoutRecords) {
@@ -414,11 +437,14 @@ export function buildTeamFitSummary(warnings: TeamSelectionWarning[]) {
 
 export function formatTeamBuilderSportCapability(capability: TeamBuilderSportCapability) {
   if (capability.sport === "tumbling" || capability.sport === "stunts") {
+    const roleLabel = capability.sport === "stunts" ? formatStuntRoleLabel(capability.stuntRole) : null;
+
     if (!capability.bestLevel) {
-      return "No result";
+      return roleLabel ? `Role: ${roleLabel}` : "No result";
     }
 
-    return `${capability.bestLevel} / ${round(capability.bestLevelScore)} main / ${round(capability.bestExtraScore)} extra`;
+    const scoreLabel = `${capability.bestLevel} / ${round(capability.bestLevelScore)} main / ${round(capability.bestExtraScore)} extra`;
+    return roleLabel ? `${scoreLabel} / ${roleLabel}` : scoreLabel;
   }
 
   if (capability.sport === "jumps") {

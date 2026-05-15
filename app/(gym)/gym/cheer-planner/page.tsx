@@ -1,5 +1,12 @@
 import { CheerPlannerTryouts } from "@/components/tools/cheer-planner-tryouts";
+import { getAuthSession } from "@/lib/auth/session";
+import { getGymRegistrationNumberModeForSession } from "@/lib/services/gym-registration-settings";
 
-export default function GymCheerPlannerPage() {
-  return <CheerPlannerTryouts scope="gym" />;
+export const dynamic = "force-dynamic";
+
+export default async function GymCheerPlannerPage() {
+  const session = await getAuthSession();
+  const registrationNumberMode = await getGymRegistrationNumberModeForSession(session);
+
+  return <CheerPlannerTryouts scope="gym" registrationNumberMode={registrationNumberMode} />;
 }
