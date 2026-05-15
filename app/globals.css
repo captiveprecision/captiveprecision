@@ -2460,6 +2460,22 @@
   color: var(--cp-text-body);
 }
 
+.landing-forgot-password-link,
+.password-reset-back-link {
+  justify-self: center;
+  color: var(--cp-color-gray-500);
+  font-size: 13px;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.landing-forgot-password-link:hover,
+.password-reset-back-link:hover {
+  color: var(--cp-text-strong);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
 .landing-beta-panel {
   gap: 16px;
 }

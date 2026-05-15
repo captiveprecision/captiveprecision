@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { useState } from "react";
 
 import { PwaInstallPrompt, usePwa } from "@/components/pwa/pwa-provider";
@@ -330,6 +331,9 @@ export function LandingAuthShell() {
                       <Button type="submit" variant="primary" size="lg" disabled={loginState.mode === "loading"}>
                         {loginState.mode === "loading" ? "Signing in..." : "Sign in"}
                       </Button>
+                      <Link className="landing-forgot-password-link" href="/auth/reset-password">
+                        Forgot password?
+                      </Link>
                       {loginState.mode === "error" ? <p className="landing-auth-error">{loginState.message}</p> : null}
                     </form>
                   </>
