@@ -8,6 +8,7 @@ import type { TeamRecord } from "@/lib/domain/team";
 import type { ChangeSet, EntityVersion, PlannerTrashItem, RestorePreview, SyncMetadata, VersionedEntityType, WorkspaceBackup, WorkspaceRoot } from "@/lib/domain/planner-versioning";
 import type { AuthSession } from "@/lib/auth/session";
 import { ensureActiveGymSeasonForTryout } from "@/lib/services/gym-seasons";
+import { resolveGymAccessContext } from "@/lib/services/gym-access";
 import type { PlannerWorkspaceScope } from "@/lib/services/planner-workspace";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -82,6 +83,12 @@ async function resolveWorkspaceRoot(
   requiredAccess: PlannerAccessLevel = "read"
 ) {
   const admin = createAdminClient();
+  const gymAccess = await resolveGymAccessContext(session);
+  const linkedGymId = gymAccess && gymAccess.accessLevel !== "none" ? gymAccess.gym.id : null;
+  const effectiveScope: PlannerWorkspaceScope = linkedGymId ? "gym" : scope;
+  const effectiveSession = linkedGymId
+    ? { ...session, primaryGymId: linkedGymId }
+    : session;
 
   if (workspaceRootId) {
     const { data, error } = await admin
@@ -95,12 +102,12 @@ async function resolveWorkspaceRoot(
     }
 
     const rootRow = data as WorkspaceRootRow;
-    const scopeMismatch = rootRow.scope_type !== scope;
-    const missingGymRoot = scope === "gym" && !rootRow.gym_id;
-    const wrongGymRoot = scope === "gym" && session.primaryGymId && rootRow.gym_id !== session.primaryGymId;
+    const scopeMismatch = rootRow.scope_type !== effectiveScope;
+    const missingGymRoot = effectiveScope === "gym" && !rootRow.gym_id;
+    const wrongGymRoot = effectiveScope === "gym" && effectiveSession.primaryGymId && rootRow.gym_id !== effectiveSession.primaryGymId;
 
     if (scopeMismatch || missingGymRoot || wrongGymRoot) {
-      return resolveWorkspaceRoot(session, scope, null, requiredAccess);
+      return resolveWorkspaceRoot(effectiveSession, effectiveScope, null, requiredAccess);
     }
 
     await assertWorkspaceAccess(session.userId, workspaceRootId, requiredAccess);
@@ -109,8 +116,8 @@ async function resolveWorkspaceRoot(
 
   const { data, error } = await admin.rpc("planner_resolve_workspace_root" as never, {
     p_actor_profile_id: session.userId,
-    p_scope_type: scope,
-    p_gym_id: session.primaryGymId ?? null
+    p_scope_type: effectiveScope,
+    p_gym_id: effectiveSession.primaryGymId ?? null
   } as never);
 
   if (error || !data) {

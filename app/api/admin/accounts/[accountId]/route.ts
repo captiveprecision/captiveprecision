@@ -262,6 +262,11 @@ export async function PATCH(
       if (licenseError) {
         return NextResponse.json({ error: "Account profile was updated, but Gym access could not be assigned." }, { status: 500 });
       }
+
+      await admin.rpc("planner_adopt_coach_workspace_into_gym" as never, {
+        p_coach_profile_id: accountId,
+        p_gym_id: linkedGym.id
+      } as never);
     }
 
     if (manualPremium) {

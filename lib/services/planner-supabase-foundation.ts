@@ -45,6 +45,7 @@ type PlannerTryoutRecordRow = Database["public"]["Tables"]["planner_tryout_recor
 type TeamSkillPlanRow = Database["public"]["Tables"]["team_skill_plans"]["Row"];
 type TeamSeasonPlanRow = Database["public"]["Tables"]["team_season_plans"]["Row"];
 type GymOwnerRow = Pick<Database["public"]["Tables"]["gyms"]["Row"], "owner_profile_id">;
+type GymLicenseProfileRow = Pick<Database["public"]["Tables"]["gym_coach_licenses"]["Row"], "coach_profile_id">;
 type WorkspaceRootLookupRow = {
   id: string;
   scope_type: "coach" | "gym";
@@ -615,9 +616,15 @@ async function listGymRelatedWorkspaceRootIds(
     .select("owner_profile_id" as never)
     .eq("id", workspaceRoot.gymId as never)
     .maybeSingle();
+  const { data: licenseRows } = await admin
+    .from("gym_coach_licenses" as never)
+    .select("coach_profile_id" as never)
+    .eq("gym_id", workspaceRoot.gymId as never)
+    .eq("status", "active" as never);
   const ownerProfileIds = Array.from(new Set([
     workspaceRoot.ownerProfileId,
-    (gymRow as GymOwnerRow | null)?.owner_profile_id ?? null
+    (gymRow as GymOwnerRow | null)?.owner_profile_id ?? null,
+    ...((licenseRows ?? []) as GymLicenseProfileRow[]).map((row) => row.coach_profile_id)
   ].filter((value): value is string => Boolean(value))));
   const { data: gymRootRows } = await admin
     .from("workspace_roots" as never)
@@ -642,13 +649,13 @@ async function listGymRelatedWorkspaceRootIds(
 async function listGymPermanentAthleteRows(
   admin: ReturnType<typeof createAdminClient>,
   workspaceRoot: WorkspaceRoot,
+  relatedRootIds: string[],
   seedRows: AthleteRow[]
 ) {
   if (!workspaceRoot.gymId) {
     return seedRows;
   }
 
-  const relatedRootIds = await listGymRelatedWorkspaceRootIds(admin, workspaceRoot);
   const [gymAthletesResult, rootAthletesResult] = await Promise.all([
     admin
       .from("athletes" as never)
@@ -671,6 +678,73 @@ async function listGymPermanentAthleteRows(
       ...((rootAthletesResult.data ?? []) as AthleteRow[])
     ]
   );
+}
+
+async function listGymPermanentTeamRows(
+  admin: ReturnType<typeof createAdminClient>,
+  workspaceRoot: WorkspaceRoot,
+  relatedRootIds: string[],
+  seedRows: TeamRow[]
+) {
+  if (!workspaceRoot.gymId) {
+    return seedRows;
+  }
+
+  const [gymTeamsResult, rootTeamsResult] = await Promise.all([
+    admin
+      .from("teams" as never)
+      .select("*" as never)
+      .eq("gym_id", workspaceRoot.gymId as never)
+      .is("deleted_at" as never, null),
+    relatedRootIds.length
+      ? admin
+        .from("teams" as never)
+        .select("*" as never)
+        .in("workspace_root_id", relatedRootIds as never)
+        .is("deleted_at" as never, null)
+      : Promise.resolve({ data: [] as unknown[] })
+  ]);
+
+  return mergeRowsById(
+    seedRows,
+    [
+      ...((gymTeamsResult.data ?? []) as TeamRow[]),
+      ...((rootTeamsResult.data ?? []) as TeamRow[])
+    ]
+  );
+}
+
+async function listRowsByWorkspaceRootIds<T extends { id: string }>(
+  admin: ReturnType<typeof createAdminClient>,
+  table: string,
+  relatedRootIds: string[],
+  seedRows: T[],
+  deletedAtColumn = true
+) {
+  if (!relatedRootIds.length) {
+    return seedRows;
+  }
+
+  let query = admin
+    .from(table as never)
+    .select("*" as never)
+    .in("workspace_root_id", relatedRootIds as never);
+
+  if (deletedAtColumn) {
+    query = query.is("deleted_at" as never, null);
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
+    if (error.code === "42P01" || error.code === "42703") {
+      return seedRows;
+    }
+
+    throw error;
+  }
+
+  return mergeRowsById(seedRows, (data ?? []) as T[]);
 }
 
 async function listTryoutRowsForAthletes(
@@ -826,7 +900,15 @@ export async function listRemotePlannerFoundation(
   const admin = createAdminClient();
 
   if (scope === "gym") {
-    rawAthleteRows = await listGymPermanentAthleteRows(admin, workspaceRoot, rawAthleteRows);
+    const relatedRootIds = await listGymRelatedWorkspaceRootIds(admin, workspaceRoot);
+    [teamRows, assignmentRows, rawAthleteRows, skillPlanRows, routinePlanRows, seasonPlanRows] = await Promise.all([
+      listGymPermanentTeamRows(admin, workspaceRoot, relatedRootIds, teamRows),
+      listRowsByWorkspaceRootIds<AthleteAssignmentRow>(admin, "athlete_team_assignments", relatedRootIds, assignmentRows),
+      listGymPermanentAthleteRows(admin, workspaceRoot, relatedRootIds, rawAthleteRows),
+      listRowsByWorkspaceRootIds<TeamSkillPlanRow>(admin, "team_skill_plans", relatedRootIds, skillPlanRows),
+      listRowsByWorkspaceRootIds<TeamRoutinePlanRow>(admin, "team_routine_plans", relatedRootIds, routinePlanRows),
+      listRowsByWorkspaceRootIds<TeamSeasonPlanRow>(admin, "team_season_plans", relatedRootIds, seasonPlanRows)
+    ]);
     rawTryoutRows = await listTryoutRowsForAthletes(
       admin,
       rawAthleteRows.map((athlete) => athlete.id),

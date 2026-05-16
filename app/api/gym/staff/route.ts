@@ -375,6 +375,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Profile was updated, but Gym access could not be assigned." }, { status: 500 });
     }
 
+    await admin.rpc("planner_adopt_coach_workspace_into_gym" as never, {
+      p_coach_profile_id: accountId,
+      p_gym_id: gym.id
+    } as never);
+
     return NextResponse.json({
       accountId,
       email,
@@ -457,6 +462,13 @@ export async function PATCH(request: NextRequest) {
 
     if (error && !isMissingCredentialLevelsColumn(error)) {
       return NextResponse.json({ error: "Unable to update staff details." }, { status: 500 });
+    }
+
+    if (membershipAssigned) {
+      await admin.rpc("planner_adopt_coach_workspace_into_gym" as never, {
+        p_coach_profile_id: profileId,
+        p_gym_id: gym.id
+      } as never);
     }
 
     const gymTeamIds = await resolveGymTeamIds(admin, gym);
