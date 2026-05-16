@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { requireCheerPlannerPremium } from "@/lib/access/membership";
 import { findDuplicateAthleteRegistrationNumberByWorkspaceRoot } from "@/lib/services/athlete-registration-numbers";
-import { canAdministerPlannerGymScope, getPlannerScopeContext, requirePlannerSession } from "@/lib/services/planner-api-access";
+import { getPlannerAccessContext, plannerAccessForbidden, requirePlannerSession } from "@/lib/services/planner-api-access";
 import { getPlannerCommandError, resolveWorkspaceRoot, savePlannerAthleteCommand } from "@/lib/services/planner-command-service";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -19,18 +19,18 @@ export async function POST(request: NextRequest) {
     }
 
     const payload = await request.json().catch(() => null) as Record<string, unknown> | null;
-    const scope = getPlannerScopeContext(request, session, typeof payload?.scope === "string" ? payload.scope : null);
-    const premiumError = await requireCheerPlannerPremium(session, scope);
+    const access = await getPlannerAccessContext(request, session, typeof payload?.scope === "string" ? payload.scope : null);
+    const premiumError = await requireCheerPlannerPremium(session, access.scopeContext);
 
     if (premiumError) {
       return premiumError;
     }
 
-    if (!(await canAdministerPlannerGymScope(session, scope))) {
-      return NextResponse.json({ error: "Only the Gym owner or Program Director can manage Gym athlete records." }, { status: 403 });
+    if (!access.canManageAthletes) {
+      return plannerAccessForbidden("This account can review athletes, but cannot save athlete records.");
     }
 
-    const workspaceRoot = await resolveWorkspaceRoot(session, scope.scope, typeof payload?.workspaceRootId === "string" ? payload.workspaceRootId : null);
+    const workspaceRoot = await resolveWorkspaceRoot(session, access.dataScope, typeof payload?.workspaceRootId === "string" ? payload.workspaceRootId : null, "athlete-write");
     const athleteId = asString(payload?.athleteId) || null;
     const registrationNumber = asString(payload?.registrationNumber);
     const duplicateRegistration = await findDuplicateAthleteRegistrationNumberByWorkspaceRoot(
@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
       }, { status: 409 });
     }
 
-    const result = await savePlannerAthleteCommand(session, scope.scope, {
+    const result = await savePlannerAthleteCommand(session, access.dataScope, {
       workspaceRootId: workspaceRoot.id,
       expectedLockVersion: typeof payload?.expectedLockVersion === "number" ? payload.expectedLockVersion : null,
       athleteId,

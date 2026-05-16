@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import type { AthleteParentContact } from "@/lib/domain/athlete";
-import { getPlannerScopeContext, requirePlannerSession } from "@/lib/services/planner-api-access";
+import { getPlannerAccessContext, plannerAccessForbidden, requirePlannerSession } from "@/lib/services/planner-api-access";
 import { requireCheerPlannerPremium } from "@/lib/access/membership";
 import { findDuplicateAthleteRegistrationNumberByWorkspaceRoot } from "@/lib/services/athlete-registration-numbers";
 import { isUuidString, type PlannerWorkspaceScope } from "@/lib/services/planner-workspace";
@@ -53,8 +53,8 @@ async function saveAthlete(request: NextRequest) {
     }
 
     const payload = await request.json().catch(() => null) as AthletePayload | null;
-    const scope = getPlannerScopeContext(request, session, payload?.scope ?? null);
-    const premiumError = await requireCheerPlannerPremium(session, scope);
+    const access = await getPlannerAccessContext(request, session, payload?.scope ?? null);
+    const premiumError = await requireCheerPlannerPremium(session, access.scopeContext);
 
     if (premiumError) {
       return premiumError;
@@ -66,7 +66,11 @@ async function saveAthlete(request: NextRequest) {
     const notes = asString(payload?.notes);
     const dateOfBirth = asString(payload?.dateOfBirth);
     const parentContacts = normalizeParentContacts(payload?.parentContacts);
-    const workspaceRoot = await resolveWorkspaceRoot(session, scope.scope);
+    if (!access.canManageAthletes) {
+      return plannerAccessForbidden("You do not have access to save athletes.");
+    }
+
+    const workspaceRoot = await resolveWorkspaceRoot(session, access.dataScope, null, "athlete-write");
 
     if (!firstName || !lastName) {
       return NextResponse.json({ error: "First name and last name are required." }, { status: 400 });
@@ -86,7 +90,7 @@ async function saveAthlete(request: NextRequest) {
       }, { status: 409 });
     }
 
-    const result = await savePlannerAthleteCommand(session, scope.scope, {
+    const result = await savePlannerAthleteCommand(session, access.dataScope, {
       workspaceRootId: workspaceRoot.id,
       expectedLockVersion: typeof (payload as Record<string, unknown> | null)?.expectedLockVersion === "number"
         ? (payload as Record<string, unknown>).expectedLockVersion as number

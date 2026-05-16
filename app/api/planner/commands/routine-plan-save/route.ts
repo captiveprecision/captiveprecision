@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { requireCheerPlannerPremium } from "@/lib/access/membership";
-import { getPlannerScopeContext, requirePlannerSession } from "@/lib/services/planner-api-access";
-import { canScopeWritePlannerCommand } from "@/lib/services/planner-capabilities";
+import { canEditPlanningTeamForAccess, getPlannerAccessContext, plannerAccessForbidden, requirePlannerSession } from "@/lib/services/planner-api-access";
 import { getPlannerCommandError, savePlannerRoutinePlanCommand } from "@/lib/services/planner-command-service";
 
 function asString(value: unknown) {
@@ -24,21 +23,23 @@ export async function POST(request: NextRequest) {
     }
 
     const payload = await request.json().catch(() => null) as Record<string, unknown> | null;
-    const scope = getPlannerScopeContext(request, session, typeof payload?.scope === "string" ? payload.scope : null);
-    const premiumError = await requireCheerPlannerPremium(session, scope);
+    const access = await getPlannerAccessContext(request, session, typeof payload?.scope === "string" ? payload.scope : null);
+    const premiumError = await requireCheerPlannerPremium(session, access.scopeContext);
 
     if (premiumError) {
       return premiumError;
     }
 
-    if (!canScopeWritePlannerCommand(scope.scope, "routine-plan-save")) {
-      return NextResponse.json({ error: "Gym workspaces can review routines, but cannot edit them from Cheer Planner." }, { status: 403 });
+    const teamId = asString(payload?.teamId);
+
+    if (!access.canEditRoutineBuilder || !canEditPlanningTeamForAccess(access, teamId)) {
+      return plannerAccessForbidden("You can review this routine, but cannot edit this team.");
     }
 
-    const result = await savePlannerRoutinePlanCommand(session, scope.scope, {
+    const result = await savePlannerRoutinePlanCommand(session, access.dataScope, {
       workspaceRootId: typeof payload?.workspaceRootId === "string" ? payload.workspaceRootId : null,
       expectedLockVersion: typeof payload?.expectedLockVersion === "number" ? payload.expectedLockVersion : null,
-      teamId: asString(payload?.teamId),
+      teamId,
       status: asString(payload?.status) || "draft",
       notes: asString(payload?.notes),
       document: asObject(payload?.document)

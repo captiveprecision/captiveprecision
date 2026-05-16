@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireCheerPlannerPremium } from "@/lib/access/membership";
 import { resolveGymAccessContext } from "@/lib/services/gym-access";
 import { loadActiveGymTeamSeasonState, replaceActiveGymTeamSeasonRoster } from "@/lib/services/gym-team-seasons";
-import { canEditTeamForSession, getPlannerScopeContext, requirePlannerSession } from "@/lib/services/planner-api-access";
+import { getPlannerAccessContext, plannerAccessForbidden, requirePlannerSession } from "@/lib/services/planner-api-access";
 import { getPlannerCommandError, setPlannerTeamAssignmentsCommand } from "@/lib/services/planner-command-service";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -24,8 +24,8 @@ export async function POST(request: NextRequest) {
     }
 
     const payload = await request.json().catch(() => null) as Record<string, unknown> | null;
-    const scope = getPlannerScopeContext(request, session, typeof payload?.scope === "string" ? payload.scope : null);
-    const premiumError = await requireCheerPlannerPremium(session, scope);
+    const access = await getPlannerAccessContext(request, session, typeof payload?.scope === "string" ? payload.scope : null);
+    const premiumError = await requireCheerPlannerPremium(session, access.scopeContext);
 
     if (premiumError) {
       return premiumError;
@@ -33,18 +33,18 @@ export async function POST(request: NextRequest) {
 
     const teamId = asString(payload?.teamId);
 
-    if (scope.scope === "gym" && !(await canEditTeamForSession(teamId, session, scope))) {
-      return NextResponse.json({ error: "You do not have permission to manage this Gym team roster." }, { status: 403 });
+    if (!access.canEditTeamBuilder) {
+      return plannerAccessForbidden("Only Gym workspace administrators can manage Team Builder rosters.");
     }
 
     const athleteIds = asStringArray(payload?.athleteIds);
-    const result = await setPlannerTeamAssignmentsCommand(session, scope.scope, {
+    const result = await setPlannerTeamAssignmentsCommand(session, access.dataScope, {
       workspaceRootId: typeof payload?.workspaceRootId === "string" ? payload.workspaceRootId : null,
       teamId,
       athleteIds
     });
 
-    if (scope.scope === "gym") {
+    if (access.dataScope === "gym") {
       const access = await resolveGymAccessContext(session);
 
       if (access?.gym) {

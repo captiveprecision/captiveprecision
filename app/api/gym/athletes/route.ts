@@ -148,13 +148,19 @@ export async function PATCH(request: NextRequest) {
         last_name: lastName,
         birth_date: dateOfBirth || null,
         registration_number: registrationNumber || null,
-        notes: notes || null,
+        notes,
         parent_contacts: parentContacts,
         metadata
       } as never)
       .eq("id", athleteId as never);
 
     if (error) {
+      if (error.code === "23505") {
+        return NextResponse.json({
+          error: "That registration number is already assigned to another athlete."
+        }, { status: 409 });
+      }
+
       return NextResponse.json({ error: "Unable to update athlete." }, { status: 500 });
     }
 

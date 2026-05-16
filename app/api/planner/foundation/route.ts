@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { listRemotePlannerFoundation } from "@/lib/services/planner-supabase-foundation";
-import { getPlannerScopeContext, requirePlannerSession } from "@/lib/services/planner-api-access";
+import { getPlannerAccessContext, plannerAccessForbidden, requirePlannerSession } from "@/lib/services/planner-api-access";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -14,8 +14,13 @@ export async function GET(request: NextRequest) {
       return error!;
     }
 
-    const scope = getPlannerScopeContext(request, session);
-    const snapshot = await listRemotePlannerFoundation(session, scope.scope);
+    const access = await getPlannerAccessContext(request, session);
+
+    if (!access.canReadPlanner) {
+      return plannerAccessForbidden("This account does not have Cheer Planner access for this organization.");
+    }
+
+    const snapshot = await listRemotePlannerFoundation(session, access);
     return NextResponse.json(snapshot, {
       headers: {
         "Cache-Control": "no-store"

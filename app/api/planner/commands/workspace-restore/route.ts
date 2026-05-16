@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { requireCheerPlannerPremium } from "@/lib/access/membership";
-import { getPlannerScopeContext, requirePlannerSession } from "@/lib/services/planner-api-access";
+import { getPlannerAccessContext, plannerAccessForbidden, requirePlannerSession } from "@/lib/services/planner-api-access";
 import { getPlannerCommandError, restorePlannerWorkspaceCommand } from "@/lib/services/planner-command-service";
 
 function asString(value: unknown) {
@@ -17,14 +17,18 @@ export async function POST(request: NextRequest) {
     }
 
     const payload = await request.json().catch(() => null) as Record<string, unknown> | null;
-    const scope = getPlannerScopeContext(request, session, typeof payload?.scope === "string" ? payload.scope : null);
-    const premiumError = await requireCheerPlannerPremium(session, scope);
+    const access = await getPlannerAccessContext(request, session, typeof payload?.scope === "string" ? payload.scope : null);
+    const premiumError = await requireCheerPlannerPremium(session, access.scopeContext);
 
     if (premiumError) {
       return premiumError;
     }
 
-    const result = await restorePlannerWorkspaceCommand(session, scope.scope, {
+    if (!access.canRestoreTrash) {
+      return plannerAccessForbidden("Only Gym administrators can restore planner backups.");
+    }
+
+    const result = await restorePlannerWorkspaceCommand(session, access.dataScope, {
       workspaceRootId: typeof payload?.workspaceRootId === "string" ? payload.workspaceRootId : null,
       backupId: asString(payload?.backupId)
     });

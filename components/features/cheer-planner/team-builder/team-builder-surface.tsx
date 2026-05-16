@@ -1,7 +1,7 @@
 "use client";
 
 import { Pencil, Trash2 } from "lucide-react";
-import type { Dispatch, SetStateAction } from "react";
+import { Fragment, useState, type Dispatch, type SetStateAction } from "react";
 
 import { Badge, Button, Card, CardContent, EmptyState, Input, SectionHeader, Select } from "@/components/ui";
 import type { TeamSelectionProfile } from "@/lib/domain/team";
@@ -56,6 +56,8 @@ type TeamBuilderSurfaceProps = {
   deleteTeam: (teamId: string) => void;
   formatScore: (value: number) => string;
 };
+
+type AthletePoolEntry = CheerPlannerIntegration["filteredAthletePool"][number];
 
 type SelectionProfileEditorProps = {
   profile: TeamSelectionProfile;
@@ -264,6 +266,45 @@ function SelectionProfileEditor({ profile, levelLabelsList, onChange }: Selectio
   );
 }
 
+function formatAthleteDate(value?: string | null) {
+  if (!value) {
+    return "Not recorded";
+  }
+
+  const dateOnlyMatch = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  const parsedDate = dateOnlyMatch
+    ? new Date(Number(dateOnlyMatch[1]), Number(dateOnlyMatch[2]) - 1, Number(dateOnlyMatch[3]))
+    : new Date(value);
+
+  if (Number.isNaN(parsedDate.getTime())) {
+    return "Not recorded";
+  }
+
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric"
+  }).format(parsedDate);
+}
+
+function formatAthleteValue(value?: string | number | null) {
+  if (value === null || value === undefined || value === "") {
+    return "Not recorded";
+  }
+
+  return String(value);
+}
+
+function getLatestTryoutLabel(athlete: AthletePoolEntry) {
+  const latestRecord = athlete.latestTryoutRecord;
+
+  if (!latestRecord) {
+    return "No tryout record";
+  }
+
+  return `${latestRecord.rawData.sport} / ${formatAthleteDate(latestRecord.occurredAt ?? latestRecord.createdAt)}`;
+}
+
 export function TeamBuilderSurface(props: TeamBuilderSurfaceProps) {
   const {
     capabilities,
@@ -290,6 +331,8 @@ export function TeamBuilderSurface(props: TeamBuilderSurfaceProps) {
     deleteTeam,
     formatScore
   } = props;
+  const [expandedAthleteId, setExpandedAthleteId] = useState<string | null>(null);
+  const [expandedTeamId, setExpandedTeamId] = useState<string | null>(null);
 
   return (
     <div className="planner-team-builder-stack">
@@ -403,67 +446,198 @@ export function TeamBuilderSurface(props: TeamBuilderSurfaceProps) {
                 </Select>
               </div>
 
-              <div className="planner-athlete-pool-list">
-                {filteredAthletePool.length ? (
-                  filteredAthletePool.map((athlete) => (
-                    <Card key={athlete.id} variant="subtle" className="planner-athlete-pool-row">
-                      <CardContent className="planner-athlete-pool-row__content">
-                        <div className="planner-athlete-pool-copy">
-                          <div className="planner-athlete-pool-title-row">
-                            <strong>{athlete.name}</strong>
-                            <Badge variant={athlete.displayLevel === "Unqualified" ? "subtle" : "dark"}>
-                              Tumbling {athlete.displayLevel}
-                            </Badge>
-                          </div>
-                          <p>
-                            {athlete.registrationNumber} / Age {athlete.age ?? "-"} / Parent {athlete.parentContacts[0]?.name || "No parent contact yet"}
-                          </p>
-                          <p>Tumbling: {formatTeamBuilderSportCapability(athlete.capabilitiesBySport.tumbling)}</p>
-                          <p>Stunts: {formatTeamBuilderSportCapability(athlete.capabilitiesBySport.stunts)}</p>
-                          <p>Jumps: {formatTeamBuilderSportCapability(athlete.capabilitiesBySport.jumps)}</p>
-                          <p>Dance: {formatTeamBuilderSportCapability(athlete.capabilitiesBySport.dance)}</p>
-                          <p>Builder team {athlete.assignedTeamName}</p>
-                          {athlete.assignedTeamId && athlete.selectionWarnings.length ? (
-                            <p>{athlete.teamFitSummary}</p>
-                          ) : null}
-                        </div>
-                        <Select
-                          label="Assign to builder team"
-                          containerClassName="planner-athlete-assign-field"
-                          value={athlete.assignedTeamId ?? ""}
-                          disabled={!capabilities.canAssignRosters}
-                          onChange={(event) => {
-                            const nextTeamId = event.target.value;
+              <div className="settings-data-table-wrap planner-athlete-pool-table-wrap">
+                <table className="settings-data-table settings-data-table--compact planner-athlete-pool-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">Athlete</th>
+                      <th scope="col">Overall</th>
+                      <th scope="col">Date of Birth</th>
+                      <th scope="col">Builder Team</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredAthletePool.length ? (
+                      filteredAthletePool.map((athlete) => {
+                        const isExpanded = expandedAthleteId === athlete.id;
+                        const parentContacts = athlete.parentContacts.filter((contact) => (
+                          contact.name || contact.email || contact.phone
+                        ));
 
-                            if (!nextTeamId) {
-                              if (athlete.assignedTeamId) {
-                                removeFromTeam(athlete.id, athlete.assignedTeamId);
-                              }
-                              return;
-                            }
+                        return (
+                          <Fragment key={athlete.id}>
+                            <tr
+                              key={`${athlete.id}-row`}
+                              className="settings-data-table__expand-row planner-athlete-pool-table-row"
+                              aria-expanded={isExpanded}
+                              onClick={() => setExpandedAthleteId((current) => (current === athlete.id ? null : athlete.id))}
+                              tabIndex={0}
+                              onKeyDown={(event) => {
+                                if (event.key === "Enter" || event.key === " ") {
+                                  event.preventDefault();
+                                  setExpandedAthleteId((current) => (current === athlete.id ? null : athlete.id));
+                                }
+                              }}
+                            >
+                              <td><strong>{athlete.name}</strong></td>
+                              <td>
+                                <Badge variant={athlete.displayLevel === "Unqualified" ? "subtle" : "dark"}>
+                                  {athlete.displayLevel}
+                                </Badge>
+                              </td>
+                              <td>{formatAthleteDate(athlete.dateOfBirth)}</td>
+                              <td>{athlete.assignedTeamName}</td>
+                            </tr>
+                            {isExpanded ? (
+                              <tr key={`${athlete.id}-detail`} className="settings-data-table__detail-row planner-athlete-pool-detail-row">
+                                <td colSpan={4}>
+                                  <div className="planner-athlete-pool-expanded">
+                                    <div className="planner-athlete-pool-assign-panel">
+                                      <Select
+                                        label="Assign to builder team"
+                                        containerClassName="planner-athlete-assign-field"
+                                        value={athlete.assignedTeamId ?? ""}
+                                        disabled={!capabilities.canAssignRosters}
+                                        onChange={(event) => {
+                                          const nextTeamId = event.target.value;
 
-                            assignToTeam(athlete.id, nextTeamId);
-                          }}
-                        >
-                          <option value="">No Team</option>
-                          {teams.map((team) => {
-                            const warnings = buildTeamSelectionWarnings(athlete, team);
-                            return (
-                              <option key={team.id} value={team.id}>
-                                {team.name} ({team.teamLevel}){warnings.length ? ` / ${buildTeamFitSummary(warnings)}` : ""}
-                              </option>
-                            );
-                          })}
-                        </Select>
-                      </CardContent>
-                    </Card>
-                  ))
-                ) : (
-                  <EmptyState
-                    title="No Athletes Match The Current Filters."
-                    description="Adjust filters or save more tryout records."
-                  />
-                )}
+                                          if (!nextTeamId) {
+                                            if (athlete.assignedTeamId) {
+                                              removeFromTeam(athlete.id, athlete.assignedTeamId);
+                                            }
+                                            return;
+                                          }
+
+                                          assignToTeam(athlete.id, nextTeamId);
+                                        }}
+                                      >
+                                        <option value="">No Team</option>
+                                        {teams.map((team) => {
+                                          const warnings = buildTeamSelectionWarnings(athlete, team);
+                                          return (
+                                            <option key={team.id} value={team.id}>
+                                              {team.name} ({team.teamLevel}){warnings.length ? ` / ${buildTeamFitSummary(warnings)}` : ""}
+                                            </option>
+                                          );
+                                        })}
+                                      </Select>
+                                    </div>
+
+                                    <div className="planner-athlete-pool-expanded-grid">
+                                      <div className="planner-athlete-detail-group">
+                                        <div className="planner-athlete-detail-row">
+                                          <span>First name</span>
+                                          <strong>{formatAthleteValue(athlete.firstName)}</strong>
+                                        </div>
+                                        <div className="planner-athlete-detail-row">
+                                          <span>Last name</span>
+                                          <strong>{formatAthleteValue(athlete.lastName)}</strong>
+                                        </div>
+                                        <div className="planner-athlete-detail-row">
+                                          <span>Registration</span>
+                                          <strong>{formatAthleteValue(athlete.registrationNumber)}</strong>
+                                        </div>
+                                        <div className="planner-athlete-detail-row">
+                                          <span>Age</span>
+                                          <strong>{formatAthleteValue(athlete.age)}</strong>
+                                        </div>
+                                        <div className="planner-athlete-detail-row">
+                                          <span>Status</span>
+                                          <strong>{athlete.status}</strong>
+                                        </div>
+                                        <div className="planner-athlete-detail-row">
+                                          <span>Latest tryout</span>
+                                          <strong>{getLatestTryoutLabel(athlete)}</strong>
+                                        </div>
+                                        <div className="planner-athlete-detail-row">
+                                          <span>Team fit</span>
+                                          <strong>{athlete.assignedTeamId ? athlete.teamFitSummary : "No team selected"}</strong>
+                                        </div>
+                                      </div>
+
+                                      <div className="planner-athlete-detail-group">
+                                        <div className="planner-athlete-detail-row">
+                                          <span>Tumbling</span>
+                                          <strong>{formatTeamBuilderSportCapability(athlete.capabilitiesBySport.tumbling)}</strong>
+                                        </div>
+                                        <div className="planner-athlete-detail-row">
+                                          <span>Stunts</span>
+                                          <strong>{formatTeamBuilderSportCapability(athlete.capabilitiesBySport.stunts)}</strong>
+                                        </div>
+                                        <div className="planner-athlete-detail-row">
+                                          <span>Jumps</span>
+                                          <strong>{formatTeamBuilderSportCapability(athlete.capabilitiesBySport.jumps)}</strong>
+                                        </div>
+                                        <div className="planner-athlete-detail-row">
+                                          <span>Dance</span>
+                                          <strong>{formatTeamBuilderSportCapability(athlete.capabilitiesBySport.dance)}</strong>
+                                        </div>
+                                        <div className="planner-athlete-detail-row">
+                                          <span>Tumbling score</span>
+                                          <strong>{formatScore(athlete.displayScore)} main / {formatScore(athlete.extraScore)} extra</strong>
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    <div className="planner-athlete-detail-group">
+                                      <div className="planner-athlete-detail-row">
+                                        <span>Notes</span>
+                                        <strong>{formatAthleteValue(athlete.notes || athlete.athleteNotes)}</strong>
+                                      </div>
+                                      {athlete.sourceTeamName ? (
+                                        <div className="planner-athlete-detail-row">
+                                          <span>Source team</span>
+                                          <strong>{athlete.sourceTeamName}</strong>
+                                        </div>
+                                      ) : null}
+                                      <div className="planner-athlete-detail-row">
+                                        <span>Created</span>
+                                        <strong>{formatAthleteDate(athlete.createdAt)}</strong>
+                                      </div>
+                                      <div className="planner-athlete-detail-row">
+                                        <span>Updated</span>
+                                        <strong>{formatAthleteDate(athlete.updatedAt)}</strong>
+                                      </div>
+                                    </div>
+
+                                    <div className="planner-athlete-detail-group">
+                                      <div className="planner-athlete-detail-row">
+                                        <span>Parent contacts</span>
+                                        <strong>
+                                          {parentContacts.length ? (
+                                            <span className="planner-athlete-pool-contact-list">
+                                              {parentContacts.map((contact, contactIndex) => (
+                                                <span key={contact.id || contact.email || `${athlete.id}-contact-${contactIndex}`} className="planner-athlete-pool-contact">
+                                                  <span>{formatAthleteValue(contact.name)}</span>
+                                                  <span>{[contact.email, contact.phone].filter(Boolean).join(" / ") || "No contact details"}</span>
+                                                </span>
+                                              ))}
+                                            </span>
+                                          ) : (
+                                            "No parent contact yet"
+                                          )}
+                                        </strong>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </td>
+                              </tr>
+                            ) : null}
+                          </Fragment>
+                        );
+                      })
+                    ) : (
+                      <tr>
+                        <td colSpan={4}>
+                          <EmptyState
+                            title="No Athletes Match The Current Filters."
+                            description="Adjust filters or save more tryout records."
+                          />
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
               </div>
             </CardContent>
           </Card>
@@ -520,88 +694,139 @@ export function TeamBuilderSurface(props: TeamBuilderSurfaceProps) {
                 </Card>
               ) : null}
 
-              <div className="planner-team-card-list">
-                {teamsWithMembers.length ? (
-                  teamsWithMembers.map((team) => (
-                    <Card key={team.id} variant="subtle" className="planner-team-card">
-                      <CardContent className="planner-panel-stack">
-                        <div className="planner-team-card-head">
-                          <div>
-                            <strong>{team.name}</strong>
-                            <p>
-                              {team.teamLevel} / {team.teamType}
-                            </p>
-                          </div>
-                          <Badge variant="subtle">{team.members.length} athletes</Badge>
-                        </div>
-                        <div className="planner-inline-actions">
-                          {capabilities.canEditTeams ? (
-                            <Button variant="ghost" size="sm" leadingIcon={<Pencil />} onClick={() => openTeamEdit(team)}>
-                              Edit Team
-                            </Button>
-                          ) : null}
-                          {capabilities.canAssignRosters ? (
-                            <Button variant="ghost" size="sm" onClick={() => clearTeam(team.id)}>
-                              Clear Roster
-                            </Button>
-                          ) : null}
-                          {capabilities.canDeleteTeams ? (
-                            <Button variant="ghost" size="sm" leadingIcon={<Trash2 />} onClick={() => deleteTeam(team.id)}>
-                              Delete Team
-                            </Button>
-                          ) : null}
-                        </div>
+              <div className="settings-data-table-wrap planner-team-table-wrap">
+                <table className="settings-data-table settings-data-table--compact planner-team-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">Team</th>
+                      <th scope="col">Level</th>
+                      <th scope="col">Athletes</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {teamsWithMembers.length ? (
+                      teamsWithMembers.map((team) => {
+                        const isExpanded = expandedTeamId === team.id;
 
-                        <div className="planner-panel-stack">
-                          <p>Tumbling avg {formatScore(team.sportAverages.tumbling.averageScore)} / Coverage {team.sportAverages.tumbling.coverageCount}/{team.sportAverages.tumbling.rosterSize}</p>
-                          <p>Stunts avg {formatScore(team.sportAverages.stunts.averageScore)} / Coverage {team.sportAverages.stunts.coverageCount}/{team.sportAverages.stunts.rosterSize}</p>
-                          <p>Jumps avg {formatScore(team.sportAverages.jumps.averageScore)} / Coverage {team.sportAverages.jumps.coverageCount}/{team.sportAverages.jumps.rosterSize}</p>
-                          <p>Dance avg {formatScore(team.sportAverages.dance.averageScore)} / Coverage {team.sportAverages.dance.coverageCount}/{team.sportAverages.dance.rosterSize}</p>
-                          <p>
-                            Criteria: {team.selectionProfile.sports.tumbling.enabled ? `Tumbling ${team.selectionProfile.sports.tumbling.minLevel} ${formatScore(team.selectionProfile.sports.tumbling.minScore)}+` : "Tumbling ignored"} / {team.selectionProfile.sports.stunts.enabled ? `Stunts ${team.selectionProfile.sports.stunts.minLevel} ${formatScore(team.selectionProfile.sports.stunts.minScore)}+` : "Stunts ignored"} / {team.selectionProfile.sports.jumps.enabled ? `Jumps ${getTeamSelectionGroupLabel(team.selectionProfile.sports.jumps.group)} ${formatScore(team.selectionProfile.sports.jumps.minScore)}+` : "Jumps ignored"} / {team.selectionProfile.sports.dance.enabled ? `Dance ${formatScore(team.selectionProfile.sports.dance.minTotalScore)}+` : "Dance ignored"}
-                          </p>
-                        </div>
+                        return (
+                          <Fragment key={team.id}>
+                            <tr
+                              className="settings-data-table__expand-row planner-team-table-row"
+                              aria-expanded={isExpanded}
+                              onClick={() => setExpandedTeamId((current) => (current === team.id ? null : team.id))}
+                              tabIndex={0}
+                              onKeyDown={(event) => {
+                                if (event.key === "Enter" || event.key === " ") {
+                                  event.preventDefault();
+                                  setExpandedTeamId((current) => (current === team.id ? null : team.id));
+                                }
+                              }}
+                            >
+                              <td><strong>{team.name}</strong></td>
+                              <td>{team.teamLevel}</td>
+                              <td><Badge variant="subtle">{team.members.length}</Badge></td>
+                            </tr>
+                            {isExpanded ? (
+                              <tr className="settings-data-table__detail-row planner-team-detail-row">
+                                <td colSpan={3}>
+                                  <div className="planner-team-table-detail">
+                                    <div className="planner-inline-actions planner-team-table-actions">
+                                      {capabilities.canEditTeams ? (
+                                        <Button variant="ghost" size="sm" leadingIcon={<Pencil />} onClick={() => openTeamEdit(team)}>
+                                          Edit Team
+                                        </Button>
+                                      ) : null}
+                                      {capabilities.canAssignRosters ? (
+                                        <Button variant="ghost" size="sm" onClick={() => clearTeam(team.id)}>
+                                          Clear Roster
+                                        </Button>
+                                      ) : null}
+                                      {capabilities.canDeleteTeams ? (
+                                        <Button variant="ghost" size="sm" leadingIcon={<Trash2 />} onClick={() => deleteTeam(team.id)}>
+                                          Delete Team
+                                        </Button>
+                                      ) : null}
+                                    </div>
 
-                        <div className="planner-team-members-list">
-                          {team.members.length ? (
-                            team.members.map((member) => {
-                              const warnings = buildTeamSelectionWarnings(member, team);
-                              return (
-                                <div key={member.id} className="planner-team-member-row">
-                                  <div>
-                                    <strong>{member.name}</strong>
-                                    <p>
-                                      {member.registrationNumber} / T {formatTeamBuilderSportCapability(member.capabilitiesBySport.tumbling)} / S {formatTeamBuilderSportCapability(member.capabilitiesBySport.stunts)}
-                                    </p>
-                                    <p>
-                                      J {formatTeamBuilderSportCapability(member.capabilitiesBySport.jumps)} / D {formatTeamBuilderSportCapability(member.capabilitiesBySport.dance)}
-                                    </p>
-                                    {warnings.length ? <p>{buildTeamFitSummary(warnings)}</p> : null}
+                                    <div className="planner-athlete-detail-group">
+                                      <div className="planner-athlete-detail-row">
+                                        <span>Team type</span>
+                                        <strong>{formatAthleteValue(team.teamType)}</strong>
+                                      </div>
+                                      <div className="planner-athlete-detail-row">
+                                        <span>Tumbling avg</span>
+                                        <strong>{formatScore(team.sportAverages.tumbling.averageScore)} / Coverage {team.sportAverages.tumbling.coverageCount}/{team.sportAverages.tumbling.rosterSize}</strong>
+                                      </div>
+                                      <div className="planner-athlete-detail-row">
+                                        <span>Stunts avg</span>
+                                        <strong>{formatScore(team.sportAverages.stunts.averageScore)} / Coverage {team.sportAverages.stunts.coverageCount}/{team.sportAverages.stunts.rosterSize}</strong>
+                                      </div>
+                                      <div className="planner-athlete-detail-row">
+                                        <span>Jumps avg</span>
+                                        <strong>{formatScore(team.sportAverages.jumps.averageScore)} / Coverage {team.sportAverages.jumps.coverageCount}/{team.sportAverages.jumps.rosterSize}</strong>
+                                      </div>
+                                      <div className="planner-athlete-detail-row">
+                                        <span>Dance avg</span>
+                                        <strong>{formatScore(team.sportAverages.dance.averageScore)} / Coverage {team.sportAverages.dance.coverageCount}/{team.sportAverages.dance.rosterSize}</strong>
+                                      </div>
+                                      <div className="planner-athlete-detail-row">
+                                        <span>Criteria</span>
+                                        <strong>
+                                          {team.selectionProfile.sports.tumbling.enabled ? `Tumbling ${team.selectionProfile.sports.tumbling.minLevel} ${formatScore(team.selectionProfile.sports.tumbling.minScore)}+` : "Tumbling ignored"} / {team.selectionProfile.sports.stunts.enabled ? `Stunts ${team.selectionProfile.sports.stunts.minLevel} ${formatScore(team.selectionProfile.sports.stunts.minScore)}+` : "Stunts ignored"} / {team.selectionProfile.sports.jumps.enabled ? `Jumps ${getTeamSelectionGroupLabel(team.selectionProfile.sports.jumps.group)} ${formatScore(team.selectionProfile.sports.jumps.minScore)}+` : "Jumps ignored"} / {team.selectionProfile.sports.dance.enabled ? `Dance ${formatScore(team.selectionProfile.sports.dance.minTotalScore)}+` : "Dance ignored"}
+                                        </strong>
+                                      </div>
+                                    </div>
+
+                                    <div className="planner-team-members-list">
+                                      {team.members.length ? (
+                                        team.members.map((member) => {
+                                          const warnings = buildTeamSelectionWarnings(member, team);
+                                          return (
+                                            <div key={member.id} className="planner-team-member-row">
+                                              <div>
+                                                <strong>{member.name}</strong>
+                                                <p>
+                                                  {member.registrationNumber} / T {formatTeamBuilderSportCapability(member.capabilitiesBySport.tumbling)} / S {formatTeamBuilderSportCapability(member.capabilitiesBySport.stunts)}
+                                                </p>
+                                                <p>
+                                                  J {formatTeamBuilderSportCapability(member.capabilitiesBySport.jumps)} / D {formatTeamBuilderSportCapability(member.capabilitiesBySport.dance)}
+                                                </p>
+                                                {warnings.length ? <p>{buildTeamFitSummary(warnings)}</p> : null}
+                                              </div>
+                                              {capabilities.canAssignRosters ? (
+                                                <Button variant="ghost" size="sm" leadingIcon={<Trash2 />} onClick={() => removeFromTeam(member.id, team.id)}>
+                                                  Remove
+                                                </Button>
+                                              ) : null}
+                                            </div>
+                                          );
+                                        })
+                                      ) : (
+                                        <EmptyState
+                                          title="No Athletes Assigned Yet."
+                                          description="Assign athletes from the pool to start building this roster."
+                                        />
+                                      )}
+                                    </div>
                                   </div>
-                                  {capabilities.canAssignRosters ? (
-                                    <Button variant="ghost" size="sm" leadingIcon={<Trash2 />} onClick={() => removeFromTeam(member.id, team.id)}>
-                                      Remove
-                                    </Button>
-                                  ) : null}
-                                </div>
-                              );
-                            })
-                          ) : (
-                            <EmptyState
-                              title="No Athletes Assigned Yet."
-                              description="Assign athletes from the pool to start building this roster."
-                            />
-                          )}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))
-                ) : (
-                  <EmptyState
-                    title="Create Your First Team To Start Assigning Athletes."
-                    description="Team Builder now reads the tryout logbook by sport and keeps warnings non-blocking."
-                  />
-                )}
+                                </td>
+                              </tr>
+                            ) : null}
+                          </Fragment>
+                        );
+                      })
+                    ) : (
+                      <tr>
+                        <td colSpan={3}>
+                          <EmptyState
+                            title="Create Your First Team To Start Assigning Athletes."
+                            description="Team Builder now reads the tryout logbook by sport and keeps warnings non-blocking."
+                          />
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
               </div>
             </CardContent>
           </Card>

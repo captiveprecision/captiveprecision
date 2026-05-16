@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { getPlannerScopeContext, requirePlannerSession } from "@/lib/services/planner-api-access";
+import { getPlannerAccessContext, plannerAccessForbidden, requirePlannerSession } from "@/lib/services/planner-api-access";
 import { listPlannerBackups } from "@/lib/services/planner-command-service";
 
 function parseLimit(value: string | null) {
@@ -16,8 +16,13 @@ export async function GET(request: NextRequest) {
       return error!;
     }
 
-    const scope = getPlannerScopeContext(request, session);
-    const result = await listPlannerBackups(session, scope.scope, {
+    const access = await getPlannerAccessContext(request, session);
+
+    if (!access.canRestoreTrash) {
+      return plannerAccessForbidden("Only Gym administrators can review planner backups.");
+    }
+
+    const result = await listPlannerBackups(session, access.dataScope, {
       workspaceRootId: request.nextUrl.searchParams.get("workspaceRootId"),
       limit: parseLimit(request.nextUrl.searchParams.get("limit"))
     });

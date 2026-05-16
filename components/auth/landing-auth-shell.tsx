@@ -13,7 +13,9 @@ import {
   Input,
   Select
 } from "@/components/ui";
+import { PASSWORD_RECOVERY_SESSION_COOKIE, PASSWORD_RECOVERY_SESSION_COOKIE_VALUE } from "@/lib/auth/password-recovery";
 import type { AppRole } from "@/lib/auth/session";
+import { createClient } from "@/lib/supabase/client";
 
 type RequestState = {
   mode: "idle" | "loading" | "error" | "success";
@@ -75,6 +77,16 @@ const landingFaqs: LandingFaq[] = [
   }
 ];
 
+function hasPasswordRecoveryGuardCookie() {
+  return document.cookie
+    .split(";")
+    .some((cookie) => cookie.trim() === `${PASSWORD_RECOVERY_SESSION_COOKIE}=${PASSWORD_RECOVERY_SESSION_COOKIE_VALUE}`);
+}
+
+function clearPasswordRecoveryGuardCookie() {
+  document.cookie = `${PASSWORD_RECOVERY_SESSION_COOKIE}=; Max-Age=0; Path=/; SameSite=Lax`;
+}
+
 async function readAuthResponse(response: Response): Promise<AuthResponsePayload> {
   const contentType = response.headers.get("content-type") ?? "";
 
@@ -121,11 +133,15 @@ export function LandingAuthShell() {
     const type = url.searchParams.get("type") ?? hashParams.get("type");
     const hasRecoveryToken = type === "recovery" || Boolean(hashParams.get("access_token")) || Boolean(url.searchParams.get("code"));
 
-    if (!hasRecoveryToken) {
+    if (hasRecoveryToken) {
+      window.location.replace(`/auth/reset-password${url.search}${url.hash}`);
       return;
     }
 
-    window.location.replace(`/auth/reset-password${url.search}${url.hash}`);
+    if (hasPasswordRecoveryGuardCookie()) {
+      const supabase = createClient();
+      void supabase.auth.signOut().finally(clearPasswordRecoveryGuardCookie);
+    }
   }, []);
 
   function scrollToAccess() {

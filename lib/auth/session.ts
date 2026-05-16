@@ -1,6 +1,8 @@
 import type { Route } from "next";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
+import { PASSWORD_RECOVERY_SESSION_COOKIE, PASSWORD_RECOVERY_SESSION_COOKIE_VALUE } from "@/lib/auth/password-recovery";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/types/database";
@@ -23,6 +25,9 @@ export type AuthSession = {
   roles: AppRole[];
   primaryGymId: string | null;
   primaryGymName: string | null;
+  gymSeatRole: "owner" | "program_director" | "coach" | "assistant" | "staff" | null;
+  gymAccessLevel: "none" | "read" | "team-write" | "full" | null;
+  canOpenGymWorkspace: boolean;
   city: string | null;
   state: string | null;
   roleLabel: string | null;
@@ -111,12 +116,21 @@ export function getNextPathForSession(session: Pick<AuthSession, "roles">): Rout
   return session.roles.length === 1 ? getNextPathForRole(session.roles[0]) : "/select-workspace";
 }
 
+async function hasPendingPasswordRecoverySession() {
+  const cookieStore = await cookies();
+  return cookieStore.get(PASSWORD_RECOVERY_SESSION_COOKIE)?.value === PASSWORD_RECOVERY_SESSION_COOKIE_VALUE;
+}
+
 function isNextDynamicServerError(error: unknown) {
   return typeof error === "object" && error !== null && "digest" in error && (error as { digest?: unknown }).digest === "DYNAMIC_SERVER_USAGE";
 }
 
 export async function getAuthSession(): Promise<AuthSession | null> {
   try {
+    if (await hasPendingPasswordRecoverySession()) {
+      return null;
+    }
+
     const supabase = await createServerSupabaseClient();
     const {
       data: { user },
@@ -150,28 +164,34 @@ export async function getAuthSession(): Promise<AuthSession | null> {
     const authorizedProfile = profile;
     let linkedGymId: string | null = authorizedProfile.primary_gym_id ?? null;
     let linkedGymName: string | null = null;
+    let linkedGymOwnerProfileId: string | null = null;
+    let linkedGymSeatRole: AuthSession["gymSeatRole"] = null;
 
     if (linkedGymId) {
       const { data: gymData } = await admin
         .from("gyms" as never)
-        .select("name" as never)
+        .select("name, owner_profile_id" as never)
         .eq("id", linkedGymId as never)
         .maybeSingle();
 
-      linkedGymName = (gymData as Pick<GymRow, "name"> | null)?.name ?? null;
+      const gymRow = gymData as Pick<GymRow, "name" | "owner_profile_id"> | null;
+      linkedGymName = gymRow?.name ?? null;
+      linkedGymOwnerProfileId = gymRow?.owner_profile_id ?? null;
     }
 
     if (!linkedGymId) {
       const { data: ownedGym } = await admin
         .from("gyms" as never)
-        .select("id, name" as never)
+        .select("id, name, owner_profile_id" as never)
         .eq("owner_profile_id", user.id as never)
         .maybeSingle();
-      const ownedGymRow = ownedGym as Pick<GymRow, "id" | "name"> | null;
+      const ownedGymRow = ownedGym as Pick<GymRow, "id" | "name" | "owner_profile_id"> | null;
 
       if (ownedGymRow?.id) {
         linkedGymId = ownedGymRow.id;
         linkedGymName = ownedGymRow.name;
+        linkedGymOwnerProfileId = ownedGymRow.owner_profile_id;
+        linkedGymSeatRole = "owner";
       }
     }
 
@@ -189,21 +209,54 @@ export async function getAuthSession(): Promise<AuthSession | null> {
       if (licensedGymId) {
         const { data: gymData } = await admin
           .from("gyms" as never)
-          .select("id, name" as never)
+          .select("id, name, owner_profile_id" as never)
           .eq("id", licensedGymId as never)
           .maybeSingle();
-        const gymRow = gymData as Pick<GymRow, "id" | "name"> | null;
+        const gymRow = gymData as Pick<GymRow, "id" | "name" | "owner_profile_id"> | null;
 
         if (gymRow?.id) {
           linkedGymId = gymRow.id;
           linkedGymName = gymRow.name;
+          linkedGymOwnerProfileId = gymRow.owner_profile_id;
         }
       }
     }
 
+    if (linkedGymId && !linkedGymSeatRole) {
+      if (linkedGymOwnerProfileId === user.id) {
+        linkedGymSeatRole = "owner";
+      } else {
+        const { data: seatData } = await admin
+          .from("gym_coach_licenses" as never)
+          .select("seat_role, status" as never)
+          .eq("gym_id", linkedGymId as never)
+          .eq("coach_profile_id", user.id as never)
+          .eq("status", "active" as never)
+          .maybeSingle();
+        const seatRole = (seatData as { seat_role?: string | null } | null)?.seat_role ?? null;
+
+        linkedGymSeatRole = seatRole === "program_director" || seatRole === "coach" || seatRole === "assistant" || seatRole === "staff"
+          ? seatRole
+          : null;
+      }
+    }
+
+    const gymAccessLevel: AuthSession["gymAccessLevel"] = access.role === "admin" || access.role === "gym" || linkedGymSeatRole === "owner" || linkedGymSeatRole === "program_director"
+      ? "full"
+      : linkedGymSeatRole === "coach"
+        ? "team-write"
+        : linkedGymSeatRole === "assistant"
+          ? "read"
+          : linkedGymSeatRole === "staff"
+            ? "none"
+            : null;
+    const canOpenGymWorkspace = Boolean(
+      linkedGymId
+      && (access.role === "admin" || access.role === "gym" || linkedGymSeatRole === "owner" || linkedGymSeatRole === "program_director")
+    );
     const effectiveRoles = Array.from(new Set([
       ...getEffectiveRoles(access.role),
-      ...(linkedGymId ? ["gym" as AppRole] : [])
+      ...(canOpenGymWorkspace ? ["gym" as AppRole] : [])
     ]));
 
     return {
@@ -214,6 +267,9 @@ export async function getAuthSession(): Promise<AuthSession | null> {
       roles: effectiveRoles,
       primaryGymId: linkedGymId,
       primaryGymName: authorizedProfile.gym_name ?? linkedGymName,
+      gymSeatRole: linkedGymSeatRole,
+      gymAccessLevel,
+      canOpenGymWorkspace,
       city: authorizedProfile.city ?? null,
       state: authorizedProfile.state ?? null,
       roleLabel: authorizedProfile.role_label ?? null,

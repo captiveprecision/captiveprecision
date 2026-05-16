@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { getPlannerScopeContext, requirePlannerSession, canEditTeamForSession } from "@/lib/services/planner-api-access";
+import { canEditPlanningTeamForAccess, getPlannerAccessContext, plannerAccessForbidden, requirePlannerSession } from "@/lib/services/planner-api-access";
 import { requireCheerPlannerPremium } from "@/lib/access/membership";
 import type { TeamSeasonPlan } from "@/lib/domain/season-plan";
 import { getPlannerCommandError, savePlannerSeasonPlanCommand } from "@/lib/services/planner-command-service";
@@ -31,8 +31,8 @@ export async function POST(request: NextRequest) {
     }
 
     const payload = await request.json().catch(() => null) as SeasonPlanPayload | null;
-    const scope = getPlannerScopeContext(request, session, payload?.scope ?? null);
-    const premiumError = await requireCheerPlannerPremium(session, scope);
+    const access = await getPlannerAccessContext(request, session, payload?.scope ?? null);
+    const premiumError = await requireCheerPlannerPremium(session, access.scopeContext);
 
     if (premiumError) {
       return premiumError;
@@ -48,10 +48,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "A team id is required to save a season plan." }, { status: 400 });
     }
 
-    if (!(await canEditTeamForSession(teamId, session, scope))) {
-      return NextResponse.json({ error: "You do not have access to edit this season plan." }, { status: 403 });
+    if (!access.canEditSeasonPlanner || !canEditPlanningTeamForAccess(access, teamId)) {
+      return plannerAccessForbidden("You do not have access to edit this season plan.");
     }
-    const result = await savePlannerSeasonPlanCommand(session, scope.scope, {
+    const result = await savePlannerSeasonPlanCommand(session, access.dataScope, {
       workspaceRootId: typeof (payload as Record<string, unknown> | null)?.workspaceRootId === "string"
         ? (payload as Record<string, unknown>).workspaceRootId as string
         : null,

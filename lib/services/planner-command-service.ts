@@ -12,7 +12,7 @@ import type { PlannerWorkspaceScope } from "@/lib/services/planner-workspace";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 type PlannerCommandEntity = AthleteRecord | TryoutRecord | PlannerProject | TeamRecord | TeamSkillPlan | TeamRoutinePlan | TeamSeasonPlan | Record<string, unknown>;
-type PlannerAccessLevel = "read" | "write" | "restore";
+type PlannerAccessLevel = "read" | "write" | "restore" | "athlete-write" | "tryout-write" | "plan-write" | "team-builder-write" | "admin-write";
 
 type CommandEnvelope<T extends PlannerCommandEntity = PlannerCommandEntity> = {
   entity: T;
@@ -383,7 +383,7 @@ export async function savePlannerProjectCommand(
     qualificationRules?: Record<string, unknown>;
   }
 ) {
-  const workspaceRoot = await resolveWorkspaceRoot(session, scope, payload.workspaceRootId, "write");
+  const workspaceRoot = await resolveWorkspaceRoot(session, scope, payload.workspaceRootId, "admin-write");
 
   return executePlannerCommand<PlannerProject>("planner_command_project_save", {
     p_actor_profile_id: session.userId,
@@ -412,7 +412,7 @@ export async function savePlannerAthleteCommand(
     parentContacts: unknown[];
   }
 ) {
-  const workspaceRoot = await resolveWorkspaceRoot(session, scope, payload.workspaceRootId, "write");
+  const workspaceRoot = await resolveWorkspaceRoot(session, scope, payload.workspaceRootId, "athlete-write");
 
   return executePlannerCommand<AthleteRecord>("planner_command_athlete_save", {
     p_actor_profile_id: session.userId,
@@ -440,7 +440,7 @@ export async function savePlannerTryoutRecordCommand(
     record: Record<string, unknown>;
   }
 ) {
-  const workspaceRoot = await resolveWorkspaceRoot(session, scope, payload.workspaceRootId, "write");
+  const workspaceRoot = await resolveWorkspaceRoot(session, scope, payload.workspaceRootId, "tryout-write");
   const activeGymSeason = await ensureActiveGymSeasonForTryout(session);
   const record = activeGymSeason
     ? {
@@ -486,7 +486,7 @@ export async function savePlannerTeamCommand(
     selectionProfile?: Record<string, unknown> | null;
   }
 ) {
-  const workspaceRoot = await resolveWorkspaceRoot(session, scope, payload.workspaceRootId, "write");
+  const workspaceRoot = await resolveWorkspaceRoot(session, scope, payload.workspaceRootId, "team-builder-write");
 
   return executePlannerCommand<TeamRecord>("planner_command_team_save", {
     p_actor_profile_id: session.userId,
@@ -514,7 +514,7 @@ export async function setPlannerTeamAssignmentsCommand(
     athleteIds: string[];
   }
 ) {
-  const workspaceRoot = await resolveWorkspaceRoot(session, scope, payload.workspaceRootId, "write");
+  const workspaceRoot = await resolveWorkspaceRoot(session, scope, payload.workspaceRootId, "team-builder-write");
 
   return executePlannerCommand<TeamRecord>("planner_command_team_assignments_set", {
     p_actor_profile_id: session.userId,
@@ -536,7 +536,7 @@ export async function savePlannerSkillPlanCommand(
     selections: unknown[];
   }
 ) {
-  const workspaceRoot = await resolveWorkspaceRoot(session, scope, payload.workspaceRootId, "write");
+  const workspaceRoot = await resolveWorkspaceRoot(session, scope, payload.workspaceRootId, "plan-write");
 
   return executePlannerCommand<TeamSkillPlan>("planner_command_skill_plan_save", {
     p_actor_profile_id: session.userId,
@@ -561,7 +561,7 @@ export async function savePlannerRoutinePlanCommand(
     document: Record<string, unknown> | null;
   }
 ) {
-  const workspaceRoot = await resolveWorkspaceRoot(session, scope, payload.workspaceRootId, "write");
+  const workspaceRoot = await resolveWorkspaceRoot(session, scope, payload.workspaceRootId, "plan-write");
 
   return executePlannerCommand<TeamRoutinePlan>("planner_command_routine_plan_save", {
     p_actor_profile_id: session.userId,
@@ -587,7 +587,7 @@ export async function savePlannerSeasonPlanCommand(
     manualEntries?: unknown[];
   }
 ) {
-  const workspaceRoot = await resolveWorkspaceRoot(session, scope, payload.workspaceRootId, "write");
+  const workspaceRoot = await resolveWorkspaceRoot(session, scope, payload.workspaceRootId, "plan-write");
 
   return executePlannerCommand<TeamSeasonPlan>("planner_command_season_plan_save", {
     p_actor_profile_id: session.userId,
@@ -648,7 +648,7 @@ export async function softDeletePlannerTeamCommand(
     expectedLockVersion?: number | null;
   }
 ) {
-  const workspaceRoot = await resolveWorkspaceRoot(session, scope, payload.workspaceRootId, "write");
+  const workspaceRoot = await resolveWorkspaceRoot(session, scope, payload.workspaceRootId, "admin-write");
 
   return executePlannerCommand<TeamRecord>("planner_soft_delete_team", {
     p_actor_profile_id: session.userId,
@@ -667,7 +667,7 @@ export async function softDeletePlannerAthleteCommand(
     expectedLockVersion?: number | null;
   }
 ) {
-  const workspaceRoot = await resolveWorkspaceRoot(session, scope, payload.workspaceRootId, "write");
+  const workspaceRoot = await resolveWorkspaceRoot(session, scope, payload.workspaceRootId, "admin-write");
 
   return executePlannerCommand<AthleteRecord>("planner_soft_delete_athlete", {
     p_actor_profile_id: session.userId,

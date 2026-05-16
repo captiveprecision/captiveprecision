@@ -1,10 +1,14 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
-import Link from "next/link";
 import { KeyRound, Mail } from "lucide-react";
 
 import { Button, Card, CardContent, Input, SectionHeader } from "@/components/ui";
+import {
+  PASSWORD_RECOVERY_SESSION_COOKIE,
+  PASSWORD_RECOVERY_SESSION_COOKIE_VALUE,
+  PASSWORD_RECOVERY_SESSION_MAX_AGE_SECONDS
+} from "@/lib/auth/password-recovery";
 import { createClient } from "@/lib/supabase/client";
 
 type ResetState =
@@ -14,6 +18,43 @@ type ResetState =
   | { mode: "submitting"; message: string }
   | { mode: "success"; message: string }
   | { mode: "error"; message: string };
+
+function getSecureCookieFlag() {
+  return window.location.protocol === "https:" ? "Secure" : "";
+}
+
+function hasPasswordRecoveryGuardCookie() {
+  return document.cookie
+    .split(";")
+    .some((cookie) => cookie.trim() === `${PASSWORD_RECOVERY_SESSION_COOKIE}=${PASSWORD_RECOVERY_SESSION_COOKIE_VALUE}`);
+}
+
+function setPasswordRecoveryGuardCookie() {
+  document.cookie = [
+    `${PASSWORD_RECOVERY_SESSION_COOKIE}=${PASSWORD_RECOVERY_SESSION_COOKIE_VALUE}`,
+    `Max-Age=${PASSWORD_RECOVERY_SESSION_MAX_AGE_SECONDS}`,
+    "Path=/",
+    "SameSite=Lax",
+    getSecureCookieFlag()
+  ].filter(Boolean).join("; ");
+}
+
+function clearPasswordRecoveryGuardCookie() {
+  document.cookie = [
+    `${PASSWORD_RECOVERY_SESSION_COOKIE}=`,
+    "Max-Age=0",
+    "Path=/",
+    "SameSite=Lax",
+    getSecureCookieFlag()
+  ].filter(Boolean).join("; ");
+}
+
+async function readResetResponse(response: Response) {
+  return response.json().catch(() => ({ error: "The password reset service returned an invalid response." })) as Promise<{
+    error?: string;
+    message?: string;
+  }>;
+}
 
 export function PasswordResetShell() {
   const [state, setState] = useState<ResetState>({
@@ -36,6 +77,12 @@ export function PasswordResetShell() {
       const refreshToken = hashParams.get("refresh_token");
 
       if (!code && (!accessToken || !refreshToken)) {
+        if (hasPasswordRecoveryGuardCookie()) {
+          const supabase = createClient();
+          await supabase.auth.signOut();
+          clearPasswordRecoveryGuardCookie();
+        }
+
         return;
       }
 
@@ -54,6 +101,7 @@ export function PasswordResetShell() {
       }
 
       if (sessionError) {
+        clearPasswordRecoveryGuardCookie();
         setSessionReady(false);
         setState({
           mode: "error",
@@ -69,6 +117,7 @@ export function PasswordResetShell() {
       }
 
       if (error || !data.session) {
+        clearPasswordRecoveryGuardCookie();
         setSessionReady(false);
         setState({
           mode: "error",
@@ -77,6 +126,7 @@ export function PasswordResetShell() {
         return;
       }
 
+      setPasswordRecoveryGuardCookie();
       setSessionReady(true);
       setState({ mode: "ready", message: "Choose a new password for your account." });
     }
@@ -133,19 +183,52 @@ export function PasswordResetShell() {
     setState({ mode: "submitting", message: "Updating password..." });
 
     const supabase = createClient();
-    const { error } = await supabase.auth.updateUser({ password });
+    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
 
-    if (error) {
-      setState({ mode: "error", message: error.message });
+    if (sessionError || !sessionData.session?.access_token) {
+      setSessionReady(false);
+      clearPasswordRecoveryGuardCookie();
+      setState({
+        mode: "error",
+        message: sessionError?.message ?? "This reset session is invalid or expired. Request a new password reset email."
+      });
       return;
     }
 
+    const response = await fetch("/api/auth/reset-password", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        password,
+        accessToken: sessionData.session.access_token
+      })
+    });
+    const payload = await readResetResponse(response);
+
+    if (!response.ok) {
+      setState({ mode: "error", message: payload.error ?? "Unable to update password." });
+      return;
+    }
+
+    clearPasswordRecoveryGuardCookie();
     await supabase.auth.signOut();
 
     setState({ mode: "success", message: "Password updated. Redirecting to sign in..." });
     window.setTimeout(() => {
       window.location.assign("/");
     }, 700);
+  }
+
+  async function handleReturnToSignIn() {
+    setSessionReady(false);
+    setState({ mode: "checking", message: "Closing reset session..." });
+
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    clearPasswordRecoveryGuardCookie();
+    window.location.assign("/");
   }
 
   const isBusy = state.mode === "checking" || state.mode === "submitting";
@@ -209,7 +292,9 @@ export function PasswordResetShell() {
           )}
 
           <p className={`account-activation-message account-activation-message--${state.mode}`}>{state.message}</p>
-          <Link className="password-reset-back-link" href="/">Back to sign in</Link>
+          <button type="button" className="password-reset-back-link" onClick={handleReturnToSignIn}>
+            Back to sign in
+          </button>
         </CardContent>
       </Card>
     </main>

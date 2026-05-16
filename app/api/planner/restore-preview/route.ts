@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { getPlannerScopeContext, requirePlannerSession } from "@/lib/services/planner-api-access";
+import { getPlannerAccessContext, plannerAccessForbidden, requirePlannerSession } from "@/lib/services/planner-api-access";
 import { getPlannerCommandError, getPlannerRestorePreview } from "@/lib/services/planner-command-service";
 
 export const dynamic = "force-dynamic";
@@ -36,8 +36,13 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "entityType and versionId are required." }, { status: 400 });
     }
 
-    const scope = getPlannerScopeContext(request, session);
-    const result = await getPlannerRestorePreview(session, scope.scope, {
+    const access = await getPlannerAccessContext(request, session);
+
+    if (!access.canRestoreTrash) {
+      return plannerAccessForbidden("Only Gym administrators can preview shared planner restore actions.");
+    }
+
+    const result = await getPlannerRestorePreview(session, access.dataScope, {
       workspaceRootId: request.nextUrl.searchParams.get("workspaceRootId"),
       entityType,
       versionId

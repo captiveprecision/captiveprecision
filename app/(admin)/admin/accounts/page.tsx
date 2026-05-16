@@ -46,6 +46,15 @@ function getBestMembershipForUser(memberships: AccountMembership[], userId: stri
   return candidates.find(isMembershipActive) ?? candidates[0];
 }
 
+function hasActiveManualPremium(memberships: AccountMembership[], userId: string) {
+  return memberships.some((membership) => (
+    membership.user_id === userId
+    && membership.provider === "manual"
+    && membership.provider_membership_id === `manual:${userId}:premium`
+    && isMembershipActive(membership)
+  ));
+}
+
 function membershipLabel(membership: AccountMembership | undefined, planById: Map<string, AccountPlan>) {
   if (!membership) {
     return "No Premium";
@@ -100,15 +109,18 @@ export default async function AdminAccountsPage() {
 
     return {
       id: gym.id,
+      accountId: gym.owner_profile_id,
       name: gym.name,
       slug: gym.slug,
       ownerName: displayName(owner),
       ownerEmail: displayEmail(owner),
+      accessStatus: owner?.beta_access_status ?? "missing-profile",
       planLabel: plan?.name ?? membershipLabel(ownerMembership, planById),
       membershipStatus: ownerMembership?.status ?? "no membership",
+      hasManualPremium: owner ? hasActiveManualPremium(memberships, owner.id) : false,
       activeCoachLicenses,
       totalCoachLicenses: gym.coach_license_limit,
-      createdAt: gym.created_at
+      createdAt: owner?.created_at ?? gym.created_at
     };
   });
 
@@ -127,10 +139,13 @@ export default async function AdminAccountsPage() {
         id: profile.id,
         name: displayName(profile),
         email: displayEmail(profile),
+        role: "coach",
         accessStatus: profile.beta_access_status,
+        gymId: assignedGym?.id ?? null,
         organizationName: assignedGym?.name ?? profile.gym_name ?? null,
         organizationStatus: assignedGym ? "gym_assigned" : "independent",
         membershipLabel: membershipLabel(membership, planById),
+        hasManualPremium: hasActiveManualPremium(memberships, profile.id),
         createdAt: profile.created_at
       };
     });
@@ -141,7 +156,10 @@ export default async function AdminAccountsPage() {
       id: profile.id,
       name: displayName(profile),
       email: displayEmail(profile),
+      role: "admin",
       accessStatus: profile.beta_access_status,
+      membershipLabel: membershipLabel(getBestMembershipForUser(memberships, profile.id), planById),
+      hasManualPremium: hasActiveManualPremium(memberships, profile.id),
       createdAt: profile.created_at
     }));
 

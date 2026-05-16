@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { getAuthSession, type AuthSession } from "@/lib/auth/session";
 import { canManageGymAdministration, resolveGymAccessContext } from "@/lib/services/gym-access";
+import { canEditPlannerTeam, resolvePlannerAccessContext } from "@/lib/services/planner-access";
 import { parsePlannerWorkspaceScope, resolvePlannerScopeContext, type PlannerScopeContext, type PlannerWorkspaceScope } from "@/lib/services/planner-workspace";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Database } from "@/lib/types/database";
@@ -26,6 +27,26 @@ export function getPlannerScopeContext(
 ): PlannerScopeContext {
   const urlScope = request.nextUrl.searchParams.get("scope");
   return resolvePlannerScopeContext(session, parsePlannerWorkspaceScope(scopeValue ?? urlScope));
+}
+
+export async function getPlannerAccessContext(
+  request: NextRequest,
+  session: AuthSession,
+  scopeValue?: PlannerWorkspaceScope | string | null
+) {
+  const urlScope = request.nextUrl.searchParams.get("scope");
+  return resolvePlannerAccessContext(session, scopeValue ?? urlScope);
+}
+
+export function plannerAccessForbidden(message = "You do not have permission to use this planner action.") {
+  return NextResponse.json({ error: message }, { status: 403 });
+}
+
+export function canEditPlanningTeamForAccess(
+  access: Awaited<ReturnType<typeof resolvePlannerAccessContext>>,
+  teamId: string
+) {
+  return canEditPlannerTeam(access, teamId);
 }
 
 export async function canEditTeamForSession(teamId: string, session: AuthSession, scope: PlannerScopeContext) {

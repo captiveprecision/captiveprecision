@@ -1,0 +1,3 @@
+export const PASSWORD_RECOVERY_SESSION_COOKIE = "cp-password-recovery";
+export const PASSWORD_RECOVERY_SESSION_COOKIE_VALUE = "pending";
+export const PASSWORD_RECOVERY_SESSION_MAX_AGE_SECONDS = 10 * 60;

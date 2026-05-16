@@ -1,33 +1,116 @@
 import type { PlannerWorkspaceScope } from "@/lib/services/planner-workspace";
 
-export type CheerPlannerCapabilities = {
+export type PlannerAccessLevel = "none" | "read" | "team-write" | "full";
+export type PlannerSeatRole = "owner" | "program_director" | "coach" | "assistant" | "staff" | null;
+
+export type PlannerAccessContext = {
+  uiWorkspace: PlannerWorkspaceScope;
+  dataScope: PlannerWorkspaceScope;
+  gymId: string | null;
+  seatRole: PlannerSeatRole;
+  accessLevel: PlannerAccessLevel;
+  canOpenGymWorkspace: boolean;
+  canReadPlanner: boolean;
   canConfigureTryouts: boolean;
   canManageAthletes: boolean;
   canSaveTryoutRecords: boolean;
+  canEditTeamBuilder: boolean;
   canCreateTeams: boolean;
   canEditTeams: boolean;
   canAssignRosters: boolean;
   canDeleteTeams: boolean;
+  canRestoreTrash: boolean;
   canEditSkillPlanner: boolean;
   canEditRoutineBuilder: boolean;
   canEditSeasonPlanner: boolean;
   canEditSeasonManualEntries: boolean;
+  editablePlanningTeamIds: string[];
 };
 
-export function buildCheerPlannerCapabilities(scope: PlannerWorkspaceScope): CheerPlannerCapabilities {
+export type CheerPlannerCapabilities = {
+  canConfigureTryouts: boolean;
+  canManageAthletes: boolean;
+  canSaveTryoutRecords: boolean;
+  canEditTeamBuilder: boolean;
+  canCreateTeams: boolean;
+  canEditTeams: boolean;
+  canAssignRosters: boolean;
+  canDeleteTeams: boolean;
+  canRestoreTrash: boolean;
+  canEditSkillPlanner: boolean;
+  canEditRoutineBuilder: boolean;
+  canEditSeasonPlanner: boolean;
+  canEditSeasonManualEntries: boolean;
+  editablePlanningTeamIds: string[];
+};
+
+export function buildDefaultPlannerAccessContext(uiWorkspace: PlannerWorkspaceScope): PlannerAccessContext {
+  const isGym = uiWorkspace === "gym";
+
+  return {
+    uiWorkspace,
+    dataScope: uiWorkspace,
+    gymId: null,
+    seatRole: isGym ? "owner" : null,
+    accessLevel: isGym ? "full" : "team-write",
+    canOpenGymWorkspace: isGym,
+    canReadPlanner: true,
+    canConfigureTryouts: true,
+    canManageAthletes: true,
+    canSaveTryoutRecords: true,
+    canEditTeamBuilder: isGym,
+    canCreateTeams: isGym,
+    canEditTeams: isGym,
+    canAssignRosters: isGym,
+    canDeleteTeams: isGym,
+    canRestoreTrash: isGym,
+    canEditSkillPlanner: true,
+    canEditRoutineBuilder: true,
+    canEditSeasonPlanner: true,
+    canEditSeasonManualEntries: true,
+    editablePlanningTeamIds: []
+  };
+}
+
+export function buildCheerPlannerCapabilities(
+  scope: PlannerWorkspaceScope,
+  accessContext?: PlannerAccessContext | null
+): CheerPlannerCapabilities {
+  if (accessContext) {
+    return {
+      canConfigureTryouts: accessContext.canConfigureTryouts,
+      canManageAthletes: accessContext.canManageAthletes,
+      canSaveTryoutRecords: accessContext.canSaveTryoutRecords,
+      canEditTeamBuilder: accessContext.canEditTeamBuilder,
+      canCreateTeams: accessContext.canCreateTeams,
+      canEditTeams: accessContext.canEditTeams,
+      canAssignRosters: accessContext.canAssignRosters,
+      canDeleteTeams: accessContext.canDeleteTeams,
+      canRestoreTrash: accessContext.canRestoreTrash,
+      canEditSkillPlanner: accessContext.canEditSkillPlanner,
+      canEditRoutineBuilder: accessContext.canEditRoutineBuilder,
+      canEditSeasonPlanner: accessContext.canEditSeasonPlanner,
+      canEditSeasonManualEntries: accessContext.canEditSeasonManualEntries,
+      editablePlanningTeamIds: accessContext.editablePlanningTeamIds
+    };
+  }
+
   if (scope === "gym") {
     return {
       canConfigureTryouts: true,
       canManageAthletes: true,
-      canSaveTryoutRecords: false,
+      canSaveTryoutRecords: true,
+      canEditTeamBuilder: true,
       canCreateTeams: true,
       canEditTeams: true,
       canAssignRosters: true,
-      canDeleteTeams: false,
-      canEditSkillPlanner: false,
-      canEditRoutineBuilder: false,
+      canDeleteTeams: true,
+      canRestoreTrash: true,
+      canEditSkillPlanner: true,
+      canEditRoutineBuilder: true,
       canEditSeasonPlanner: true,
-      canEditSeasonManualEntries: true
+      canEditSeasonManualEntries: true,
+      editablePlanningTeamIds: []
     };
   }
 
@@ -35,14 +118,17 @@ export function buildCheerPlannerCapabilities(scope: PlannerWorkspaceScope): Che
     canConfigureTryouts: true,
     canManageAthletes: true,
     canSaveTryoutRecords: true,
-    canCreateTeams: true,
-    canEditTeams: true,
-    canAssignRosters: true,
-    canDeleteTeams: true,
+    canEditTeamBuilder: false,
+    canCreateTeams: false,
+    canEditTeams: false,
+    canAssignRosters: false,
+    canDeleteTeams: false,
+    canRestoreTrash: false,
     canEditSkillPlanner: true,
     canEditRoutineBuilder: true,
     canEditSeasonPlanner: true,
-    canEditSeasonManualEntries: true
+    canEditSeasonManualEntries: true,
+    editablePlanningTeamIds: []
   };
 }
 

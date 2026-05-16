@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { requireCheerPlannerPremium } from "@/lib/access/membership";
-import { getPlannerScopeContext, requirePlannerSession } from "@/lib/services/planner-api-access";
+import { getPlannerAccessContext, plannerAccessForbidden, requirePlannerSession } from "@/lib/services/planner-api-access";
 import { getPlannerCommandError, softDeletePlannerTeamCommand } from "@/lib/services/planner-command-service";
 
 function asString(value: unknown) {
@@ -17,18 +17,18 @@ export async function POST(request: NextRequest) {
     }
 
     const payload = await request.json().catch(() => null) as Record<string, unknown> | null;
-    const scope = getPlannerScopeContext(request, session, typeof payload?.scope === "string" ? payload.scope : null);
-    const premiumError = await requireCheerPlannerPremium(session, scope);
+    const access = await getPlannerAccessContext(request, session, typeof payload?.scope === "string" ? payload.scope : null);
+    const premiumError = await requireCheerPlannerPremium(session, access.scopeContext);
 
     if (premiumError) {
       return premiumError;
     }
 
-    if (scope.scope === "gym") {
-      return NextResponse.json({ error: "Gym workspaces can manage rosters, but cannot delete teams from Cheer Planner." }, { status: 403 });
+    if (!access.canDeleteTeams) {
+      return plannerAccessForbidden("Only Gym administrators can delete shared teams.");
     }
 
-    const result = await softDeletePlannerTeamCommand(session, scope.scope, {
+    const result = await softDeletePlannerTeamCommand(session, access.dataScope, {
       workspaceRootId: typeof payload?.workspaceRootId === "string" ? payload.workspaceRootId : null,
       teamId: asString(payload?.teamId),
       expectedLockVersion: typeof payload?.expectedLockVersion === "number" ? payload.expectedLockVersion : null

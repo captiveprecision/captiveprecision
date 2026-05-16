@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { requireCheerPlannerPremium } from "@/lib/access/membership";
-import { getPlannerScopeContext, requirePlannerSession } from "@/lib/services/planner-api-access";
+import { getPlannerAccessContext, plannerAccessForbidden, requirePlannerSession } from "@/lib/services/planner-api-access";
 import { getPlannerCommandError, restorePlannerEntityCommand } from "@/lib/services/planner-command-service";
 
 function asString(value: unknown) {
@@ -34,14 +34,18 @@ export async function POST(request: NextRequest) {
     }
 
     const payload = await request.json().catch(() => null) as Record<string, unknown> | null;
-    const scope = getPlannerScopeContext(request, session, typeof payload?.scope === "string" ? payload.scope : null);
-    const premiumError = await requireCheerPlannerPremium(session, scope);
+    const access = await getPlannerAccessContext(request, session, typeof payload?.scope === "string" ? payload.scope : null);
+    const premiumError = await requireCheerPlannerPremium(session, access.scopeContext);
 
     if (premiumError) {
       return premiumError;
     }
 
-    const result = await restorePlannerEntityCommand(session, scope.scope, {
+    if (!access.canRestoreTrash) {
+      return plannerAccessForbidden("Only Gym administrators can restore shared planner records.");
+    }
+
+    const result = await restorePlannerEntityCommand(session, access.dataScope, {
       workspaceRootId: typeof payload?.workspaceRootId === "string" ? payload.workspaceRootId : null,
       entityType: asString(payload?.entityType),
       versionId: asString(payload?.versionId),

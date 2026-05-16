@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { requireCheerPlannerPremium } from "@/lib/access/membership";
-import { canEditTeamForSession, getPlannerScopeContext, requirePlannerSession } from "@/lib/services/planner-api-access";
+import { canEditPlanningTeamForAccess, getPlannerAccessContext, plannerAccessForbidden, requirePlannerSession } from "@/lib/services/planner-api-access";
 import { getPlannerCommandError, savePlannerSeasonPlanCommand } from "@/lib/services/planner-command-service";
 
 function asString(value: unknown) {
@@ -17,8 +17,8 @@ export async function POST(request: NextRequest) {
     }
 
     const payload = await request.json().catch(() => null) as Record<string, unknown> | null;
-    const scope = getPlannerScopeContext(request, session, typeof payload?.scope === "string" ? payload.scope : null);
-    const premiumError = await requireCheerPlannerPremium(session, scope);
+    const access = await getPlannerAccessContext(request, session, typeof payload?.scope === "string" ? payload.scope : null);
+    const premiumError = await requireCheerPlannerPremium(session, access.scopeContext);
 
     if (premiumError) {
       return premiumError;
@@ -26,11 +26,11 @@ export async function POST(request: NextRequest) {
 
     const teamId = asString(payload?.teamId);
 
-    if (scope.scope === "gym" && !(await canEditTeamForSession(teamId, session, scope))) {
-      return NextResponse.json({ error: "You do not have permission to update this Gym team's season plan." }, { status: 403 });
+    if (!access.canEditSeasonPlanner || !canEditPlanningTeamForAccess(access, teamId)) {
+      return plannerAccessForbidden("You can review this season plan, but cannot edit this team.");
     }
 
-    const result = await savePlannerSeasonPlanCommand(session, scope.scope, {
+    const result = await savePlannerSeasonPlanCommand(session, access.dataScope, {
       workspaceRootId: typeof payload?.workspaceRootId === "string" ? payload.workspaceRootId : null,
       expectedLockVersion: typeof payload?.expectedLockVersion === "number" ? payload.expectedLockVersion : null,
       teamId,

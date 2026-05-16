@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { requireCheerPlannerPremium } from "@/lib/access/membership";
-import { canAdministerPlannerGymScope, getPlannerScopeContext, requirePlannerSession } from "@/lib/services/planner-api-access";
+import { getPlannerAccessContext, plannerAccessForbidden, requirePlannerSession } from "@/lib/services/planner-api-access";
 import { getPlannerCommandError, softDeletePlannerAthleteCommand } from "@/lib/services/planner-command-service";
 
 function asString(value: unknown) {
@@ -17,18 +17,18 @@ export async function POST(request: NextRequest) {
     }
 
     const payload = await request.json().catch(() => null) as Record<string, unknown> | null;
-    const scope = getPlannerScopeContext(request, session, typeof payload?.scope === "string" ? payload.scope : null);
-    const premiumError = await requireCheerPlannerPremium(session, scope);
+    const access = await getPlannerAccessContext(request, session, typeof payload?.scope === "string" ? payload.scope : null);
+    const premiumError = await requireCheerPlannerPremium(session, access.scopeContext);
 
     if (premiumError) {
       return premiumError;
     }
 
-    if (!(await canAdministerPlannerGymScope(session, scope))) {
-      return NextResponse.json({ error: "Only the Gym owner or Program Director can remove Gym athlete records." }, { status: 403 });
+    if (!access.canRestoreTrash) {
+      return plannerAccessForbidden("Only Gym administrators can remove shared athlete records.");
     }
 
-    const result = await softDeletePlannerAthleteCommand(session, scope.scope, {
+    const result = await softDeletePlannerAthleteCommand(session, access.dataScope, {
       workspaceRootId: typeof payload?.workspaceRootId === "string" ? payload.workspaceRootId : null,
       athleteId: asString(payload?.athleteId),
       expectedLockVersion: typeof payload?.expectedLockVersion === "number" ? payload.expectedLockVersion : null

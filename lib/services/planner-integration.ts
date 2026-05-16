@@ -45,6 +45,10 @@ import {
   buildSkillPlannerPersistedSelections
 } from "@/lib/services/planner-integration-adapters";
 import {
+  buildDefaultPlannerAccessContext,
+  type PlannerAccessContext
+} from "@/lib/services/planner-capabilities";
+import {
   applyTryoutSaveToPlannerProject,
   buildTryoutBucketEvaluations,
   buildTryoutRecord,
@@ -1066,6 +1070,7 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
     currentPeriodEnd: null,
     cancelAtPeriodEnd: false
   });
+  const [plannerAccess, setPlannerAccess] = useState<PlannerAccessContext>(() => buildDefaultPlannerAccessContext(scope));
   const plannerStateRef = useRef(plannerState);
   const saveStatesRef = useRef(saveStates);
   const pendingWritesRef = useRef(pendingWrites);
@@ -1153,6 +1158,7 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
       snapshot.plannerProject.updatedAt
     );
 
+    setPlannerAccess(snapshot.permissions ?? buildDefaultPlannerAccessContext(scope));
     commitPlannerStateSnapshot(nextState);
     setTemplateDrafts(buildTemplateDraftsBySport(nextState.tryoutTemplates));
     setEvaluationDrafts(buildEvaluationDraftsBySport(nextState.tryoutTemplates));
@@ -1162,7 +1168,7 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
       shouldRefetch: false,
       nextState
     };
-  }, [commitPlannerStateSnapshot, evaluateFoundationSnapshot, logDiscardedFoundationSnapshot]);
+  }, [commitPlannerStateSnapshot, evaluateFoundationSnapshot, logDiscardedFoundationSnapshot, scope]);
 
   const runRemoteFoundationSync = useCallback(async (options?: {
     source?: string;
@@ -1220,6 +1226,7 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
     foundationRequestIdRef.current = 0;
     plannerMutationVersionRef.current = 0;
     setPendingWrites(readPendingWritesFromStorage(scope));
+    setPlannerAccess(buildDefaultPlannerAccessContext(scope));
     setPlannerState(state);
     setTemplateDrafts(buildTemplateDraftsBySport(state.tryoutTemplates));
     setEvaluationDrafts(buildEvaluationDraftsBySport(state.tryoutTemplates));
@@ -1379,6 +1386,11 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
       search?: string | null;
     }
   ) => {
+    if (!plannerAccess.canRestoreTrash) {
+      setTrashItems([]);
+      return [];
+    }
+
     setTrashLoading(true);
 
     try {
@@ -1393,7 +1405,7 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
     } finally {
       setTrashLoading(false);
     }
-  }, [scope]);
+  }, [plannerAccess.canRestoreTrash, scope]);
 
   const syncAfterTrashMutation = useCallback((successMessage: string, partialSyncMessage: string) => {
     void Promise.allSettled([
@@ -1415,6 +1427,15 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
     }
 
     return true;
+  };
+
+  const canUsePlannerAction = (allowed: boolean, message: string) => {
+    if (!allowed) {
+      setSaveMessage(message);
+      return false;
+    }
+
+    return canUsePremiumAction();
   };
 
   const handlePremiumWriteError = useCallback((error: unknown, fallback: string) => {
@@ -1679,6 +1700,22 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
     () => new Map(plannerState.teams.map((team) => [team.id, team] as const)),
     [plannerState.teams]
   );
+  const editablePlanningTeamIds = useMemo(
+    () => new Set(plannerAccess.editablePlanningTeamIds),
+    [plannerAccess.editablePlanningTeamIds]
+  );
+  const canEditPlanningTeam = useCallback((teamId: string) => {
+    if (plannerAccess.accessLevel === "full") {
+      return true;
+    }
+
+    if (plannerAccess.dataScope === "coach" && plannerAccess.accessLevel === "team-write") {
+      return true;
+    }
+
+    const team = teamMap.get(teamId);
+    return editablePlanningTeamIds.has(teamId) || Boolean(team?.remoteTeamId && editablePlanningTeamIds.has(team.remoteTeamId));
+  }, [editablePlanningTeamIds, plannerAccess.accessLevel, plannerAccess.dataScope, teamMap]);
   const teamsWithMembers = useMemo(
     () => buildTeamBuilderTeamsWithMembers(plannerState, athletePool),
     [athletePool, plannerState]
@@ -1946,7 +1983,7 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
   };
 
   const saveTemplate = async () => {
-    if (!canUsePremiumAction()) {
+    if (!canUsePlannerAction(plannerAccess.canConfigureTryouts, "Only Gym administrators can edit shared tryout settings.")) {
       return;
     }
 
@@ -2088,7 +2125,7 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
   };
 
   const saveAthleteProfile = async () => {
-    if (!canUsePremiumAction()) {
+    if (!canUsePlannerAction(plannerAccess.canManageAthletes, "You do not have access to save athlete profiles.")) {
       return;
     }
 
@@ -2148,7 +2185,7 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
   };
 
   const saveTryoutRecord = async () => {
-    if (!canUsePremiumAction()) {
+    if (!canUsePlannerAction(plannerAccess.canSaveTryoutRecords, "You do not have access to save tryout records.")) {
       return;
     }
 
@@ -2312,7 +2349,7 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
   };
 
   const saveQualificationRules = async () => {
-    if (!canUsePremiumAction()) {
+    if (!canUsePlannerAction(plannerAccess.canConfigureTryouts, "Only Gym administrators can edit Team Builder criteria.")) {
       return;
     }
 
@@ -2359,31 +2396,15 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
       pipelineStage
     }));
 
-    try {
-      const remoteProject = await syncRemotePlannerConfig(scope, nextState);
-      commitRemoteProject(remoteProject);
-      setSaveState("pipeline-stage", "saved");
-    } catch (error) {
-      handleWriteFailure(
-        "pipeline-stage",
-        error,
-        "Unable to sync the planner stage to Supabase.",
-        buildPendingWrite(scope, "project-save", nextState.workspaceRootId ?? null, {
-          workspaceId: nextState.workspaceId,
-          workspaceRootId: nextState.workspaceRootId ?? null,
-          lockVersion: nextState.lockVersion ?? null,
-          name: nextState.name,
-          status: nextState.status,
-          pipelineStage: nextState.pipelineStage,
-          template: { tryoutTemplates: nextState.tryoutTemplates },
-          qualificationRules: nextState.qualificationRules
-        })
-      );
-    }
+    patchPlannerState((current) => ({
+      ...current,
+      pipelineStage
+    }), null, nextState.updatedAt);
+    setSaveState("pipeline-stage", "saved");
   };
 
   const createTeam = async () => {
-    if (!canUsePremiumAction()) {
+    if (!canUsePlannerAction(plannerAccess.canEditTeamBuilder, "Team Builder editing is available only from Gym workspace.")) {
       return;
     }
 
@@ -2672,7 +2693,7 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
   };
 
   const assignToTeam = async (athleteId: string, teamId: string) => {
-    if (!canUsePremiumAction()) {
+    if (!canUsePlannerAction(plannerAccess.canEditTeamBuilder, "Team Builder editing is available only from Gym workspace.")) {
       return;
     }
 
@@ -2732,7 +2753,7 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
   };
 
   const removeFromTeam = async (athleteId: string, teamId: string) => {
-    if (!canUsePremiumAction()) {
+    if (!canUsePlannerAction(plannerAccess.canEditTeamBuilder, "Team Builder editing is available only from Gym workspace.")) {
       return;
     }
 
@@ -2781,7 +2802,7 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
   };
 
   const clearTeam = async (teamId: string) => {
-    if (!canUsePremiumAction()) {
+    if (!canUsePlannerAction(plannerAccess.canEditTeamBuilder, "Team Builder editing is available only from Gym workspace.")) {
       return;
     }
 
@@ -2822,7 +2843,7 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
   };
 
   const deleteAthleteProfile = async (athleteId: string) => {
-    if (!canUsePremiumAction()) {
+    if (!canUsePlannerAction(plannerAccess.canRestoreTrash, "Only Gym administrators can delete athlete records.")) {
       return false;
     }
 
@@ -2882,7 +2903,7 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
   };
 
   const deleteTeam = async (teamId: string) => {
-    if (!canUsePremiumAction()) {
+    if (!canUsePlannerAction(plannerAccess.canDeleteTeams, "Only Gym administrators can delete teams.")) {
       return false;
     }
 
@@ -2940,7 +2961,7 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
   };
 
   const getTrashRestorePreview = async (item: Pick<PlannerTrashItem, "entityType" | "versionId">) => {
-    if (!canUsePremiumAction()) {
+    if (!canUsePlannerAction(plannerAccess.canRestoreTrash, "Only Gym administrators can restore planner records.")) {
       return null;
     }
 
@@ -2954,7 +2975,7 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
   };
 
   const restoreTrashItem = async (item: Pick<PlannerTrashItem, "entityType" | "versionId" | "name">) => {
-    if (!canUsePremiumAction()) {
+    if (!canUsePlannerAction(plannerAccess.canRestoreTrash, "Only Gym administrators can restore planner records.")) {
       return false;
     }
 
@@ -2998,6 +3019,11 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
   };
 
   const openTeamEdit = (team: PlannerTeamRecord) => {
+    if (!plannerAccess.canEditTeamBuilder) {
+      setSaveMessage("Team Builder editing is available only from Gym workspace.");
+      return;
+    }
+
     setTeamEdit({
       teamId: team.id,
       name: team.name,
@@ -3008,7 +3034,7 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
   };
 
   const confirmTeamEdit = async () => {
-    if (!canUsePremiumAction()) {
+    if (!canUsePlannerAction(plannerAccess.canEditTeamBuilder, "Team Builder editing is available only from Gym workspace.")) {
       return;
     }
 
@@ -3106,6 +3132,11 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
   };
 
   const openSkillPlannerTeam = (teamId: string) => {
+    if (!plannerAccess.canEditSkillPlanner || !canEditPlanningTeam(teamId)) {
+      setSaveMessage("You can view this team, but only assigned coaches can edit its Skill Planner.");
+      return;
+    }
+
     const team = skillPlannerTeams.find((item) => item.teamId === teamId) ?? null;
 
     if (!team) {
@@ -3201,7 +3232,10 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
   };
 
   const saveSkillPlannerEdit = async () => {
-    if (!canUsePremiumAction()) {
+    if (!canUsePlannerAction(
+      Boolean(skillPlannerDraft && plannerAccess.canEditSkillPlanner && canEditPlanningTeam(skillPlannerDraft.teamId)),
+      "You do not have access to save this Skill Planner."
+    )) {
       return;
     }
 
@@ -3255,6 +3289,11 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
   };
 
   const openRoutineBuilderTeam = async (teamId: string) => {
+    if (!plannerAccess.canEditRoutineBuilder || !canEditPlanningTeam(teamId)) {
+      setSaveMessage("You can view this team, but only assigned coaches can edit its Routine Builder.");
+      return;
+    }
+
     const team = routineBuilderTeams.find((item) => item.teamId === teamId) ?? null;
 
     if (!team) {
@@ -3314,7 +3353,10 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
   };
 
   const saveRoutineBuilderEdit = async () => {
-    if (!canUsePremiumAction()) {
+    if (!canUsePlannerAction(
+      Boolean(routineBuilderDraft && plannerAccess.canEditRoutineBuilder && canEditPlanningTeam(routineBuilderDraft.teamId)),
+      "You do not have access to save this Routine Builder."
+    )) {
       return;
     }
 
@@ -3364,6 +3406,11 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
   };
 
   const openSeasonPlannerTeam = (teamId: string) => {
+    if (!plannerAccess.canEditSeasonPlanner || !canEditPlanningTeam(teamId)) {
+      setSaveMessage("You can view this team, but only assigned coaches can edit its Season Planner.");
+      return;
+    }
+
     const team = seasonPlannerTeams.find((item) => item.teamId === teamId) ?? null;
 
     if (!team) {
@@ -3523,7 +3570,10 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
   };
 
   const saveSeasonPlannerEdit = async () => {
-    if (!canUsePremiumAction()) {
+    if (!canUsePlannerAction(
+      Boolean(seasonPlannerDraft && plannerAccess.canEditSeasonPlanner && canEditPlanningTeam(seasonPlannerDraft.teamId)),
+      "You do not have access to save this Season Planner."
+    )) {
       return;
     }
 
@@ -3604,6 +3654,8 @@ export function useCheerPlannerIntegration(scope: PlannerWorkspaceScope = "coach
 
   return {
     plannerState,
+    plannerAccess,
+    canEditPlanningTeam,
     athletePool,
     trashItems,
     trashLoading,

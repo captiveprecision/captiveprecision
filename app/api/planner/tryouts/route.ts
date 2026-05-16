@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { getPlannerScopeContext, requirePlannerSession } from "@/lib/services/planner-api-access";
+import { getPlannerAccessContext, plannerAccessForbidden, requirePlannerSession } from "@/lib/services/planner-api-access";
 import { requireCheerPlannerPremium } from "@/lib/access/membership";
-import { canScopeWritePlannerCommand } from "@/lib/services/planner-capabilities";
 import { getPlannerCommandError, savePlannerTryoutRecordCommand } from "@/lib/services/planner-command-service";
 import { normalizePlannerTryoutRecord } from "@/lib/services/planner-domain-mappers";
 import { isUuidString } from "@/lib/services/planner-workspace";
@@ -35,15 +34,15 @@ export async function POST(request: NextRequest) {
     }
 
     const payload = await request.json().catch(() => null) as Record<string, unknown> | null;
-    const scope = getPlannerScopeContext(request, session, typeof payload?.scope === "string" ? payload.scope : null);
-    const premiumError = await requireCheerPlannerPremium(session, scope);
+    const access = await getPlannerAccessContext(request, session, typeof payload?.scope === "string" ? payload.scope : null);
+    const premiumError = await requireCheerPlannerPremium(session, access.scopeContext);
 
     if (premiumError) {
       return premiumError;
     }
 
-    if (!canScopeWritePlannerCommand(scope.scope, "tryout-save")) {
-      return NextResponse.json({ error: "Gym workspaces can review tryouts, but cannot save new tryout evaluations." }, { status: 403 });
+    if (!access.canSaveTryoutRecords) {
+      return plannerAccessForbidden("You do not have access to save tryout records.");
     }
 
     const tryoutRecord = asObject(payload?.tryoutRecord);
@@ -54,7 +53,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "A valid tryout record payload with a persisted athlete id is required." }, { status: 400 });
     }
 
-    const result = await savePlannerTryoutRecordCommand(session, scope.scope, {
+    const result = await savePlannerTryoutRecordCommand(session, access.dataScope, {
       workspaceRootId: typeof payload?.workspaceRootId === "string" ? payload.workspaceRootId : null,
       expectedLockVersion: typeof tryoutRecord.lockVersion === "number" ? tryoutRecord.lockVersion : null,
       tryoutRecordId,

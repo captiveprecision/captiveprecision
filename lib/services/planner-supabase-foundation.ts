@@ -8,6 +8,7 @@ import type { TeamSeasonPlan } from "@/lib/domain/season-plan";
 import type { TeamSkillPlan } from "@/lib/domain/skill-plan";
 import type { TeamRecord } from "@/lib/domain/team";
 import type { SyncMetadata, WorkspaceRoot } from "@/lib/domain/planner-versioning";
+import type { PlannerAccessContext } from "@/lib/services/planner-capabilities";
 import {
   normalizePlannerTryoutRecord,
   normalizePlannerTeam,
@@ -17,7 +18,6 @@ import {
   normalizeTeamSkillPlan
 } from "@/lib/services/planner-domain-mappers";
 import { deriveRoutineItemsFromDocument, normalizeRoutineDocument } from "@/lib/services/planner-routine-builder";
-import { canManageGymAdministration, resolveGymAccessContext } from "@/lib/services/gym-access";
 import {
   loadActiveGymTeamSeasonState,
   type GymActiveTeamSeasonState
@@ -44,6 +44,13 @@ type PlannerProjectRow = Database["public"]["Tables"]["planner_projects"]["Row"]
 type PlannerTryoutRecordRow = Database["public"]["Tables"]["planner_tryout_records"]["Row"];
 type TeamSkillPlanRow = Database["public"]["Tables"]["team_skill_plans"]["Row"];
 type TeamSeasonPlanRow = Database["public"]["Tables"]["team_season_plans"]["Row"];
+type GymOwnerRow = Pick<Database["public"]["Tables"]["gyms"]["Row"], "owner_profile_id">;
+type WorkspaceRootLookupRow = {
+  id: string;
+  scope_type: "coach" | "gym";
+  gym_id: string | null;
+  owner_profile_id: string | null;
+};
 
 type TeamMetadata = {
   teamLevel?: string;
@@ -74,6 +81,7 @@ type VersionedRow = {
 export type PlannerRemoteFoundationSnapshot = {
   workspaceRoot: WorkspaceRoot;
   plannerProject: PlannerProject;
+  permissions: PlannerAccessContext;
   assignments: Array<{ id: string; athleteId: string; teamId: string; createdAt: string; updatedAt: string; lockVersion?: number }>;
   athletes: AthleteRecord[];
   tryoutRecords: TryoutRecord[];
@@ -594,6 +602,104 @@ function mergeRowsById<T extends { id: string }>(rows: T[], extraRows: T[]) {
   return [...byId.values()];
 }
 
+async function listGymRelatedWorkspaceRootIds(
+  admin: ReturnType<typeof createAdminClient>,
+  workspaceRoot: WorkspaceRoot
+) {
+  if (!workspaceRoot.gymId) {
+    return [workspaceRoot.id];
+  }
+
+  const { data: gymRow } = await admin
+    .from("gyms" as never)
+    .select("owner_profile_id" as never)
+    .eq("id", workspaceRoot.gymId as never)
+    .maybeSingle();
+  const ownerProfileIds = Array.from(new Set([
+    workspaceRoot.ownerProfileId,
+    (gymRow as GymOwnerRow | null)?.owner_profile_id ?? null
+  ].filter((value): value is string => Boolean(value))));
+  const { data: gymRootRows } = await admin
+    .from("workspace_roots" as never)
+    .select("id, scope_type, gym_id, owner_profile_id" as never)
+    .eq("gym_id", workspaceRoot.gymId as never);
+  const { data: ownerRootRows } = ownerProfileIds.length
+    ? await admin
+      .from("workspace_roots" as never)
+      .select("id, scope_type, gym_id, owner_profile_id" as never)
+      .in("owner_profile_id", ownerProfileIds as never)
+    : { data: [] as unknown[] };
+  const relatedRootIds = ([...(gymRootRows ?? []), ...(ownerRootRows ?? [])] as WorkspaceRootLookupRow[])
+    .filter((root) => (
+      (root.scope_type === "gym" && root.gym_id === workspaceRoot.gymId)
+      || (root.scope_type === "coach" && typeof root.owner_profile_id === "string" && ownerProfileIds.includes(root.owner_profile_id))
+    ))
+    .map((root) => root.id);
+
+  return Array.from(new Set([workspaceRoot.id, ...relatedRootIds]));
+}
+
+async function listGymPermanentAthleteRows(
+  admin: ReturnType<typeof createAdminClient>,
+  workspaceRoot: WorkspaceRoot,
+  seedRows: AthleteRow[]
+) {
+  if (!workspaceRoot.gymId) {
+    return seedRows;
+  }
+
+  const relatedRootIds = await listGymRelatedWorkspaceRootIds(admin, workspaceRoot);
+  const [gymAthletesResult, rootAthletesResult] = await Promise.all([
+    admin
+      .from("athletes" as never)
+      .select("*" as never)
+      .eq("gym_id", workspaceRoot.gymId as never)
+      .is("deleted_at" as never, null),
+    relatedRootIds.length
+      ? admin
+        .from("athletes" as never)
+        .select("*" as never)
+        .in("workspace_root_id", relatedRootIds as never)
+        .is("deleted_at" as never, null)
+      : Promise.resolve({ data: [] as unknown[] })
+  ]);
+
+  return mergeRowsById(
+    seedRows,
+    [
+      ...((gymAthletesResult.data ?? []) as AthleteRow[]),
+      ...((rootAthletesResult.data ?? []) as AthleteRow[])
+    ]
+  );
+}
+
+async function listTryoutRowsForAthletes(
+  admin: ReturnType<typeof createAdminClient>,
+  athleteIds: string[],
+  seedRows: PlannerTryoutRecordRow[]
+) {
+  if (!athleteIds.length) {
+    return seedRows;
+  }
+
+  const { data, error } = await admin
+    .from("planner_tryout_records" as never)
+    .select("*" as never)
+    .in("athlete_id", athleteIds as never)
+    .is("deleted_at" as never, null)
+    .order("occurred_at" as never, { ascending: false });
+
+  if (error) {
+    if (error.code === "42P01" || error.code === "42703") {
+      return seedRows;
+    }
+
+    throw error;
+  }
+
+  return mergeRowsById(seedRows, (data ?? []) as PlannerTryoutRecordRow[]);
+}
+
 async function applyActiveGymSeasonStateToFoundation(
   workspaceRoot: WorkspaceRoot,
   rawTeamRows: TeamRow[],
@@ -680,17 +786,26 @@ async function applyActiveGymSeasonStateToFoundation(
 
 export async function listRemotePlannerFoundation(
   session: Pick<AuthSession, "role" | "userId" | "primaryGymId">,
-  scopeInput: PlannerWorkspaceScope | string
+  scopeInput: PlannerWorkspaceScope | string | (PlannerAccessContext & { scopeContext?: PlannerScopeContext })
 ): Promise<PlannerRemoteFoundationSnapshot> {
-  const scope = parsePlannerWorkspaceScope(scopeInput);
-  const workspaceRoot = await resolveWorkspaceRoot(session as AuthSession, scope);
+  const accessContext = typeof scopeInput === "object"
+    ? scopeInput
+    : null;
+  const scope = accessContext?.dataScope ?? parsePlannerWorkspaceScope(scopeInput);
+  const resolverSession = {
+    ...session,
+    primaryGymId: scope === "gym"
+      ? accessContext?.gymId ?? session.primaryGymId ?? null
+      : session.primaryGymId ?? null
+  } as AuthSession;
+  const workspaceRoot = await resolveWorkspaceRoot(resolverSession, scope);
   const workspaceId = buildWorkspaceId(workspaceRoot);
   const plannerProjectRow = await ensurePlannerProjectRow(workspaceRoot);
   const plannerProject = plannerProjectRow
     ? buildPlannerProjectFromRow(plannerProjectRow, workspaceId)
     : buildDefaultPlannerProject(buildFallbackScopeContext(workspaceRoot));
 
-  const [rawTeamRows, rawAssignmentRows, rawAthleteRows, rawEvaluationRows, rawSkillPlanRows, rawRoutinePlanRows, rawSeasonPlanRows, syncMetadata] = await Promise.all([
+  const [rawTeamRows, rawAssignmentRows, baseAthleteRows, rawEvaluationRows, rawSkillPlanRows, rawRoutinePlanRows, rawSeasonPlanRows, syncMetadata] = await Promise.all([
     listWorkspaceRows<TeamRow>("teams", workspaceRoot.id),
     listWorkspaceRows<AthleteAssignmentRow>("athlete_team_assignments", workspaceRoot.id),
     listWorkspaceRows<AthleteRow>("athletes", workspaceRoot.id),
@@ -703,12 +818,24 @@ export async function listRemotePlannerFoundation(
 
   let teamRows = rawTeamRows;
   let assignmentRows = rawAssignmentRows;
-  let athleteRows = rawAthleteRows;
-  let evaluationRows = rawEvaluationRows;
+  let rawAthleteRows = baseAthleteRows;
+  let rawTryoutRows = rawEvaluationRows;
   let skillPlanRows = rawSkillPlanRows;
   let routinePlanRows = rawRoutinePlanRows;
   let seasonPlanRows = rawSeasonPlanRows;
   const admin = createAdminClient();
+
+  if (scope === "gym") {
+    rawAthleteRows = await listGymPermanentAthleteRows(admin, workspaceRoot, rawAthleteRows);
+    rawTryoutRows = await listTryoutRowsForAthletes(
+      admin,
+      rawAthleteRows.map((athlete) => athlete.id),
+      rawTryoutRows
+    );
+  }
+
+  let athleteRows = rawAthleteRows;
+  let evaluationRows = rawTryoutRows;
   const activeGymSeasonState = scope === "gym" && workspaceRoot.gymId
     ? await loadActiveGymTeamSeasonState(admin, workspaceRoot.gymId, session.userId)
     : null;
@@ -725,50 +852,12 @@ export async function listRemotePlannerFoundation(
   assignmentRows = seasonalFoundation.assignmentRows;
   athleteRows = seasonalFoundation.athleteRows;
 
-  if (scope === "gym" && session.role !== "admin") {
-    const access = await resolveGymAccessContext(session as AuthSession);
-
-    if (!canManageGymAdministration(access)) {
-      const scopedTeamRows = access?.accessLevel === "team-write" || access?.accessLevel === "read"
-        ? teamRows
-        : [];
-      const scopedTeamIds = scopedTeamRows.map((team) => team.id);
-      const { data: assignedTeamData } = teamCoachRowsOverride
-        ? {
-          data: teamCoachRowsOverride
-            .filter((coach) => scopedTeamIds.includes(coach.team_id) && coach.coach_profile_id === session.userId)
-            .map((coach) => ({ team_id: coach.team_id }))
-        }
-        : scopedTeamIds.length
-          ? await admin
-            .from("team_coaches" as never)
-            .select("team_id" as never)
-            .in("team_id", scopedTeamIds as never)
-            .eq("coach_profile_id", session.userId as never)
-          : { data: [] as unknown[] };
-      const visibleTeamIds = new Set(
-        ((assignedTeamData ?? []) as Array<{ team_id: string }>)
-          .map((row) => row.team_id)
-          .filter(Boolean)
-      );
-
-      for (const team of scopedTeamRows) {
-        if (team.primary_coach_profile_id === session.userId) {
-          visibleTeamIds.add(team.id);
-        }
-      }
-
-      teamRows = scopedTeamRows.filter((team) => visibleTeamIds.has(team.id));
-      assignmentRows = assignmentRows.filter((assignment) => visibleTeamIds.has(assignment.team_id));
-
-      const visibleAthleteIds = new Set(assignmentRows.map((assignment) => assignment.athlete_id));
-      athleteRows = athleteRows.filter((athlete) => visibleAthleteIds.has(athlete.id));
-      evaluationRows = evaluationRows.filter((evaluation) => visibleAthleteIds.has(evaluation.athlete_id));
-      skillPlanRows = skillPlanRows.filter((plan) => visibleTeamIds.has(plan.team_id));
-      routinePlanRows = routinePlanRows.filter((plan) => visibleTeamIds.has(plan.team_id));
-      seasonPlanRows = seasonPlanRows.filter((plan) => visibleTeamIds.has(plan.team_id));
-      teamCoachRowsOverride = teamCoachRowsOverride?.filter((coach) => visibleTeamIds.has(coach.team_id)) ?? null;
-    }
+  if (scope === "gym") {
+    evaluationRows = await listTryoutRowsForAthletes(
+      admin,
+      athleteRows.map((athlete) => athlete.id),
+      evaluationRows
+    );
   }
 
   const teamIds = teamRows.map((team) => team.id);
@@ -801,6 +890,53 @@ export async function listRemotePlannerFoundation(
   return {
     workspaceRoot,
     plannerProject,
+    permissions: accessContext
+      ? {
+        uiWorkspace: accessContext.uiWorkspace,
+        dataScope: accessContext.dataScope,
+        gymId: accessContext.gymId,
+        seatRole: accessContext.seatRole,
+        accessLevel: accessContext.accessLevel,
+        canOpenGymWorkspace: accessContext.canOpenGymWorkspace,
+        canReadPlanner: accessContext.canReadPlanner,
+        canConfigureTryouts: accessContext.canConfigureTryouts,
+        canManageAthletes: accessContext.canManageAthletes,
+        canSaveTryoutRecords: accessContext.canSaveTryoutRecords,
+        canEditTeamBuilder: accessContext.canEditTeamBuilder,
+        canCreateTeams: accessContext.canCreateTeams,
+        canEditTeams: accessContext.canEditTeams,
+        canAssignRosters: accessContext.canAssignRosters,
+        canDeleteTeams: accessContext.canDeleteTeams,
+        canRestoreTrash: accessContext.canRestoreTrash,
+        canEditSkillPlanner: accessContext.canEditSkillPlanner,
+        canEditRoutineBuilder: accessContext.canEditRoutineBuilder,
+        canEditSeasonPlanner: accessContext.canEditSeasonPlanner,
+        canEditSeasonManualEntries: accessContext.canEditSeasonManualEntries,
+        editablePlanningTeamIds: accessContext.editablePlanningTeamIds
+      }
+      : {
+        uiWorkspace: scope,
+        dataScope: scope,
+        gymId: workspaceRoot.gymId,
+        seatRole: null,
+        accessLevel: "full",
+        canOpenGymWorkspace: scope === "gym",
+        canReadPlanner: true,
+        canConfigureTryouts: true,
+        canManageAthletes: true,
+        canSaveTryoutRecords: true,
+        canEditTeamBuilder: scope === "gym",
+        canCreateTeams: scope === "gym",
+        canEditTeams: scope === "gym",
+        canAssignRosters: scope === "gym",
+        canDeleteTeams: scope === "gym",
+        canRestoreTrash: scope === "gym",
+        canEditSkillPlanner: true,
+        canEditRoutineBuilder: true,
+        canEditSeasonPlanner: true,
+        canEditSeasonManualEntries: true,
+        editablePlanningTeamIds: []
+      },
     assignments: assignmentRows.map((row) => {
       const versionedRow = row as AthleteAssignmentRow & VersionedRow & { updated_at?: string };
 

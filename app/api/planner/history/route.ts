@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { getPlannerScopeContext, requirePlannerSession } from "@/lib/services/planner-api-access";
+import { getPlannerAccessContext, plannerAccessForbidden, requirePlannerSession } from "@/lib/services/planner-api-access";
 import { listPlannerHistory } from "@/lib/services/planner-command-service";
 
 function parseLimit(value: string | null) {
@@ -16,8 +16,13 @@ export async function GET(request: NextRequest) {
       return error!;
     }
 
-    const scope = getPlannerScopeContext(request, session);
-    const result = await listPlannerHistory(session, scope.scope, {
+    const access = await getPlannerAccessContext(request, session);
+
+    if (!access.canReadPlanner) {
+      return plannerAccessForbidden("You do not have access to planner history.");
+    }
+
+    const result = await listPlannerHistory(session, access.dataScope, {
       workspaceRootId: request.nextUrl.searchParams.get("workspaceRootId"),
       entityType: request.nextUrl.searchParams.get("entityType"),
       entityId: request.nextUrl.searchParams.get("entityId"),

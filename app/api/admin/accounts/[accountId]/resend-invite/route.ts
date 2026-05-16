@@ -1,0 +1,72 @@
+import { NextResponse } from "next/server";
+
+import { getAuthSession } from "@/lib/auth/session";
+import { getServerEnv } from "@/lib/config/env";
+import { createAdminClient } from "@/lib/supabase/admin";
+import type { Database } from "@/lib/types/database";
+
+export const dynamic = "force-dynamic";
+
+type ProfileRow = Pick<Database["public"]["Tables"]["profiles"]["Row"], "email" | "display_name" | "role">;
+
+function isAlreadyRegisteredError(message: string) {
+  return /already registered|already exists|already been registered|user already/i.test(message);
+}
+
+export async function POST(
+  _request: Request,
+  context: { params: Promise<{ accountId: string }> }
+) {
+  try {
+    const session = await getAuthSession();
+
+    if (!session?.roles.includes("admin")) {
+      return NextResponse.json({ error: "Admin access is required." }, { status: 403 });
+    }
+
+    const { accountId } = await context.params;
+    const admin = createAdminClient();
+    const { data, error } = await admin
+      .from("profiles" as never)
+      .select("email, display_name, role" as never)
+      .eq("id", accountId as never)
+      .maybeSingle();
+
+    if (error) {
+      return NextResponse.json({ error: "Unable to load account profile." }, { status: 500 });
+    }
+
+    const profile = data as ProfileRow | null;
+
+    if (!profile?.email) {
+      return NextResponse.json({ error: "Account email was not found." }, { status: 404 });
+    }
+
+    const env = getServerEnv();
+    const inviteResult = await admin.auth.admin.inviteUserByEmail(profile.email, {
+      redirectTo: `${env.NEXT_PUBLIC_APP_URL}/auth/activate`,
+      data: {
+        display_name: profile.display_name ?? profile.email,
+        role: profile.role,
+        invited_by_profile_id: session.userId,
+        source: "admin-account-resend-invite"
+      }
+    });
+
+    if (inviteResult.error) {
+      if (isAlreadyRegisteredError(inviteResult.error.message)) {
+        return NextResponse.json(
+          { error: "This account is already registered. Send a password reset link instead." },
+          { status: 409 }
+        );
+      }
+
+      return NextResponse.json({ error: inviteResult.error.message }, { status: 400 });
+    }
+
+    return NextResponse.json({ message: "Invitation email sent." });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unexpected invite resend failure.";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}

@@ -153,6 +153,7 @@ export function CheerPlannerShell({ integration, capabilities, registrationNumbe
       {workspaceTab === "skill-planner" ? (
         <SkillPlannerSurface
           readOnly={!capabilities.canEditSkillPlanner}
+          canEditTeam={integration.canEditPlanningTeam}
           teams={integration.skillPlannerTeams}
           skillPlannerDraft={integration.skillPlannerDraft}
           openSkillPlannerTeam={integration.openSkillPlannerTeam}
@@ -167,6 +168,7 @@ export function CheerPlannerShell({ integration, capabilities, registrationNumbe
       {workspaceTab === "routine-builder" ? (
         <RoutineBuilderSurface
           readOnly={!capabilities.canEditRoutineBuilder}
+          canEditTeam={integration.canEditPlanningTeam}
           teams={integration.routineBuilderTeams}
           routineBuilderDraft={integration.routineBuilderDraft}
           openRoutineBuilderTeam={integration.openRoutineBuilderTeam}
@@ -180,6 +182,7 @@ export function CheerPlannerShell({ integration, capabilities, registrationNumbe
         <SeasonPlannerSurface
           canEdit={capabilities.canEditSeasonPlanner}
           canEditManualEntries={capabilities.canEditSeasonManualEntries}
+          canEditTeam={integration.canEditPlanningTeam}
           teams={integration.seasonPlannerTeams}
           seasonPlannerDraft={integration.seasonPlannerDraft}
           openSeasonPlannerTeam={integration.openSeasonPlannerTeam}

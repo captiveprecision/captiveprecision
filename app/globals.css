@@ -2746,8 +2746,12 @@
 
 .landing-forgot-password-link,
 .password-reset-back-link {
+  padding: 0;
+  border: 0;
+  background: transparent;
   justify-self: center;
   color: var(--cp-color-gray-500);
+  cursor: pointer;
   font-size: 13px;
   font-weight: 800;
   text-decoration: none;
@@ -2945,6 +2949,10 @@
   gap: 10px;
 }
 
+.admin-account-card__headline .ui-button {
+  margin-left: auto;
+}
+
 .admin-account-card__headline h3,
 .admin-account-card__body p {
   margin: 0;
@@ -3047,6 +3055,51 @@
   color: var(--cp-muted);
 }
 
+.admin-account-manage-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.admin-account-manage-summary > div,
+.admin-account-risk-confirm {
+  padding: 12px;
+  border: 1px solid var(--cp-border);
+  border-radius: var(--cp-radius-control);
+  background: #fafafa;
+}
+
+.admin-account-manage-summary > div {
+  display: grid;
+  gap: 4px;
+}
+
+.admin-account-manage-summary strong {
+  overflow-wrap: anywhere;
+  font-size: 14px;
+}
+
+.admin-account-risk-confirm {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: flex-start;
+  background: #fff0ee;
+  color: #9f3028;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.admin-account-risk-confirm input {
+  margin-top: 2px;
+}
+
+.admin-account-secondary-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
 .admin-account-modal__actions {
   display: flex;
   justify-content: flex-end;
@@ -3137,6 +3190,7 @@
   .admin-beta-row,
   .admin-beta-row__actions,
   .admin-accounts-hero,
+  .admin-account-manage-summary,
   .admin-account-modal__grid {
     grid-template-columns: 1fr;
   }
@@ -3687,6 +3741,195 @@
   gap: 4px;
 }
 
+.planner-athlete-pool-card-content,
+.planner-athlete-pool-expanded,
+.planner-athlete-pool-contact-list,
+.planner-athlete-pool-contact {
+  display: grid;
+}
+
+.planner-athlete-pool-card-content {
+  gap: 14px;
+}
+
+.planner-athlete-pool-row {
+  transition:
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    background-color 140ms ease;
+}
+
+.planner-athlete-pool-row.is-expanded {
+  border-color: rgba(15, 15, 15, 0.22);
+  background: #ffffff;
+}
+
+.planner-athlete-pool-toggle {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  min-width: 0;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.planner-athlete-pool-toggle:focus-visible {
+  outline: none;
+  border-radius: var(--cp-radius-control);
+  box-shadow: var(--cp-focus-ring);
+}
+
+.planner-athlete-pool-summary-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  color: var(--cp-muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.planner-athlete-pool-expand-indicator {
+  flex: 0 0 auto;
+  color: var(--cp-muted);
+  font-size: 11px;
+  font-weight: var(--cp-font-weight-bold);
+  letter-spacing: var(--cp-letter-spacing-label);
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+
+.planner-athlete-pool-toggle:hover .planner-athlete-pool-expand-indicator,
+.planner-athlete-pool-toggle:focus-visible .planner-athlete-pool-expand-indicator {
+  color: var(--cp-color-black);
+}
+
+.planner-athlete-pool-row__content .planner-athlete-assign-field {
+  flex: 0 0 min(240px, 100%);
+  width: min(240px, 100%);
+}
+
+.planner-athlete-pool-table {
+  min-width: 0;
+}
+
+.planner-athlete-pool-table th:first-child,
+.planner-athlete-pool-table td:first-child {
+  width: 34%;
+}
+
+.planner-athlete-pool-table th:nth-child(2),
+.planner-athlete-pool-table td:nth-child(2) {
+  width: 18%;
+}
+
+.planner-athlete-pool-table th:nth-child(3),
+.planner-athlete-pool-table td:nth-child(3) {
+  width: 22%;
+}
+
+.planner-athlete-pool-table th:nth-child(4),
+.planner-athlete-pool-table td:nth-child(4) {
+  width: 26%;
+}
+
+.planner-athlete-pool-table td {
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.planner-team-table {
+  min-width: 0;
+}
+
+.planner-team-table th:first-child,
+.planner-team-table td:first-child {
+  width: 52%;
+}
+
+.planner-team-table th:nth-child(2),
+.planner-team-table td:nth-child(2) {
+  width: 28%;
+}
+
+.planner-team-table th:nth-child(3),
+.planner-team-table td:nth-child(3) {
+  width: 20%;
+}
+
+.planner-team-table td {
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.planner-athlete-pool-detail-row td {
+  padding-top: 0;
+}
+
+.planner-team-detail-row td {
+  padding-top: 0;
+}
+
+.planner-athlete-pool-expanded {
+  gap: 14px;
+  padding-top: 16px;
+}
+
+.planner-team-table-detail {
+  display: grid;
+  gap: 14px;
+  padding-top: 16px;
+}
+
+.planner-team-table-actions {
+  padding: 12px 14px;
+  border: 1px solid var(--cp-border);
+  border-radius: var(--cp-radius-card-sm);
+  background: var(--cp-color-white);
+}
+
+.planner-athlete-pool-expanded-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.planner-athlete-pool-assign-panel {
+  display: grid;
+  justify-items: start;
+  padding: 12px 14px;
+  border: 1px solid var(--cp-border);
+  border-radius: var(--cp-radius-card-sm);
+  background: var(--cp-color-white);
+}
+
+.planner-athlete-pool-assign-panel .planner-athlete-assign-field {
+  width: min(100%, 320px);
+}
+
+.planner-athlete-pool-contact-list {
+  gap: 8px;
+}
+
+.planner-athlete-pool-contact {
+  gap: 2px;
+}
+
+.planner-athlete-pool-contact span {
+  color: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  letter-spacing: 0;
+  line-height: 1.4;
+  text-transform: none;
+}
+
 .planner-athlete-pool-copy p,
 .planner-team-card p,
 .planner-team-member-row p,
@@ -3758,6 +4001,24 @@
   .planner-team-summary-row {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .planner-athlete-pool-toggle {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .planner-athlete-pool-expand-indicator {
+    align-self: flex-start;
+  }
+
+  .planner-athlete-pool-row__content .planner-athlete-assign-field {
+    flex: 1 1 auto;
+    width: 100%;
+  }
+
+  .planner-athlete-pool-expanded-grid {
+    grid-template-columns: 1fr;
   }
 
 }
@@ -4839,6 +5100,17 @@
   margin: 0;
   line-height: 1.45;
   word-break: break-word;
+}
+
+.planner-athlete-detail-row .planner-athlete-pool-contact-list,
+.planner-athlete-detail-row .planner-athlete-pool-contact,
+.planner-athlete-detail-row .planner-athlete-pool-contact span {
+  color: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  letter-spacing: 0;
+  line-height: 1.4;
+  text-transform: none;
 }
 
 .planner-parent-contact-card {

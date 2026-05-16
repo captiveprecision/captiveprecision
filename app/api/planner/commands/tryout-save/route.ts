@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { requireCheerPlannerPremium } from "@/lib/access/membership";
-import { getPlannerScopeContext, requirePlannerSession } from "@/lib/services/planner-api-access";
-import { canScopeWritePlannerCommand } from "@/lib/services/planner-capabilities";
+import { getPlannerAccessContext, plannerAccessForbidden, requirePlannerSession } from "@/lib/services/planner-api-access";
 import { getPlannerCommandError, savePlannerTryoutRecordCommand } from "@/lib/services/planner-command-service";
 
 function asString(value: unknown) {
@@ -24,15 +23,15 @@ export async function POST(request: NextRequest) {
     }
 
     const payload = await request.json().catch(() => null) as Record<string, unknown> | null;
-    const scope = getPlannerScopeContext(request, session, typeof payload?.scope === "string" ? payload.scope : null);
-    const premiumError = await requireCheerPlannerPremium(session, scope);
+    const access = await getPlannerAccessContext(request, session, typeof payload?.scope === "string" ? payload.scope : null);
+    const premiumError = await requireCheerPlannerPremium(session, access.scopeContext);
 
     if (premiumError) {
       return premiumError;
     }
 
-    if (!canScopeWritePlannerCommand(scope.scope, "tryout-save")) {
-      return NextResponse.json({ error: "Gym workspaces can review tryouts, but cannot save new tryout evaluations." }, { status: 403 });
+    if (!access.canSaveTryoutRecords) {
+      return plannerAccessForbidden("This account can review tryouts, but cannot save new tryout records.");
     }
 
     const tryoutRecord = asObject(payload?.payload) ?? asObject(payload);
@@ -41,7 +40,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "A valid tryout record payload is required." }, { status: 400 });
     }
 
-    const result = await savePlannerTryoutRecordCommand(session, scope.scope, {
+    const result = await savePlannerTryoutRecordCommand(session, access.dataScope, {
       workspaceRootId: typeof tryoutRecord.workspaceRootId === "string" ? tryoutRecord.workspaceRootId : null,
       expectedLockVersion: typeof tryoutRecord.expectedLockVersion === "number" ? tryoutRecord.expectedLockVersion : null,
       tryoutRecordId: asString(tryoutRecord.tryoutRecordId ?? tryoutRecord.id),

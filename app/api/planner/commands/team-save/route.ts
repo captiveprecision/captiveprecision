@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { requireCheerPlannerPremium } from "@/lib/access/membership";
-import { canAdministerPlannerGymScope, canEditTeamForSession, getPlannerScopeContext, requirePlannerSession } from "@/lib/services/planner-api-access";
+import { getPlannerAccessContext, plannerAccessForbidden, requirePlannerSession } from "@/lib/services/planner-api-access";
 import { getPlannerCommandError, savePlannerTeamCommand } from "@/lib/services/planner-command-service";
 
 function asString(value: unknown) {
@@ -25,8 +25,8 @@ export async function POST(request: NextRequest) {
     }
 
     const payload = await request.json().catch(() => null) as Record<string, unknown> | null;
-    const scope = getPlannerScopeContext(request, session, typeof payload?.scope === "string" ? payload.scope : null);
-    const premiumError = await requireCheerPlannerPremium(session, scope);
+    const access = await getPlannerAccessContext(request, session, typeof payload?.scope === "string" ? payload.scope : null);
+    const premiumError = await requireCheerPlannerPremium(session, access.scopeContext);
 
     if (premiumError) {
       return premiumError;
@@ -34,17 +34,11 @@ export async function POST(request: NextRequest) {
 
     const teamId = asString(payload?.teamId) || null;
 
-    if (scope.scope === "gym") {
-      const canSaveTeam = teamId
-        ? await canEditTeamForSession(teamId, session, scope)
-        : await canAdministerPlannerGymScope(session, scope);
-
-      if (!canSaveTeam) {
-        return NextResponse.json({ error: "You do not have permission to save this Gym team." }, { status: 403 });
-      }
+    if (!access.canEditTeamBuilder) {
+      return plannerAccessForbidden("Only Gym workspace administrators can save Team Builder teams.");
     }
 
-    const result = await savePlannerTeamCommand(session, scope.scope, {
+    const result = await savePlannerTeamCommand(session, access.dataScope, {
       workspaceRootId: typeof payload?.workspaceRootId === "string" ? payload.workspaceRootId : null,
       expectedLockVersion: typeof payload?.expectedLockVersion === "number" ? payload.expectedLockVersion : null,
       teamId,

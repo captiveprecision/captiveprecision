@@ -9,6 +9,7 @@ import type { CheerPlannerIntegration } from "@/lib/services/planner-integration
 
 type RoutineBuilderSurfaceProps = {
   readOnly?: boolean;
+  canEditTeam?: (teamId: string) => boolean;
   teams: CheerPlannerIntegration["routineBuilderTeams"];
   routineBuilderDraft: CheerPlannerIntegration["routineBuilderDraft"];
   openRoutineBuilderTeam: (teamId: string) => void | Promise<void>;
@@ -21,6 +22,7 @@ type RoutineBuilderSurfaceProps = {
 export function RoutineBuilderSurface(props: RoutineBuilderSurfaceProps) {
   const {
     readOnly = false,
+    canEditTeam = () => true,
     teams,
     routineBuilderDraft,
     openRoutineBuilderTeam,
@@ -66,6 +68,7 @@ export function RoutineBuilderSurface(props: RoutineBuilderSurfaceProps) {
               const editorSkills = buildRoutineBuilderSkillDefinitions(team, effectiveDocument);
               const persistedCount = team.routinePlan?.items.length ?? 0;
               const currentCount = effectiveDocument.placements.length;
+              const teamCanEdit = !readOnly && canEditTeam(team.teamId);
 
               return (
                 <Card key={team.teamId} variant="subtle" className="planner-team-card">
@@ -80,7 +83,7 @@ export function RoutineBuilderSurface(props: RoutineBuilderSurfaceProps) {
                           <Badge variant={team.skillPlan ? "accent" : "subtle"}>{team.skillPlan ? `Skills ${team.skillPlan.status.charAt(0).toUpperCase()}${team.skillPlan.status.slice(1)}` : "No Skill Plan"}</Badge>
                           <Badge variant={team.routinePlan ? "dark" : "subtle"}>{team.routinePlan ? `Routine ${team.routinePlan.status.charAt(0).toUpperCase()}${team.routinePlan.status.slice(1)}` : "No Routine Plan"}</Badge>
                         </div>
-                        {isEditing && !readOnly ? (
+                        {isEditing && teamCanEdit ? (
                           <>
                             <Button size="sm" onClick={() => void saveRoutineBuilderEdit()} disabled={isSavingAction("routine-plan")}>
                               {isSavingAction("routine-plan") ? "Saving..." : "Save"}
@@ -97,7 +100,7 @@ export function RoutineBuilderSurface(props: RoutineBuilderSurfaceProps) {
                             >
                               {isSelected ? "Hide Details" : "View Team"}
                             </Button>
-                            {!readOnly ? (
+                            {teamCanEdit ? (
                               <Button
                                 variant="ghost"
                                 size="sm"
@@ -124,7 +127,7 @@ export function RoutineBuilderSurface(props: RoutineBuilderSurfaceProps) {
                           teamName={team.teamName}
                           initialDocument={effectiveDocument}
                           skills={editorSkills}
-                          readOnly={!isEditing || readOnly}
+                          readOnly={!isEditing || !teamCanEdit}
                           onDocumentChange={updateRoutineBuilderDocument}
                         />
                       </div>

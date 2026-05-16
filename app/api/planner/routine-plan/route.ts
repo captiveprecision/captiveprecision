@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { deriveRoutineItemsFromDocument, normalizeRoutineDocument } from "@/lib/services/planner-routine-builder";
-import { getPlannerScopeContext, requirePlannerSession, canEditTeamForSession } from "@/lib/services/planner-api-access";
+import { canEditPlanningTeamForAccess, getPlannerAccessContext, plannerAccessForbidden, requirePlannerSession } from "@/lib/services/planner-api-access";
 import { requireCheerPlannerPremium } from "@/lib/access/membership";
-import { canScopeWritePlannerCommand } from "@/lib/services/planner-capabilities";
 import { getPlannerCommandError, savePlannerRoutinePlanCommand } from "@/lib/services/planner-command-service";
 
 type RoutinePlanPayload = {
@@ -31,15 +30,11 @@ export async function POST(request: NextRequest) {
     }
 
     const payload = await request.json().catch(() => null) as RoutinePlanPayload | null;
-    const scope = getPlannerScopeContext(request, session, payload?.scope ?? null);
-    const premiumError = await requireCheerPlannerPremium(session, scope);
+    const access = await getPlannerAccessContext(request, session, payload?.scope ?? null);
+    const premiumError = await requireCheerPlannerPremium(session, access.scopeContext);
 
     if (premiumError) {
       return premiumError;
-    }
-
-    if (!canScopeWritePlannerCommand(scope.scope, "routine-plan-save")) {
-      return NextResponse.json({ error: "Gym workspaces can review routines, but cannot edit them from Cheer Planner." }, { status: 403 });
     }
 
     const teamId = asString(payload?.teamId);
@@ -50,12 +45,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "A team id is required to save a routine plan." }, { status: 400 });
     }
 
-    if (!(await canEditTeamForSession(teamId, session, scope))) {
-      return NextResponse.json({ error: "You do not have access to edit this routine plan." }, { status: 403 });
+    if (!access.canEditRoutineBuilder || !canEditPlanningTeamForAccess(access, teamId)) {
+      return plannerAccessForbidden("You do not have access to edit this routine plan.");
     }
 
     const document = normalizeRoutineDocument(payload?.document as Parameters<typeof normalizeRoutineDocument>[0], "Untitled routine");
-    const result = await savePlannerRoutinePlanCommand(session, scope.scope, {
+    const result = await savePlannerRoutinePlanCommand(session, access.dataScope, {
       workspaceRootId: typeof (payload as Record<string, unknown> | null)?.workspaceRootId === "string"
         ? (payload as Record<string, unknown>).workspaceRootId as string
         : null,

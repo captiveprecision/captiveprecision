@@ -17,7 +17,7 @@ export function CheerPlannerTryouts({
   return (
     <CheerPlannerShell
       integration={integration}
-      capabilities={buildCheerPlannerCapabilities(scope)}
+      capabilities={buildCheerPlannerCapabilities(scope, integration.plannerAccess)}
       registrationNumberMode={registrationNumberMode}
     />
   );

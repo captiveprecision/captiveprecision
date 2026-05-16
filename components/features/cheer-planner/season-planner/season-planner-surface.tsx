@@ -9,6 +9,7 @@ import type { CheerPlannerIntegration } from "@/lib/services/planner-integration
 type SeasonPlannerSurfaceProps = {
   canEdit?: boolean;
   canEditManualEntries?: boolean;
+  canEditTeam?: (teamId: string) => boolean;
   teams: CheerPlannerIntegration["seasonPlannerTeams"];
   seasonPlannerDraft: CheerPlannerIntegration["seasonPlannerDraft"];
   openSeasonPlannerTeam: (teamId: string) => void;
@@ -44,6 +45,7 @@ export function SeasonPlannerSurface(props: SeasonPlannerSurfaceProps) {
   const {
     canEdit = true,
     canEditManualEntries = true,
+    canEditTeam = () => true,
     teams,
     seasonPlannerDraft,
     openSeasonPlannerTeam,
@@ -73,6 +75,8 @@ export function SeasonPlannerSurface(props: SeasonPlannerSurfaceProps) {
                 ? seasonPlannerDraft.checkpoints.filter((checkpoint) => checkpoint.selected).length
                 : (team.seasonPlan?.checkpoints.length ?? 0);
               const persistedManualEntries = team.seasonPlan?.manualEntries ?? [];
+              const teamCanEdit = canEdit && canEditTeam(team.teamId);
+              const teamCanEditManualEntries = teamCanEdit && canEditManualEntries;
 
               return (
                 <Card key={team.teamId} variant="subtle" className="planner-team-card">
@@ -87,14 +91,14 @@ export function SeasonPlannerSurface(props: SeasonPlannerSurfaceProps) {
                           <Badge variant={team.routinePlan ? "accent" : "subtle"}>{team.routinePlan ? `Routine ${team.routinePlan.status.charAt(0).toUpperCase()}${team.routinePlan.status.slice(1)}` : "No Routine"}</Badge>
                           <Badge variant={team.seasonPlan ? "dark" : "subtle"}>{team.seasonPlan ? `Season ${team.seasonPlan.status.charAt(0).toUpperCase()}${team.seasonPlan.status.slice(1)}` : "No Season Plan"}</Badge>
                         </div>
-                        {isEditing && canEdit ? (
+                        {isEditing && teamCanEdit ? (
                           <>
                             <Button size="sm" onClick={saveSeasonPlannerEdit} disabled={isSavingAction("season-plan")}>
                               {isSavingAction("season-plan") ? "Saving..." : "Save"}
                             </Button>
                             <Button variant="secondary" size="sm" onClick={cancelSeasonPlannerEdit}>Cancel</Button>
                           </>
-                        ) : canEdit && (team.availableCheckpoints.length || canEditManualEntries) ? (
+                        ) : teamCanEdit && (team.availableCheckpoints.length || teamCanEditManualEntries) ? (
                           <Button variant="ghost" size="sm" leadingIcon={<Pencil />} onClick={() => openSeasonPlannerTeam(team.teamId)}>Edit team</Button>
                         ) : null}
                       </div>
@@ -117,7 +121,7 @@ export function SeasonPlannerSurface(props: SeasonPlannerSurfaceProps) {
                                 <input
                                   type="checkbox"
                                   checked={checkpoint.selected}
-                                  disabled={!canEdit}
+                                  disabled={!teamCanEdit}
                                   onChange={() => toggleSeasonPlannerCheckpoint(checkpoint.id)}
                                 />
                               </label>
@@ -127,13 +131,13 @@ export function SeasonPlannerSurface(props: SeasonPlannerSurfaceProps) {
                                     type="date"
                                     label="Completion Date"
                                     value={checkpoint.targetDate}
-                                    disabled={!canEdit}
+                                    disabled={!teamCanEdit}
                                     onChange={(event) => updateSeasonPlannerCheckpoint(checkpoint.id, "targetDate", event.target.value)}
                                   />
                                   <Select
                                     label="Status"
                                     value={checkpoint.status}
-                                    disabled={!canEdit}
+                                    disabled={!teamCanEdit}
                                     onChange={(event) => updateSeasonPlannerCheckpoint(checkpoint.id, "status", event.target.value)}
                                   >
                                     <option value="planned">Planned</option>
@@ -145,7 +149,7 @@ export function SeasonPlannerSurface(props: SeasonPlannerSurfaceProps) {
                                     rows={2}
                                     containerClassName="planner-athlete-grid-wide"
                                     value={checkpoint.notes}
-                                    disabled={!canEdit}
+                                    disabled={!teamCanEdit}
                                     onChange={(event) => updateSeasonPlannerCheckpoint(checkpoint.id, "notes", event.target.value)}
                                   />
                                 </div>
@@ -171,7 +175,7 @@ export function SeasonPlannerSurface(props: SeasonPlannerSurfaceProps) {
                       <SectionHeader
                         eyebrow="Timeline"
                         title="Manual Season Entries"
-                        actions={isEditing && canEditManualEntries ? (
+                        actions={isEditing && teamCanEditManualEntries ? (
                           <div className="planner-inline-actions">
                             {MANUAL_ENTRY_TYPES.map((entryType) => (
                               <Button
@@ -196,7 +200,7 @@ export function SeasonPlannerSurface(props: SeasonPlannerSurfaceProps) {
                                 <Select
                                   label="Type"
                                   value={entry.type}
-                                  disabled={!canEditManualEntries}
+                                  disabled={!teamCanEditManualEntries}
                                   onChange={(event) => updateSeasonPlannerManualEntry(entry.id, "type", event.target.value)}
                                 >
                                   {MANUAL_ENTRY_TYPES.map((entryType) => (
@@ -206,20 +210,20 @@ export function SeasonPlannerSurface(props: SeasonPlannerSurfaceProps) {
                                 <Input
                                   label="Title"
                                   value={entry.title}
-                                  disabled={!canEditManualEntries}
+                                  disabled={!teamCanEditManualEntries}
                                   onChange={(event) => updateSeasonPlannerManualEntry(entry.id, "title", event.target.value)}
                                 />
                                 <Input
                                   type="date"
                                   label="Date"
                                   value={entry.targetDate ?? ""}
-                                  disabled={!canEditManualEntries}
+                                  disabled={!teamCanEditManualEntries}
                                   onChange={(event) => updateSeasonPlannerManualEntry(entry.id, "targetDate", event.target.value)}
                                 />
                                 <Select
                                   label="Status"
                                   value={entry.status}
-                                  disabled={!canEditManualEntries}
+                                  disabled={!teamCanEditManualEntries}
                                   onChange={(event) => updateSeasonPlannerManualEntry(entry.id, "status", event.target.value)}
                                 >
                                   <option value="planned">Planned</option>
@@ -231,11 +235,11 @@ export function SeasonPlannerSurface(props: SeasonPlannerSurfaceProps) {
                                   rows={2}
                                   containerClassName="planner-athlete-grid-wide"
                                   value={entry.notes}
-                                  disabled={!canEditManualEntries}
+                                  disabled={!teamCanEditManualEntries}
                                   onChange={(event) => updateSeasonPlannerManualEntry(entry.id, "notes", event.target.value)}
                                 />
                               </div>
-                              {canEditManualEntries ? (
+                              {teamCanEditManualEntries ? (
                                 <div className="planner-inline-actions">
                                   <Button type="button" variant="ghost" size="sm" leadingIcon={<Trash2 />} onClick={() => removeSeasonPlannerManualEntry(entry.id)}>
                                     Remove
