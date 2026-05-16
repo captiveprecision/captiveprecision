@@ -14,6 +14,7 @@ type WorkspaceRootRow = {
   gym_id: string | null;
   owner_profile_id: string | null;
 };
+type GymLicenseProfileRow = Pick<Database["public"]["Tables"]["gym_coach_licenses"]["Row"], "coach_profile_id">;
 type AthleteRow = Pick<Database["public"]["Tables"]["athletes"]["Row"], "id" | "first_name" | "last_name" | "birth_date" | "registration_number" | "notes" | "parent_contacts" | "metadata" | "created_at">;
 type TeamRow = Pick<Database["public"]["Tables"]["teams"]["Row"], "id" | "name">;
 type GymSeasonRow = Pick<Database["public"]["Tables"]["gym_seasons"]["Row"], "id" | "label" | "season_number">;
@@ -107,17 +108,30 @@ async function resolveRelatedWorkspaceRootIds(
   gymId: string,
   ownerProfileId: string | null
 ) {
-  const { data: workspaceRoots } = ownerProfileId
+  const { data: licenseRows } = await admin
+    .from("gym_coach_licenses" as never)
+    .select("coach_profile_id" as never)
+    .eq("gym_id", gymId as never)
+    .eq("status", "active" as never);
+  const ownerProfileIds = Array.from(new Set([
+    ownerProfileId,
+    ...((licenseRows ?? []) as GymLicenseProfileRow[]).map((row) => row.coach_profile_id)
+  ].filter((value): value is string => Boolean(value))));
+  const { data: gymRoots } = await admin
+    .from("workspace_roots" as never)
+    .select("id, scope_type, gym_id, owner_profile_id" as never)
+    .eq("gym_id", gymId as never);
+  const { data: coachRoots } = ownerProfileIds.length
     ? await admin
       .from("workspace_roots" as never)
       .select("id, scope_type, gym_id, owner_profile_id" as never)
-      .or(`gym_id.eq.${gymId},owner_profile_id.eq.${ownerProfileId}` as never)
+      .in("owner_profile_id", ownerProfileIds as never)
     : { data: [] as unknown[] };
 
-  return ((workspaceRoots ?? []) as WorkspaceRootRow[])
+  return ([...(gymRoots ?? []), ...(coachRoots ?? [])] as WorkspaceRootRow[])
     .filter((root) => (
       (root.scope_type === "gym" && root.gym_id === gymId)
-      || (root.scope_type === "coach" && root.owner_profile_id === ownerProfileId)
+      || (root.scope_type === "coach" && typeof root.owner_profile_id === "string" && ownerProfileIds.includes(root.owner_profile_id))
     ))
     .map((root) => root.id);
 }
@@ -259,22 +273,7 @@ export default async function ManageGymAthletesPage() {
   const canEditAthletes = canManageGymAdministration(access);
   const relatedWorkspaceRootIds = await resolveRelatedWorkspaceRootIds(admin, access.gym.id, access.gym.owner_profile_id);
   const activeSeasonState = await loadActiveGymTeamSeasonState(admin, access.gym.id, session.userId);
-  let athleteRows = await loadPermanentAthletes(admin, access.gym.id, relatedWorkspaceRootIds);
-
-  if (!canEditAthletes) {
-    const assignedTeamIds = new Set(
-      (activeSeasonState?.coaches ?? [])
-        .filter((coach) => coach.coach_profile_id === session.userId)
-        .map((coach) => coach.team_id)
-    );
-    const visibleAthleteIds = new Set(
-      (activeSeasonState?.roster ?? [])
-        .filter((row) => assignedTeamIds.has(row.team_id))
-        .map((row) => row.athlete_id)
-    );
-
-    athleteRows = athleteRows.filter((athlete) => visibleAthleteIds.has(athlete.id));
-  }
+  const athleteRows = await loadPermanentAthletes(admin, access.gym.id, relatedWorkspaceRootIds);
 
   const athleteIds = athleteRows.map((athlete) => athlete.id);
   const activeSeasonLabel = activeSeasonState?.season.label ?? null;

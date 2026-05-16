@@ -106,9 +106,11 @@ export async function resolvePlannerAccessContext(
   if (uiWorkspace === "gym") {
     const dataScope: PlannerWorkspaceScope = "gym";
     const editablePlanningTeamIds = hasFullGymAccess ? [] : await listEditablePlanningTeamIds(session, access);
+    const canPlanAssignedTeams = access?.accessLevel === "team-write" && editablePlanningTeamIds.length > 0;
     const hasLinkedGymAccess = Boolean(access && access.accessLevel !== "none");
     const canOpenGymWorkspace = hasFullGymAccess || hasLinkedGymAccess;
     const canManageGymAthletes = hasFullGymAccess || access?.accessLevel === "team-write";
+    const canSaveGymTryoutRecords = hasFullGymAccess || access?.accessLevel === "team-write";
     const base: PlannerAccessContext = {
       uiWorkspace,
       dataScope,
@@ -119,17 +121,17 @@ export async function resolvePlannerAccessContext(
       canReadPlanner: canOpenGymWorkspace,
       canConfigureTryouts: hasFullGymAccess,
       canManageAthletes: canManageGymAthletes,
-      canSaveTryoutRecords: hasFullGymAccess,
+      canSaveTryoutRecords: canSaveGymTryoutRecords,
       canEditTeamBuilder: hasFullGymAccess,
       canCreateTeams: hasFullGymAccess,
       canEditTeams: hasFullGymAccess,
       canAssignRosters: hasFullGymAccess,
       canDeleteTeams: hasFullGymAccess,
       canRestoreTrash: hasFullGymAccess,
-      canEditSkillPlanner: hasFullGymAccess,
-      canEditRoutineBuilder: hasFullGymAccess,
-      canEditSeasonPlanner: hasFullGymAccess,
-      canEditSeasonManualEntries: hasFullGymAccess,
+      canEditSkillPlanner: hasFullGymAccess || canPlanAssignedTeams,
+      canEditRoutineBuilder: hasFullGymAccess || canPlanAssignedTeams,
+      canEditSeasonPlanner: hasFullGymAccess || canPlanAssignedTeams,
+      canEditSeasonManualEntries: hasFullGymAccess || canPlanAssignedTeams,
       editablePlanningTeamIds
     };
 
@@ -150,7 +152,7 @@ export async function resolvePlannerAccessContext(
       gymId: access.gym.id,
       seatRole: mapSeatRole(access),
       accessLevel: access.accessLevel,
-      canOpenGymWorkspace: false,
+      canOpenGymWorkspace: true,
       canReadPlanner: true,
       canConfigureTryouts: false,
       canManageAthletes: true,

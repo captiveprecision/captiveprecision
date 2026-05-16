@@ -252,7 +252,14 @@ export async function getAuthSession(): Promise<AuthSession | null> {
             : null;
     const canOpenGymWorkspace = Boolean(
       linkedGymId
-      && (access.role === "admin" || access.role === "gym" || linkedGymSeatRole === "owner" || linkedGymSeatRole === "program_director")
+      && (
+        access.role === "admin"
+        || access.role === "gym"
+        || linkedGymSeatRole === "owner"
+        || linkedGymSeatRole === "program_director"
+        || linkedGymSeatRole === "coach"
+        || linkedGymSeatRole === "assistant"
+      )
     );
     const effectiveRoles = Array.from(new Set([
       ...getEffectiveRoles(access.role),

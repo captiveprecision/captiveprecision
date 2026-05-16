@@ -222,19 +222,31 @@ async function resolveManageGymOverview(userId: string, primaryGymId: string | n
   }
 
   const gymOwnerProfileId = gymRow?.owner_profile_id ?? userId;
-  const { data: workspaceRoots } = await admin
+  const licenseRows = await loadGymLicenses(admin, gymId);
+  const relatedOwnerProfileIds = Array.from(new Set([
+    gymOwnerProfileId,
+    ...licenseRows
+      .filter((license) => license.status === "active")
+      .map((license) => license.coach_profile_id)
+  ].filter((value): value is string => Boolean(value))));
+  const { data: gymWorkspaceRoots } = await admin
     .from("workspace_roots" as never)
     .select("id, scope_type, gym_id, owner_profile_id" as never)
-    .or(`gym_id.eq.${gymId},owner_profile_id.eq.${gymOwnerProfileId}` as never);
-  const relatedWorkspaceRootIds = ((workspaceRoots ?? []) as WorkspaceRootRow[])
+    .eq("gym_id", gymId as never);
+  const { data: coachWorkspaceRoots } = relatedOwnerProfileIds.length
+    ? await admin
+      .from("workspace_roots" as never)
+      .select("id, scope_type, gym_id, owner_profile_id" as never)
+      .in("owner_profile_id", relatedOwnerProfileIds as never)
+    : { data: [] as unknown[] };
+  const relatedWorkspaceRootIds = ([...(gymWorkspaceRoots ?? []), ...(coachWorkspaceRoots ?? [])] as WorkspaceRootRow[])
     .filter((root) => (
       (root.scope_type === "gym" && root.gym_id === gymId)
-      || (root.scope_type === "coach" && root.owner_profile_id === gymOwnerProfileId)
+      || (root.scope_type === "coach" && typeof root.owner_profile_id === "string" && relatedOwnerProfileIds.includes(root.owner_profile_id))
     ))
     .map((root) => root.id);
 
-  const [licenseRows, gymTeamsResult, rootTeamsResult, gymAthletesResult, rootAthletesResult] = await Promise.all([
-    loadGymLicenses(admin, gymId),
+  const [gymTeamsResult, rootTeamsResult, gymAthletesResult, rootAthletesResult] = await Promise.all([
     admin
       .from("teams" as never)
       .select("id, division, metadata, name, primary_coach_profile_id" as never)
@@ -408,15 +420,9 @@ async function resolveManageGymOverview(userId: string, primaryGymId: string | n
   const canManageAdministration = role === "admin"
     || gymOwnerProfileId === userId
     || currentUserLicense?.seat_role === "program_director";
-  const visibleTeamRows = canManageAdministration
-    ? teamRows
-    : teamRows.filter((team) => coachIdsByTeamId.get(team.id)?.has(userId));
+  const visibleTeamRows = teamRows;
   const visibleTeamIds = new Set(visibleTeamRows.map((team) => team.id));
-  const visibleAthleteIds = canManageAdministration
-    ? directAthleteIds
-    : new Set(
-      Array.from(visibleTeamIds).flatMap((teamId) => Array.from(athleteCountsByTeamId.get(teamId) ?? []))
-    );
+  const visibleAthleteIds = directAthleteIds;
   const visibleRosterAthleteIds = Array.from(new Set(
     Array.from(visibleTeamIds).flatMap((teamId) => Array.from(athleteIdsByTeamId.get(teamId) ?? []))
   ));
@@ -502,8 +508,8 @@ async function resolveManageGymOverview(userId: string, primaryGymId: string | n
   return {
     stats: [
       { label: "Active coaches", value: String(licenseRows.filter((license) => license.status === "active").length), copy: "Under assigned gym licenses" },
-      { label: "Teams", value: String(visibleTeamRows.length), copy: canManageAdministration ? "Across all licensed coaches" : "Assigned to your account" },
-      { label: "Athletes", value: String(visibleAthleteIds.size), copy: canManageAdministration ? "Visible at organization level" : "Assigned through your teams" }
+      { label: "Teams", value: String(visibleTeamRows.length), copy: "Visible at organization level" },
+      { label: "Athletes", value: String(visibleAthleteIds.size), copy: "Visible at organization level" }
     ],
     teams: teams.map((team) => {
       const metadata = asRecord((teamRows.find((row) => row.id === team.id) as TeamRow | undefined)?.metadata);
